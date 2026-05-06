@@ -249,6 +249,23 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
     let stem_lower = double_extension(path);
     match (ext_lower.as_deref(), stem_lower.as_deref()) {
         (Some("zip"), _) => Some(ArchiveFormat::Zip),
+        // PR-F3 — ZIP variant aliases. JAR / WAR / EAR (Java archives),
+        // IPA (iOS payload), APK / AAB (Android), APPX / MSIX (Windows
+        // app packages), XPI (Firefox extensions), CRX (Chrome v3+).
+        // Every one of these is a ZIP container with extra structural
+        // conventions on top, so the same ZIP backend handles them with
+        // no per-format dispatch needed. UI label differentiation is a
+        // host-side concern (see app/SpanZIP.App/UserControls/ConfigPanel).
+        (Some("jar"), _)
+        | (Some("war"), _)
+        | (Some("ear"), _)
+        | (Some("ipa"), _)
+        | (Some("apk"), _)
+        | (Some("aab"), _)
+        | (Some("appx"), _)
+        | (Some("msix"), _)
+        | (Some("xpi"), _)
+        | (Some("crx"), _) => Some(ArchiveFormat::Zip),
         (Some("7z"), _) => Some(ArchiveFormat::SevenZ),
         (Some("rar"), _) => Some(ArchiveFormat::Rar),
         (Some("tar"), _) => Some(ArchiveFormat::Tar),
@@ -473,5 +490,44 @@ mod tests {
     fn upgrade_with_ext_lz4_picks_tar_variant_for_dotted_name() {
         let p = Path::new("payload.tar.lz4");
         assert_eq!(upgrade_with_extension(ArchiveFormat::Lz4, p), ArchiveFormat::TarLz4);
+    }
+
+    // --- PR-F3: ZIP variant aliases -----------------------------------
+
+    #[test]
+    fn ext_hint_jar_yields_zip() {
+        assert_eq!(extension_hint(Path::new("library.jar")), Some(ArchiveFormat::Zip));
+    }
+
+    #[test]
+    fn ext_hint_war_ear_yield_zip() {
+        assert_eq!(extension_hint(Path::new("webapp.war")), Some(ArchiveFormat::Zip));
+        assert_eq!(extension_hint(Path::new("enterprise.ear")), Some(ArchiveFormat::Zip));
+    }
+
+    #[test]
+    fn ext_hint_apk_aab_ipa_yield_zip() {
+        assert_eq!(extension_hint(Path::new("MyApp.apk")), Some(ArchiveFormat::Zip));
+        assert_eq!(extension_hint(Path::new("MyApp.aab")), Some(ArchiveFormat::Zip));
+        assert_eq!(extension_hint(Path::new("MyApp.ipa")), Some(ArchiveFormat::Zip));
+    }
+
+    #[test]
+    fn ext_hint_appx_msix_yield_zip() {
+        assert_eq!(extension_hint(Path::new("Pkg.appx")), Some(ArchiveFormat::Zip));
+        assert_eq!(extension_hint(Path::new("Pkg.msix")), Some(ArchiveFormat::Zip));
+    }
+
+    #[test]
+    fn ext_hint_xpi_crx_yield_zip() {
+        assert_eq!(extension_hint(Path::new("addon.xpi")), Some(ArchiveFormat::Zip));
+        assert_eq!(extension_hint(Path::new("ext.crx")), Some(ArchiveFormat::Zip));
+    }
+
+    #[test]
+    fn ext_hint_uppercase_alias_still_yields_zip() {
+        // lowercase_extension does the casefold; just sanity-check.
+        assert_eq!(extension_hint(Path::new("CAPS.JAR")), Some(ArchiveFormat::Zip));
+        assert_eq!(extension_hint(Path::new("MyApp.APK")), Some(ArchiveFormat::Zip));
     }
 }
