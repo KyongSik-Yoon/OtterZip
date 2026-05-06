@@ -93,6 +93,12 @@ pub(crate) fn open_writer(
         ArchiveFormat::Cab | ArchiveFormat::Msi => Err(SpanzipError::FeatureDisabled(
             "CAB / MSI creation is out of scope (extract-only)",
         )),
+        // PR-F8 — Debian package authoring is `dpkg-deb` territory
+        // and requires policy-aware control field generation that's
+        // out of scope here.
+        ArchiveFormat::Deb => Err(SpanzipError::FeatureDisabled(
+            "DEB creation is out of scope (use dpkg-deb)",
+        )),
         ArchiveFormat::Unknown => Err(SpanzipError::InvalidArgument("unknown create format")),
     }
 }

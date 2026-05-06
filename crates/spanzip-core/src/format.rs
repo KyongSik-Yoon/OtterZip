@@ -38,6 +38,11 @@ pub enum ArchiveFormat {
     // typically embeds one or more CAB streams plus tabular metadata.
     Cab = 19,
     Msi = 20,
+    // PR-F8 — Debian package = ar(1) container holding `debian-binary`
+    // + `control.tar.*` + `data.tar.*`. We expose the three ar members
+    // directly; users who want the inner files can re-open the
+    // extracted .tar.* with SpanZIP.
+    Deb = 21,
 }
 
 #[repr(u32)]
@@ -91,6 +96,12 @@ const MAGIC_LZ4_FRAME: &[u8] = &[0x04, 0x22, 0x4D, 0x18];
 // agrees (handled in `detect`).
 const MAGIC_CAB: &[u8] = b"MSCF";
 const MAGIC_OLE2: &[u8] = &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+// PR-F8 — Unix `ar` archive header. Shared between BSD ar / GNU ar /
+// Debian packages. We tentatively classify as Deb when this magic
+// hits; `upgrade_with_extension` keeps it only for `.deb` (the bare
+// .a / .ar static-library cases stay Unknown -- those aren't an
+// archive product users right-click to extract).
+const MAGIC_AR: &[u8] = b"!<arch>\n";
 
 const TAR_USTAR_OFFSET: usize = 257;
 const TAR_USTAR_MAGIC: &[u8] = b"ustar";
@@ -182,6 +193,12 @@ pub fn detect_bytes(prefix: &[u8]) -> Option<ArchiveFormat> {
     // document.
     if starts_with(prefix, MAGIC_OLE2) {
         return Some(ArchiveFormat::Msi);
+    }
+    // PR-F8 — `ar` magic. Tentative Deb; the .deb extension check
+    // in `upgrade_with_extension` keeps the classification only for
+    // actual Debian packages (static libraries fall back to Unknown).
+    if starts_with(prefix, MAGIC_AR) {
+        return Some(ArchiveFormat::Deb);
     }
 
     // TAR: ustar magic at offset 257. Accept POSIX "ustar\0" and GNU "ustar ".
@@ -280,6 +297,17 @@ fn upgrade_with_extension(tentative: ArchiveFormat, path: &Path) -> ArchiveForma
                 ArchiveFormat::Unknown
             }
         }
+        // PR-F8 — ar magic with non-.deb extension is most likely a
+        // static library (.a / .ar) or BSD object archive, neither of
+        // which we model as an "archive product". Fall back to
+        // Unknown so the caller surfaces UnsupportedFormat.
+        ArchiveFormat::Deb => {
+            if matches!(ext, Some("deb")) {
+                ArchiveFormat::Deb
+            } else {
+                ArchiveFormat::Unknown
+            }
+        }
         other => other,
     }
 }
@@ -364,6 +392,10 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
         // the extension is what disambiguates it.
         (Some("cab"), _) => Some(ArchiveFormat::Cab),
         (Some("msi"), _) => Some(ArchiveFormat::Msi),
+        // PR-F8 — Debian package. The ar magic is checked at the
+        // backend layer; here we only need the extension fallback
+        // for truncated / empty .deb fixtures.
+        (Some("deb"), _) => Some(ArchiveFormat::Deb),
         // PR-F2 — Zstd / LZ4 single-stream + tar variants.
         (Some("zst"), _) | (Some("tzst"), _) => {
             if matches!(stem_lower.as_deref(), Some("tar.zst"))

@@ -14,6 +14,7 @@ use crate::entry::Entry;
 use crate::error::{Result, SpanzipError};
 
 pub(crate) mod cab;
+pub(crate) mod deb;
 pub(crate) mod iso;
 pub(crate) mod msi;
 pub(crate) mod sevenz;
@@ -168,6 +169,11 @@ pub(crate) fn open_backend(
         // without leaking io::Error to callers.
         F::Cab => Ok(Box::new(self::cab::CabBackend::open(path)?)),
         F::Msi => Ok(Box::new(self::msi::MsiBackend::open(path)?)),
+        // PR-F8 — Debian package (read-only). Hand-rolled ar parser
+        // surfaces the three canonical members verbatim; users
+        // re-open the inner data.tar.* with SpanZIP for the
+        // payload.
+        F::Deb => Ok(Box::new(self::deb::DebBackend::open(path)?)),
         F::Rar => Err(SpanzipError::FeatureDisabled("RAR backend (Sprint 4+)")),
         F::Unknown => Err(SpanzipError::UnsupportedFormat(None)),
     }
