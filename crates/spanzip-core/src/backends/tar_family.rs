@@ -33,6 +33,10 @@ pub(crate) enum Compression {
     Gzip,
     Bzip2,
     Xz,
+    /// `.tar.zst` — Zstandard frame around a tarball. PR-F2.
+    Zstd,
+    /// `.tar.lz4` — LZ4 frame around a tarball. PR-F2.
+    Lz4,
 }
 
 pub(crate) struct TarBackend {
@@ -64,6 +68,16 @@ impl TarBackend {
             Compression::Gzip => Ok(Box::new(flate2::read::GzDecoder::new(reader))),
             Compression::Bzip2 => Ok(Box::new(bzip2::read::BzDecoder::new(reader))),
             Compression::Xz => Ok(Box::new(xz2::read::XzDecoder::new(reader))),
+            // PR-F2 — Zstd / LZ4 wrappers. Same shape as the others;
+            // failures bubble up as BackendError to keep the open path
+            // uniform.
+            Compression::Zstd => {
+                let dec = zstd::stream::read::Decoder::new(reader).map_err(|e| {
+                    SpanzipError::BackendError(format!("tar.zst decoder init: {e}"))
+                })?;
+                Ok(Box::new(dec))
+            }
+            Compression::Lz4 => Ok(Box::new(lz4_flex::frame::FrameDecoder::new(reader))),
         }
     }
 

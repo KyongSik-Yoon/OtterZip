@@ -120,6 +120,23 @@ pub(crate) fn open_backend(
             path,
             self::single_stream::SingleStreamKind::Lzma,
         )?)),
+        // PR-F2 — Zstd / LZ4 single-stream + tar wrappers.
+        F::Zstd => Ok(Box::new(self::single_stream::SingleStreamBackend::open(
+            path,
+            self::single_stream::SingleStreamKind::Zstd,
+        )?)),
+        F::Lz4 => Ok(Box::new(self::single_stream::SingleStreamBackend::open(
+            path,
+            self::single_stream::SingleStreamKind::Lz4,
+        )?)),
+        F::TarZst => Ok(Box::new(self::tar_family::TarBackend::open(
+            path,
+            self::tar_family::Compression::Zstd,
+        )?)),
+        F::TarLz4 => Ok(Box::new(self::tar_family::TarBackend::open(
+            path,
+            self::tar_family::Compression::Lz4,
+        )?)),
         F::Rar => Err(SpanzipError::FeatureDisabled("RAR backend (Sprint 4+)")),
         F::Unknown => Err(SpanzipError::UnsupportedFormat(None)),
     }

@@ -35,6 +35,8 @@ tar         = "0.4"
 zip         = { version = "2", default-features = false, features = ["deflate"] }
 sevenz-rust = "0.6"
 unrar       = "0.5"
+# Phase 7+ option Y (PR-F2): LZ4 frame format. Pure-Rust crate, MIT.
+lz4_flex    = { version = "0.13", default-features = false, features = ["frame", "std"] }
 
 # --- dev ---
 criterion = { version = "0.5", features = ["html_reports"] }

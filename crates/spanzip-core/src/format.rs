@@ -24,6 +24,11 @@ pub enum ArchiveFormat {
     Bzip2 = 9,
     Xz = 10,
     Lzma = 11,
+    // PR-F2 — next-gen single-stream + tar wrappers.
+    Zstd = 13,   // .zst single stream
+    TarZst = 14, // .tar.zst
+    Lz4 = 15,    // .lz4 (frame format)
+    TarLz4 = 16, // .tar.lz4
 }
 
 #[repr(u32)]
@@ -64,6 +69,11 @@ const MAGIC_RAR4: &[u8] = &[0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00];
 const MAGIC_GZIP: &[u8] = &[0x1F, 0x8B];
 const MAGIC_BZIP2: &[u8] = b"BZh";
 const MAGIC_XZ: &[u8] = &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
+// PR-F2 — Zstandard frame magic (RFC 8478 §3.1.1) and LZ4 frame magic
+// (LZ4 frame format §3). Both are 4-byte little-endian sentinels that
+// uniquely identify their respective stream containers.
+const MAGIC_ZSTD: &[u8] = &[0x28, 0xB5, 0x2F, 0xFD];
+const MAGIC_LZ4_FRAME: &[u8] = &[0x04, 0x22, 0x4D, 0x18];
 
 const TAR_USTAR_OFFSET: usize = 257;
 const TAR_USTAR_MAGIC: &[u8] = b"ustar";
@@ -133,6 +143,15 @@ pub fn detect_bytes(prefix: &[u8]) -> Option<ArchiveFormat> {
     }
     if starts_with(prefix, MAGIC_BZIP2) {
         return Some(ArchiveFormat::TarBz2); // tentative; plain .bz2 via ext
+    }
+    // PR-F2 — ZSTD / LZ4 frame magic. Tentatively classify as the single-
+    // stream variant; `upgrade_with_extension` promotes to the TarZst /
+    // TarLz4 case when the file extension says so.
+    if starts_with(prefix, MAGIC_ZSTD) {
+        return Some(ArchiveFormat::Zstd);
+    }
+    if starts_with(prefix, MAGIC_LZ4_FRAME) {
+        return Some(ArchiveFormat::Lz4);
     }
 
     // TAR: ustar magic at offset 257. Accept POSIX "ustar\0" and GNU "ustar ".
@@ -205,6 +224,21 @@ fn upgrade_with_extension(tentative: ArchiveFormat, path: &Path) -> ArchiveForma
                 ArchiveFormat::TarXz
             }
         }
+        // PR-F2 — promote to .tar.zst / .tar.lz4 when the extension says so.
+        ArchiveFormat::Zstd => {
+            if matches!(ext, Some("tzst")) || matches!(stem, Some("tar.zst")) {
+                ArchiveFormat::TarZst
+            } else {
+                ArchiveFormat::Zstd
+            }
+        }
+        ArchiveFormat::Lz4 => {
+            if matches!(stem, Some("tar.lz4")) {
+                ArchiveFormat::TarLz4
+            } else {
+                ArchiveFormat::Lz4
+            }
+        }
         other => other,
     }
 }
@@ -250,6 +284,23 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
         // .lzma single-stream (v7+). No double-extension form is in scope —
         // .tar.lzma is rare and routes through the .tlz alias in TarBackend.
         (Some("lzma"), _) => Some(ArchiveFormat::Lzma),
+        // PR-F2 — Zstd / LZ4 single-stream + tar variants.
+        (Some("zst"), _) | (Some("tzst"), _) => {
+            if matches!(stem_lower.as_deref(), Some("tar.zst"))
+                || matches!(ext_lower.as_deref(), Some("tzst"))
+            {
+                Some(ArchiveFormat::TarZst)
+            } else {
+                Some(ArchiveFormat::Zstd)
+            }
+        }
+        (Some("lz4"), _) => {
+            if matches!(stem_lower.as_deref(), Some("tar.lz4")) {
+                Some(ArchiveFormat::TarLz4)
+            } else {
+                Some(ArchiveFormat::Lz4)
+            }
+        }
         _ => None,
     }
 }
@@ -261,11 +312,12 @@ fn lowercase_extension(path: &Path) -> Option<String> {
         .map(str::to_ascii_lowercase)
 }
 
-/// Return `"tar.gz"` / `"tar.bz2"` / `"tar.xz"` if the file name ends with
-/// one of those double extensions. Cheaper than double-invoking `Path::extension`.
+/// Return one of the recognised double extensions (`tar.gz`, `tar.bz2`,
+/// `tar.xz`, `tar.zst`, `tar.lz4`) if the file name ends with it.
+/// Cheaper than double-invoking `Path::extension`.
 fn double_extension(path: &Path) -> Option<String> {
     let name = path.file_name().and_then(|s| s.to_str())?.to_ascii_lowercase();
-    for &candidate in &["tar.gz", "tar.bz2", "tar.xz"] {
+    for &candidate in &["tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lz4"] {
         if name.ends_with(candidate) {
             return Some(candidate.to_string());
         }
@@ -367,5 +419,59 @@ mod tests {
     fn upgrade_with_ext_xz_picks_single_stream() {
         let p = Path::new("payload.xz");
         assert_eq!(upgrade_with_extension(ArchiveFormat::TarXz, p), ArchiveFormat::Xz);
+    }
+
+    // --- PR-F2: ZSTD / LZ4 family -------------------------------------
+
+    #[test]
+    fn zstd_magic() {
+        // Just the magic; the rest of the frame header is not needed for
+        // detection (RFC 8478 §3.1.1).
+        assert_eq!(
+            detect_bytes(&[0x28, 0xB5, 0x2F, 0xFD, 0x00]),
+            Some(ArchiveFormat::Zstd)
+        );
+    }
+
+    #[test]
+    fn lz4_frame_magic() {
+        assert_eq!(
+            detect_bytes(&[0x04, 0x22, 0x4D, 0x18, 0x00]),
+            Some(ArchiveFormat::Lz4)
+        );
+    }
+
+    #[test]
+    fn ext_hint_zst_yields_single_stream() {
+        assert_eq!(extension_hint(Path::new("foo.zst")), Some(ArchiveFormat::Zstd));
+    }
+
+    #[test]
+    fn ext_hint_lz4_yields_single_stream() {
+        assert_eq!(extension_hint(Path::new("foo.lz4")), Some(ArchiveFormat::Lz4));
+    }
+
+    #[test]
+    fn ext_hint_tar_zst_yields_tar_variant() {
+        assert_eq!(extension_hint(Path::new("foo.tar.zst")), Some(ArchiveFormat::TarZst));
+        assert_eq!(extension_hint(Path::new("foo.tzst")), Some(ArchiveFormat::TarZst));
+    }
+
+    #[test]
+    fn ext_hint_tar_lz4_yields_tar_variant() {
+        assert_eq!(extension_hint(Path::new("foo.tar.lz4")), Some(ArchiveFormat::TarLz4));
+    }
+
+    #[test]
+    fn upgrade_with_ext_zstd_picks_tar_variant_for_dotted_name() {
+        // Tentative Zstd from magic + .tar.zst extension -> TarZst.
+        let p = Path::new("payload.tar.zst");
+        assert_eq!(upgrade_with_extension(ArchiveFormat::Zstd, p), ArchiveFormat::TarZst);
+    }
+
+    #[test]
+    fn upgrade_with_ext_lz4_picks_tar_variant_for_dotted_name() {
+        let p = Path::new("payload.tar.lz4");
+        assert_eq!(upgrade_with_extension(ArchiveFormat::Lz4, p), ArchiveFormat::TarLz4);
     }
 }

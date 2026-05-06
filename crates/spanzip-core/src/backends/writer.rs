@@ -70,6 +70,16 @@ pub(crate) fn open_writer(
         ArchiveFormat::Bzip2 | ArchiveFormat::Xz | ArchiveFormat::Lzma => Err(
             SpanzipError::FeatureDisabled("single-stream create (Bzip2/Xz/Lzma) — PR-F7"),
         ),
+        // PR-F2 — Zstd / LZ4 single-stream + tar variants. Same gate as
+        // above; `.tar.zst` / `.tar.lz4` creation is also a PR-F7 item
+        // because we'd need writer-side support in TarBackend that the
+        // current `ArchiveWriter` trait doesn't model yet.
+        ArchiveFormat::Zstd
+        | ArchiveFormat::Lz4
+        | ArchiveFormat::TarZst
+        | ArchiveFormat::TarLz4 => Err(SpanzipError::FeatureDisabled(
+            "Zstd/LZ4 family create (single + tar) — PR-F7",
+        )),
         ArchiveFormat::Unknown => Err(SpanzipError::InvalidArgument("unknown create format")),
     }
 }

@@ -40,6 +40,10 @@ pub(crate) enum SingleStreamKind {
     Xz,
     /// Raw LZMA1 stream (`.lzma`). Decoded via `xz2` in LZMA1 mode.
     Lzma,
+    /// Zstandard frame (`.zst`). PR-F2.
+    Zstd,
+    /// LZ4 frame format (`.lz4`). PR-F2.
+    Lz4,
 }
 
 impl SingleStreamKind {
@@ -49,6 +53,13 @@ impl SingleStreamKind {
             SingleStreamKind::Bzip2 => CompressionMethod::Bzip2,
             SingleStreamKind::Xz => CompressionMethod::Lzma2,
             SingleStreamKind::Lzma => CompressionMethod::Lzma,
+            SingleStreamKind::Zstd => CompressionMethod::Zstd,
+            // CompressionMethod has no LZ4 variant in v7 — frame is a
+            // standalone codec that doesn't show up inside ZIP/7z entry
+            // metadata. Reuse `Store` as a "no nested compression
+            // metadata" sentinel; the per-entry .lz4 file size still
+            // reflects the compressed bytes via `compressed_size`.
+            SingleStreamKind::Lz4 => CompressionMethod::Store,
         }
     }
 
@@ -66,6 +77,8 @@ impl SingleStreamKind {
             SingleStreamKind::Bzip2 => &[".bz2", ".BZ2", ".Bz2", ".bZ2"],
             SingleStreamKind::Xz => &[".xz", ".XZ", ".Xz", ".xZ"],
             SingleStreamKind::Lzma => &[".lzma", ".LZMA", ".Lzma"],
+            SingleStreamKind::Zstd => &[".zst", ".ZST", ".Zst"],
+            SingleStreamKind::Lz4 => &[".lz4", ".LZ4", ".Lz4"],
         };
         for s in suffixes {
             if let Some(stripped) = name.strip_suffix(s) {
@@ -81,6 +94,8 @@ impl SingleStreamKind {
             SingleStreamKind::Bzip2 => ".bz2",
             SingleStreamKind::Xz => ".xz",
             SingleStreamKind::Lzma => ".lzma",
+            SingleStreamKind::Zstd => ".zst",
+            SingleStreamKind::Lz4 => ".lz4",
         };
         if let Some(idx) = lower.rfind(lower_suffix) {
             if idx > 0 && idx + lower_suffix.len() == lower.len() {
@@ -138,6 +153,21 @@ impl SingleStreamBackend {
                 let stream = xz2::stream::Stream::new_lzma_decoder(u64::MAX)
                     .map_err(|e| SpanzipError::BackendError(format!("lzma decoder init: {e}")))?;
                 Ok(Box::new(xz2::read::XzDecoder::new_stream(reader, stream)))
+            }
+            // PR-F2 — Zstandard frame. `zstd::Decoder` is the streaming
+            // API; the `?Sized` wrapper on `Read` means we don't lose
+            // anything by going through Box<dyn Read + Send>.
+            SingleStreamKind::Zstd => {
+                let dec = zstd::stream::read::Decoder::new(reader)
+                    .map_err(|e| SpanzipError::BackendError(format!("zstd decoder init: {e}")))?;
+                Ok(Box::new(dec))
+            }
+            // PR-F2 — LZ4 frame. `lz4_flex::frame::FrameDecoder` reads
+            // the frame header, dictionary, blocks, and trailer in one
+            // pass; pure-Rust so no dependency on system liblz4.
+            SingleStreamKind::Lz4 => {
+                let dec = lz4_flex::frame::FrameDecoder::new(reader);
+                Ok(Box::new(dec))
             }
         }
     }
