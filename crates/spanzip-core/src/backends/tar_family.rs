@@ -33,6 +33,11 @@ pub(crate) enum Compression {
     Gzip,
     Bzip2,
     Xz,
+    /// `.tlz` — legacy GNU naming for tar + LZMA1 (alone-format, NOT
+    /// LZMA2 / .xz). PR-F4. Routed via the same `ArchiveFormat::TarXz`
+    /// enum slot as Xz, distinguished by path extension at dispatch
+    /// time so we don't have to grow the public enum for an alias.
+    Lzma,
     /// `.tar.zst` — Zstandard frame around a tarball. PR-F2.
     Zstd,
     /// `.tar.lz4` — LZ4 frame around a tarball. PR-F2.
@@ -68,6 +73,17 @@ impl TarBackend {
             Compression::Gzip => Ok(Box::new(flate2::read::GzDecoder::new(reader))),
             Compression::Bzip2 => Ok(Box::new(bzip2::read::BzDecoder::new(reader))),
             Compression::Xz => Ok(Box::new(xz2::read::XzDecoder::new(reader))),
+            // PR-F4 — .tlz = tar + raw LZMA1. xz2 ships an explicit
+            // LZMA1 (alone-format) decoder via `Stream::new_lzma_decoder`,
+            // wrapped through `XzDecoder::new_stream` to keep the
+            // io::Read API. u64::MAX memlimit matches the single-stream
+            // backend; ZIP-bomb defence sits one layer up.
+            Compression::Lzma => {
+                let stream = xz2::stream::Stream::new_lzma_decoder(u64::MAX).map_err(|e| {
+                    SpanzipError::BackendError(format!("tlz decoder init: {e}"))
+                })?;
+                Ok(Box::new(xz2::read::XzDecoder::new_stream(reader, stream)))
+            }
             // PR-F2 — Zstd / LZ4 wrappers. Same shape as the others;
             // failures bubble up as BackendError to keep the open path
             // uniform.

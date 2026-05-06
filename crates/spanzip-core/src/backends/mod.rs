@@ -96,10 +96,27 @@ pub(crate) fn open_backend(
             path,
             self::tar_family::Compression::Bzip2,
         )?)),
-        F::TarXz => Ok(Box::new(self::tar_family::TarBackend::open(
-            path,
-            self::tar_family::Compression::Xz,
-        )?)),
+        F::TarXz => {
+            // PR-F4 — `.tlz` aliases route through this enum slot but
+            // carry a different codec (LZMA1 vs LZMA2). The detect
+            // layer collapses both onto TarXz so we don't grow the
+            // public ABI for an alias; pick the right Compression
+            // arm by inspecting the source extension.
+            let is_tlz = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|e| e.eq_ignore_ascii_case("tlz"))
+                .unwrap_or(false);
+            let compression = if is_tlz {
+                self::tar_family::Compression::Lzma
+            } else {
+                self::tar_family::Compression::Xz
+            };
+            Ok(Box::new(self::tar_family::TarBackend::open(
+                path,
+                compression,
+            )?))
+        }
         // Phase 7+ option Y (PR-F1): single-stream backends.
         // GZIP was previously FeatureDisabled despite schema §5.2 listing it
         // as supported — the gap closes here so the four single-stream

@@ -301,6 +301,12 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
         // .lzma single-stream (v7+). No double-extension form is in scope —
         // .tar.lzma is rare and routes through the .tlz alias in TarBackend.
         (Some("lzma"), _) => Some(ArchiveFormat::Lzma),
+        // PR-F4 — .tlz alias = tar + LZMA1 (legacy GNU naming).
+        // We reuse the TarXz enum slot to avoid an ABI bump; the actual
+        // LZMA1 vs LZMA2 dispatch happens in `backends::open_backend`
+        // by inspecting the path extension. Safe because no other input
+        // hits TarXz with a `.tlz` suffix.
+        (Some("tlz"), _) => Some(ArchiveFormat::TarXz),
         // PR-F2 — Zstd / LZ4 single-stream + tar variants.
         (Some("zst"), _) | (Some("tzst"), _) => {
             if matches!(stem_lower.as_deref(), Some("tar.zst"))
@@ -529,5 +535,16 @@ mod tests {
         // lowercase_extension does the casefold; just sanity-check.
         assert_eq!(extension_hint(Path::new("CAPS.JAR")), Some(ArchiveFormat::Zip));
         assert_eq!(extension_hint(Path::new("MyApp.APK")), Some(ArchiveFormat::Zip));
+    }
+
+    // --- PR-F4: .tlz alias ---------------------------------------------
+
+    #[test]
+    fn ext_hint_tlz_collapses_to_tar_xz_slot() {
+        // The detect layer cannot tell LZMA1 apart from LZMA2 by magic
+        // alone (LZMA1 has no real header signature). We use the
+        // `TarXz` enum slot for both; the path-aware dispatcher in
+        // `backends::open_backend` selects the right codec.
+        assert_eq!(extension_hint(Path::new("bundle.tlz")), Some(ArchiveFormat::TarXz));
     }
 }
