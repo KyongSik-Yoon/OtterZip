@@ -1,0 +1,97 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'rustfmt.toml'
+      - 'clippy.toml'
+      - 'deny.toml'
+      - '.github/workflows/ci-rust.yml'
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features
+
+  deny:
+    name: cargo-deny (licenses, advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features
+
+  abi-check:
+    name: FFI ABI diff
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Regenerate spanzip.h
+        run: cargo build -p spanzip-ffi
+      - name: Verify no uncommitted header changes
+        run: |
+          git diff --exit-code crates/spanzip-ffi/include/spanzip.h || (
+            echo "::error::spanzip.h changed but not committed. Update ABI version + commit header."
+            exit 1
+          )
+        shell: bash
+
+  # Performance smoke — synthetic ZIP corpus, no perf gate yet (Sprint 2 skeleton).
+  # Real regression gate (Silesia, -5% block) lands in Sprint 5 per performance.md §6.4.
+  bench-smoke:
+    name: bench (smoke, synthetic)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compile benches
+        run: cargo bench --no-run -p spanzip-core
+      - name: Quick run (synthetic fixture, ~30s)
+        run: cargo bench -p spanzip-core --bench extract -- --quick --warm-up-time 1 --measurement-time 2
+        shell: bash

@@ -1,0 +1,41 @@
+# cargo-deny 설정 — 라이선스·보안·중복 의존 게이트
+# CI에서 `cargo deny check`로 실행
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Zlib",
+    "MPL-2.0",     # file-level copyleft만 — 검토 후 유지
+]
+# 본문 라이선스 전략상 GPL 계열은 거부
+# (AGPL/SSPL은 상업 배포 자체 차단)
+exceptions = [
+    # unrar는 RAR License이지만 추출 전용 사용으로 사용자 합의.
+    # 크레이트가 등록한 라이선스 식별자에 맞춰 업데이트 필요.
+    { allow = ["Unlicense"], name = "unrar" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+# cargo-deny 0.19+ 스펙: vulnerability/notice/unmaintained 키는
+# severity-based가 아니라 categorical로 변경됨.
+# 0.19 spec valid: ["all", "workspace", "transitive", "none"]
+[advisories]
+yanked = "deny"
+unmaintained = "all"
+# vulnerability / notice는 0.19에서 자동 처리 (모든 advisory가 default deny)
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

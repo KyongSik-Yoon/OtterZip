@@ -1,0 +1,67 @@
+# ====== Rust ======
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# ====== .NET ======
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM/
+ARM64/
+generated/
+*.pidb
+*.log
+.vswrestore/
+
+# Publish output
+publish/
+AppPackages/
+BundleArtifacts/
+_pkginfo.txt
+
+# ====== Visual Studio Code / Rider ======
+.idea/
+
+# ====== Windows ======
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ====== Secrets / Local ======
+.env
+.env.local
+*.pfx
+*.snk
+*.cer
+.certs/
+local-settings.json
+
+# ====== Local build artifacts (dev cert, fixture corpora, msix staging) ======
+/build/
+
+# ====== bkit runtime (workflows/decisions/state는 commit, runtime은 local) ======
+.bkit/runtime/
+.bkit/snapshots/
+.bkit/audit/
+
+# ====== bkit state (세션/메모리) ======
+.claude/state/
+.claude/logs/
+.claude/settings.local.json
+
+# ====== Benchmark outputs ======
+bench/results/*.json
+
+# ====== cbindgen generated (committed selectively — include/spanzip.h is NOT ignored) ======
+
+# ====== Preview / temp ======
+*.tmp
+*.swp
+*~

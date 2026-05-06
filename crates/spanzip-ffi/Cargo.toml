@@ -1,0 +1,25 @@
+[package]
+name = "spanzip-ffi"
+description = "SpanZIP — C ABI FFI layer (cbindgen)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+spanzip-core = { path = "../spanzip-core" }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+zeroize      = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+zip      = { workspace = true }
+
+[build-dependencies]
+cbindgen = "0.27"

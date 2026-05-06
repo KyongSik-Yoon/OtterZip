@@ -1,0 +1,39 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      개발 중 부동 버전(예: 1.6.*) 허용. 릴리스 직전엔 고정 버전으로 전환 권장.
+      참고: https://aka.ms/nu1011
+    -->
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinUI 3 / Windows App SDK -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.6.*" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.*" />
+
+    <!-- MVVM -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.*" />
+
+    <!-- Logging / DI (AOT-friendly picks) -->
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.*" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.*" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.*" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.*" />
+
+    <!-- Analyzers -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.*" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.*" />
+
+    <!-- Testing -->
+    <PackageVersion Include="xunit" Version="2.9.*" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.*" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.*" />
+
+    <!-- Telemetry / crash reporting (PR-7F, opt-in, MS Store distribution) -->
+    <PackageVersion Include="Sentry" Version="4.13.*" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Keka-pattern main window (2026-04-30 redesign).
+
+  - Window-wide drop target: root Grid AllowDrop=True receives DragEnter/Drop
+  - ConfigPanel hosts the compression-options card stack
+  - DropOverlay covers the client area while a compatible drag is hovering
+  - StatusBar shows a single line of progress / done / error feedback
+  - Mica backdrop applied in code-behind
+
+  All user-visible strings via x:Uid; all colors via {ThemeResource}.
+-->
+<Window
+    x:Class="SpanZIP.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:SpanZIP.App.UserControls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid"
+          Background="Transparent"
+          AllowDrop="True">
+
+        <Grid.RowDefinitions>
+            <!-- Custom title bar drag region — Mica shows through; caption
+                 buttons are drawn by the OS to the right. -->
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Right-click menu (window-wide) -->
+        <Grid.ContextFlyout>
+            <MenuFlyout>
+                <MenuFlyoutItem x:Uid="WindowMenu_AddFiles"
+                                Click="OnContextAddFiles" />
+                <MenuFlyoutItem x:Uid="WindowMenu_AddFolder"
+                                Click="OnContextAddFolder" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Uid="WindowMenu_Settings"
+                                Click="OnContextOpenSettings" />
+            </MenuFlyout>
+        </Grid.ContextFlyout>
+
+        <!-- Title-bar drag region. The Border itself is the hit-testable
+             surface registered with Window.SetTitleBar(); inner content
+             (icon + title) sits on top, hit-testable through it. -->
+        <Border x:Name="AppTitleBar"
+                Grid.Row="0"
+                Background="Transparent">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Spacing="8"
+                        Margin="14,0,0,0">
+                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                          Glyph="&#xE7B8;"
+                          FontSize="14"
+                          Foreground="{ThemeResource SpanzipBrandBrush}" />
+                <TextBlock x:Uid="App_WindowTitleLabel"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- Compression configuration body -->
+        <controls:ConfigPanel Grid.Row="1"
+                              x:Name="ConfigPanel" />
+
+        <!-- Status bar (always visible) -->
+        <Grid Grid.Row="2"
+              Padding="16,8"
+              ColumnSpacing="{StaticResource SpacingSValue}"
+              RowSpacing="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="StatusText"
+                       Grid.Row="0"
+                       Grid.Column="0"
+                       x:Uid="Main_StatusBarIdleText"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextStyle}"
+                       AutomationProperties.LiveSetting="Polite" />
+
+            <Button x:Name="SettingsButton"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    x:Uid="Main_SettingsButton"
+                    Style="{StaticResource IconButtonStyle}"
+                    Click="OnSettingsButtonClick">
+                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                          Glyph="&#xE713;"
+                          FontSize="{StaticResource IconSizeS}" />
+            </Button>
+
+            <ProgressBar x:Name="StatusProgress"
+                         Grid.Row="1"
+                         Grid.Column="0"
+                         Grid.ColumnSpan="2"
+                         Visibility="Collapsed"
+                         Minimum="0"
+                         Maximum="1.0"
+                         Value="0" />
+        </Grid>
+
+        <!-- ============================================================ -->
+        <!--  Window-wide drop overlay (covers entire client area)         -->
+        <!--  rev 5 polish: nearly opaque tinted backdrop hides the cards  -->
+        <!--  behind, content lifts into a centered floating card.         -->
+        <!-- ============================================================ -->
+        <Border x:Name="DropOverlay"
+                Grid.Row="1"
+                Grid.RowSpan="2"
+                Visibility="Collapsed"
+                Background="{ThemeResource DropOverlayBackgroundBrush}">
+
+            <Grid>
+                <!-- Subtle dashed accent ring tracing the window edge — gives
+                     the "drop zone" affordance without competing with the
+                     centered card. -->
+                <Border Margin="12"
+                        BorderBrush="{ThemeResource SpanzipBrandBrush}"
+                        BorderThickness="2"
+                        CornerRadius="14"
+                        Opacity="0.35" />
+
+                <!-- Floating focal card — this is what the user reads. -->
+                <Border x:Name="DropOverlayCard"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        MinWidth="260"
+                        Background="{ThemeResource DropOverlayCardBackgroundBrush}"
+                        BorderBrush="{ThemeResource SpanzipBrandBrush}"
+                        BorderThickness="1.5"
+                        CornerRadius="16"
+                        Padding="28,24">
+                    <Border.Shadow>
+                        <ThemeShadow />
+                    </Border.Shadow>
+                    <StackPanel HorizontalAlignment="Center"
+                                Spacing="10">
+                        <FontIcon x:Name="DropOverlayIcon"
+                                  FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                  Glyph="&#xE898;"
+                                  FontSize="56"
+                                  Foreground="{ThemeResource SpanzipBrandBrush}"
+                                  HorizontalAlignment="Center" />
+                        <TextBlock x:Name="DropOverlayTitle"
+                                   x:Uid="DropOverlay_HoverTitle"
+                                   Style="{StaticResource SubtitleTextStyle}"
+                                   Foreground="{ThemeResource SpanzipBrandBrush}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center" />
+                        <TextBlock x:Name="DropOverlaySubtitle"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   MaxWidth="280"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+    </Grid>
+</Window>

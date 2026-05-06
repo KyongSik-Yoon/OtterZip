@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SpanZIP 통합 ResourceDictionary
+  App.xaml의 <Application.Resources>에서 이 파일을 MergedDictionaries로 포함.
+
+  참조 순서 (의존 방향):
+    1. Typography.xaml  — 폰트/간격/라디우스 (의존 없음)
+    2. Colors.xaml      — 색상/브러시 (Typography 불필요하지만 관례상 먼저 로드)
+    3. ControlStyles.xaml — 위 두 토큰 사용
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Colors.xaml" />
+        <ResourceDictionary Source="Typography.xaml" />
+        <ResourceDictionary Source="ControlStyles.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

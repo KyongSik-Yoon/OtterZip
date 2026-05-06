@@ -1,0 +1,33 @@
+# 텍스트 파일 정규화
+* text=auto eol=lf
+
+# Windows 전용 파일은 CRLF 유지
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.vcxproj text eol=crlf
+*.filters text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+*.manifest text eol=crlf
+*.resw text eol=crlf
+*.appxmanifest text eol=crlf
+*.rc text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 바이너리
+*.png binary
+*.jpg binary
+*.ico binary
+*.pfx binary
+*.dll binary
+*.exe binary
+*.lib binary
+*.pdb binary
+*.msix binary
+*.appx binary
+
+# 언어 통계에서 제외
+docs/** linguist-documentation
+bench/corpus/** linguist-vendored

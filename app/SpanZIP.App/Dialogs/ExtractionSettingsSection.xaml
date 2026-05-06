@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Settings → Extraction tab. (Phase 6+ rev 3)
+  6 items: extractLocation, alwaysSubfolder, MOTW, sound, reveal, deleteArchive.
+-->
+<UserControl
+    x:Class="SpanZIP.App.Dialogs.ExtractionSettingsSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
+        <StackPanel Spacing="{StaticResource SpacingSValue}"
+                    Padding="{StaticResource SpacingL}">
+
+            <Grid ColumnSpacing="{StaticResource SpacingMValue}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           x:Uid="Settings_ExtractLocationLabel"
+                           VerticalAlignment="Top"
+                           Margin="0,8,0,0"
+                           Style="{StaticResource BodyTextStyle}" />
+                <StackPanel Grid.Column="1"
+                            Spacing="{StaticResource SpacingXSValue}">
+                    <RadioButtons x:Name="ExtractLocationRadios"
+                                  MaxColumns="1"
+                                  SelectionChanged="OnExtractLocationChanged">
+                        <RadioButton x:Uid="Settings_ExtractLocationSame"   Tag="same" />
+                        <RadioButton x:Uid="Settings_ExtractLocationCustom" Tag="custom" />
+                    </RadioButtons>
+                    <Grid x:Name="ExtractLocationCustomRow"
+                          ColumnSpacing="{StaticResource SpacingSValue}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 x:Name="ExtractLocationPathBox"
+                                 IsReadOnly="True" />
+                        <Button Grid.Column="1"
+                                x:Uid="Settings_BrowseButton"
+                                Click="OnBrowseExtractLocation" />
+                    </Grid>
+                </StackPanel>
+            </Grid>
+
+            <Border Margin="0,8,0,0" />
+
+            <CheckBox x:Name="AlwaysExtractToSubfolderCheck"
+                      x:Uid="Settings_AlwaysExtractToSubfolder"
+                      MinHeight="0"
+                      Checked="OnToggle"
+                      Unchecked="OnToggle"
+                      Tag="Settings_AlwaysExtractToSubfolder" />
+
+            <StackPanel>
+                <CheckBox x:Name="PreserveZoneIdCheck"
+                          x:Uid="Settings_PreserveZoneIdentifier"
+                          MinHeight="0"
+                          Checked="OnToggle"
+                          Unchecked="OnToggle"
+                          Tag="Settings_PreserveZoneIdentifier" />
+                <TextBlock x:Uid="Settings_PreserveZoneIdentifierSub"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap"
+                           Margin="28,0,0,2"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </StackPanel>
+
+            <Border Margin="0,8,0,0" />
+
+            <CheckBox x:Name="PlaySoundOnExtractCheck"
+                      x:Uid="Settings_PlaySoundOnExtract"
+                      MinHeight="0"
+                      Checked="OnToggle"
+                      Unchecked="OnToggle"
+                      Tag="Settings_PlaySoundOnExtract" />
+
+            <CheckBox x:Name="RevealAfterExtractCheck"
+                      x:Uid="Settings_RevealAfterExtract"
+                      MinHeight="0"
+                      Checked="OnToggle"
+                      Unchecked="OnToggle"
+                      Tag="Settings_RevealAfterExtract" />
+
+            <CheckBox x:Name="DeleteArchiveAfterExtractCheck"
+                      x:Uid="Settings_DeleteArchiveAfterExtract"
+                      MinHeight="0"
+                      Checked="OnToggle"
+                      Unchecked="OnToggle"
+                      Tag="Settings_DeleteArchiveAfterExtract" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

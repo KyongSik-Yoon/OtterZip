@@ -1,0 +1,56 @@
+﻿[workspace]
+resolver = "2"
+members = [
+    "crates/spanzip-core",
+    "crates/spanzip-ffi",
+    "crates/spanzip-bench",
+    "crates/spanzip-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["SpanZIP Contributors"]
+repository = "https://github.com/spanzip/spanzip"
+rust-version = "1.80"
+
+[workspace.dependencies]
+# --- error / logging ---
+thiserror = "2"
+tracing   = "0.1"
+zeroize   = { version = "1", features = ["derive"] }
+
+# --- parallel / IO ---
+rayon     = "1"
+memmap2   = "0.9"
+
+# --- compression backends ---
+libdeflater = "1"
+zstd        = "0.13"
+bzip2       = "0.5"
+xz2         = "0.1"
+flate2      = { version = "1", default-features = false, features = ["zlib-ng"] }
+tar         = "0.4"
+zip         = { version = "2", default-features = false, features = ["deflate"] }
+sevenz-rust = "0.6"
+unrar       = "0.5"
+
+# --- dev ---
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest  = "1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.bench]
+inherits = "release"
+debug = true   # ?꾨줈?뚯씪留곸슜 ?щ낵 ?좎?
+
+[profile.dev]
+opt-level = 0
+debug = true
