@@ -2,6 +2,18 @@
 
 namespace SpanZIP.Interop;
 
+// CA1027 / CA1008 wants FlagsAttribute or a `None = 0` member once the
+// variant count crosses ~12. ArchiveFormat is a sequential-value enum
+// (mirrors a Rust `#[repr(u32)]` enum) where each value identifies one
+// container format -- bitwise combination is meaningless. `Unknown = 0`
+// already plays the role of the zero-default; suppress both rules at
+// the type level so future additions don't trigger them again.
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design", "CA1027:Mark enums with FlagsAttribute",
+    Justification = "Sequential value enum mirroring a Rust #[repr(u32)] enum; not a bit field.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design", "CA1008:Enums should have zero value",
+    Justification = "Unknown = 0 already serves as the zero-default member.")]
 public enum ArchiveFormat : uint
 {
     Unknown = 0,
@@ -13,6 +25,20 @@ public enum ArchiveFormat : uint
     TarGz = 6,
     TarBz2 = 7,
     TarXz = 8,
+    // Phase 7+ option Y -- ABI v7. Mirrors spanzip-core's
+    // ArchiveFormat (slot 12 reserved for the .Z OUT decision).
+    Bzip2 = 9,
+    Xz = 10,
+    Lzma = 11,
+    Zstd = 13,
+    TarZst = 14,
+    Lz4 = 15,
+    TarLz4 = 16,
+    Zipx = 17,
+    Iso = 18,
+    Cab = 19,
+    Msi = 20,
+    Deb = 21,
 }
 
 public enum OverwritePolicy : uint

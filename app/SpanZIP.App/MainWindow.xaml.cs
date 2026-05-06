@@ -431,10 +431,30 @@ public sealed partial class MainWindow : Window
             {
                 ArchiveFormat.Zip => true,
                 ArchiveFormat.SevenZ => true,
+                ArchiveFormat.Rar => true,
                 ArchiveFormat.Tar => true,
                 ArchiveFormat.TarGz => true,
                 ArchiveFormat.TarBz2 => true,
                 ArchiveFormat.TarXz => true,
+                // Phase 7+ option Y -- mainstream cover extension.
+                // Single-stream + tar wrappers + ZIP variants + ISO /
+                // CAB / MSI / DEB. Drop-zone classification needs to
+                // recognise every read-side ArchiveFormat the
+                // dispatcher accepts; otherwise the user's drag of a
+                // perfectly valid `.zst` / `.cab` / etc. would route
+                // to the compress flow instead of extract.
+                ArchiveFormat.Bzip2 => true,
+                ArchiveFormat.Xz => true,
+                ArchiveFormat.Lzma => true,
+                ArchiveFormat.Zstd => true,
+                ArchiveFormat.TarZst => true,
+                ArchiveFormat.Lz4 => true,
+                ArchiveFormat.TarLz4 => true,
+                ArchiveFormat.Zipx => true,
+                ArchiveFormat.Iso => true,
+                ArchiveFormat.Cab => true,
+                ArchiveFormat.Msi => true,
+                ArchiveFormat.Deb => true,
                 _ => false,
             };
         }
@@ -1038,6 +1058,17 @@ public sealed partial class MainWindow : Window
             "tar.xz" => (ArchiveFormat.TarXz,
                          store ? CompressionMethod.Store : CompressionMethod.Lzma2,
                          ".tar.xz"),
+            // PR-F7 -- single-stream .xz writer (Phase 7+ option Y).
+            // Method choice is informational here; the XZ writer
+            // always uses LZMA2 internally.
+            "xz" => (ArchiveFormat.Xz,
+                     store ? CompressionMethod.Store : CompressionMethod.Lzma2,
+                     ".xz"),
+            // PR-F7 -- ZIPX writer with Bzip2 method (the de-facto
+            // baseline; LZMA write is not supported by zip 2.x).
+            "zipx" => (ArchiveFormat.Zipx,
+                       store ? CompressionMethod.Store : CompressionMethod.Bzip2,
+                       ".zipx"),
             _ => (ArchiveFormat.Zip,
                   store ? CompressionMethod.Store : CompressionMethod.Deflate,
                   ".zip"),

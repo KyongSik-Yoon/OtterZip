@@ -68,6 +68,11 @@
                         <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz" Tag="tar.gz" />
                         <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2" Tag="tar.bz2" />
                         <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz" Tag="tar.xz" />
+                        <!-- PR-F7 (Phase 7+ option Y) — single-stream + ZIPX
+                             writers landed; expose the new create-side
+                             options here so the user can pick them. -->
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatXz" Tag="xz" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatZipx" Tag="zipx" />
                     </ComboBox>
                 </Grid>
             </Border>

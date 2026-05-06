@@ -171,6 +171,9 @@
   <data name="ConfigPanel_FormatTarGz.Content"><value>tar.gz</value></data>
   <data name="ConfigPanel_FormatTarBz2.Content"><value>tar.bz2</value></data>
   <data name="ConfigPanel_FormatTarXz.Content"><value>tar.xz</value></data>
+  <!-- PR-F7: single-stream .xz / ZIPX(Bzip2 method) creation -->
+  <data name="ConfigPanel_FormatXz.Content"><value>xz (single)</value></data>
+  <data name="ConfigPanel_FormatZipx.Content"><value>zipx (Bzip2)</value></data>
 
   <!-- Card 1: Compression Method (4-step) -->
   <data name="ConfigPanel_MethodHeaderFormat"><value>Compression method: {0}</value></data>
