@@ -80,6 +80,12 @@ pub(crate) fn open_writer(
         | ArchiveFormat::TarLz4 => Err(SpanzipError::FeatureDisabled(
             "Zstd/LZ4 family create (single + tar) — PR-F7",
         )),
+        // PR-F5 — ISO9660 is extract-only by policy. Disk-image
+        // creation belongs to dedicated authoring tools (mkisofs /
+        // oscdimg / xorriso); the schema explicitly OUTs it.
+        ArchiveFormat::Iso => Err(SpanzipError::FeatureDisabled(
+            "ISO9660 creation is out of scope (extract-only by design)",
+        )),
         ArchiveFormat::Unknown => Err(SpanzipError::InvalidArgument("unknown create format")),
     }
 }

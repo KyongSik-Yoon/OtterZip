@@ -13,6 +13,7 @@ use zeroize::Zeroizing;
 use crate::entry::Entry;
 use crate::error::{Result, SpanzipError};
 
+pub(crate) mod iso;
 pub(crate) mod sevenz;
 pub(crate) mod single_stream;
 pub(crate) mod tar_family;
@@ -154,6 +155,11 @@ pub(crate) fn open_backend(
             path,
             self::tar_family::Compression::Lz4,
         )?)),
+        // PR-F5 — ISO9660 disk image (read-only). Joliet + Rock Ridge
+        // come from the iso9660-rs `all-extensions` feature flag.
+        // UDF goes via the same enum slot but the open path returns
+        // UnsupportedFormat with a hint -- see iso::map_iso_err.
+        F::Iso => Ok(Box::new(self::iso::IsoBackend::open(path)?)),
         F::Rar => Err(SpanzipError::FeatureDisabled("RAR backend (Sprint 4+)")),
         F::Unknown => Err(SpanzipError::UnsupportedFormat(None)),
     }

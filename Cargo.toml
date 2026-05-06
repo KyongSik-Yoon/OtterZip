@@ -37,6 +37,13 @@ sevenz-rust = "0.6"
 unrar       = "0.5"
 # Phase 7+ option Y (PR-F2): LZ4 frame format. Pure-Rust crate, MIT.
 lz4_flex    = { version = "0.13", default-features = false, features = ["frame", "std"] }
+# Phase 7+ option Y (PR-F5): ISO9660 reader with Joliet + Rock Ridge.
+# cdfs (the plan's original choice) doesn't build on Windows because of
+# its hard `fuser` dep; iso9660-rs is `no_std` + cross-platform and has
+# explicit Joliet support, which the plan's PoC gate flagged as a risk
+# for cdfs. See docs/05-build/phase-7-plus-plan.md §7 for the swap log.
+iso9660-rs  = { version = "1", default-features = false, features = ["all-extensions"] }
+gpt_disk_io = "0.16"
 
 # --- dev ---
 criterion = { version = "0.5", features = ["html_reports"] }

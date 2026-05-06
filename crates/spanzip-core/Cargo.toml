@@ -25,6 +25,8 @@ zip         = { workspace = true }
 sevenz-rust = { workspace = true }
 unrar       = { workspace = true }
 lz4_flex    = { workspace = true }
+iso9660-rs  = { workspace = true }
+gpt_disk_io = { workspace = true }
 
 [dev-dependencies]
 proptest  = { workspace = true }

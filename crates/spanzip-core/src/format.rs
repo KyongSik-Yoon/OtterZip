@@ -29,6 +29,10 @@ pub enum ArchiveFormat {
     TarZst = 14, // .tar.zst
     Lz4 = 15,    // .lz4 (frame format)
     TarLz4 = 16, // .tar.lz4
+    // PR-F5 — ISO9660 disk image (read-only). Joliet + Rock Ridge
+    // extensions handled by the iso9660-rs backend; UDF is detected
+    // separately and returns Unsupported (deferred to v1.1).
+    Iso = 18,    // slot 17 (Zipx) is reserved for PR-F6
 }
 
 #[repr(u32)]
@@ -307,6 +311,15 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
         // by inspecting the path extension. Safe because no other input
         // hits TarXz with a `.tlz` suffix.
         (Some("tlz"), _) => Some(ArchiveFormat::TarXz),
+        // PR-F5 — ISO9660 disk images. Magic ('CD001' at offset 0x8001
+        // = sector 16) is past the 512-byte sniff window, so detection
+        // is extension-only here; the actual volume descriptor check
+        // happens in `backends::iso::IsoBackend::open` which fails with
+        // BackendError on a non-ISO9660 payload. `.img` is a
+        // disk-image alias frequently used for raw / hybrid ISO9660
+        // dumps. UDF (.udf) intentionally NOT routed here -- v1.1
+        // backlog.
+        (Some("iso"), _) | (Some("img"), _) => Some(ArchiveFormat::Iso),
         // PR-F2 — Zstd / LZ4 single-stream + tar variants.
         (Some("zst"), _) | (Some("tzst"), _) => {
             if matches!(stem_lower.as_deref(), Some("tar.zst"))
