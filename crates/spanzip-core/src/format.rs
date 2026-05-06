@@ -18,6 +18,12 @@ pub enum ArchiveFormat {
     TarGz = 6,
     TarBz2 = 7,
     TarXz = 8,
+
+    // ABI v7 (Phase 7+ — option Y, see CHANGELOG-ffi.md / schema.md §1.1).
+    // Slot 12 is reserved (Compress/.Z was OUT'd at the PoC gate).
+    Bzip2 = 9,
+    Xz = 10,
+    Lzma = 11,
 }
 
 #[repr(u32)]
@@ -178,15 +184,14 @@ fn upgrade_with_extension(tentative: ArchiveFormat, path: &Path) -> ArchiveForma
             }
         }
         ArchiveFormat::TarBz2 => {
-            // Default from detect_bytes is tentative TarBz2; honor plain .bz2.
+            // BZ2 magic ("BZh") is shared between plain and tar variants.
+            // Phase 7+ option Y added an explicit Bzip2 variant for the
+            // single-stream case; previously this branch fell back to
+            // Unknown because the enum lacked a Bzip2-only slot.
             if matches!(ext, Some("tbz") | Some("tbz2")) || matches!(stem, Some("tar.bz2")) {
                 ArchiveFormat::TarBz2
             } else if matches!(ext, Some("bz2")) {
-                // Raw bzip2 stream — we do not model "Bzip2 only" separately;
-                // the API enum has no Bzip2-only variant, so fall back to
-                // Unknown so callers get UnsupportedFormat rather than a
-                // misleading TarBz2.
-                ArchiveFormat::Unknown
+                ArchiveFormat::Bzip2
             } else {
                 ArchiveFormat::TarBz2
             }
@@ -195,8 +200,7 @@ fn upgrade_with_extension(tentative: ArchiveFormat, path: &Path) -> ArchiveForma
             if matches!(ext, Some("txz")) || matches!(stem, Some("tar.xz")) {
                 ArchiveFormat::TarXz
             } else if matches!(ext, Some("xz")) {
-                // Same rationale as bzip2 above — enum has no "Xz only".
-                ArchiveFormat::Unknown
+                ArchiveFormat::Xz
             } else {
                 ArchiveFormat::TarXz
             }
@@ -229,7 +233,8 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
             {
                 Some(ArchiveFormat::TarBz2)
             } else {
-                None
+                // Plain .bz2 single-stream (v7+).
+                Some(ArchiveFormat::Bzip2)
             }
         }
         (Some("xz"), _) | (Some("txz"), _) => {
@@ -238,9 +243,13 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
             {
                 Some(ArchiveFormat::TarXz)
             } else {
-                None
+                // Plain .xz single-stream (v7+).
+                Some(ArchiveFormat::Xz)
             }
         }
+        // .lzma single-stream (v7+). No double-extension form is in scope —
+        // .tar.lzma is rare and routes through the .tlz alias in TarBackend.
+        (Some("lzma"), _) => Some(ArchiveFormat::Lzma),
         _ => None,
     }
 }
@@ -317,5 +326,46 @@ mod tests {
     #[test]
     fn unknown_returns_none() {
         assert_eq!(detect_bytes(&[0, 1, 2, 3]), None);
+    }
+
+    // --- Phase 7+ option Y: single-stream variants ---------------------
+
+    #[test]
+    fn ext_hint_plain_bz2_yields_bzip2_single_stream() {
+        // The bare .bz2 case used to yield Unknown; v7 elevates it to Bzip2.
+        assert_eq!(extension_hint(Path::new("foo.bz2")), Some(ArchiveFormat::Bzip2));
+    }
+
+    #[test]
+    fn ext_hint_plain_xz_yields_xz_single_stream() {
+        assert_eq!(extension_hint(Path::new("foo.xz")), Some(ArchiveFormat::Xz));
+    }
+
+    #[test]
+    fn ext_hint_lzma_yields_lzma_single_stream() {
+        assert_eq!(extension_hint(Path::new("foo.lzma")), Some(ArchiveFormat::Lzma));
+    }
+
+    #[test]
+    fn ext_hint_tarball_still_routes_to_tar_family() {
+        // Regression guard: the v7 changes must not break the .tar.* cases.
+        assert_eq!(extension_hint(Path::new("foo.tar.bz2")), Some(ArchiveFormat::TarBz2));
+        assert_eq!(extension_hint(Path::new("foo.tar.xz")), Some(ArchiveFormat::TarXz));
+        assert_eq!(extension_hint(Path::new("foo.tbz2")), Some(ArchiveFormat::TarBz2));
+        assert_eq!(extension_hint(Path::new("foo.txz")), Some(ArchiveFormat::TarXz));
+    }
+
+    #[test]
+    fn upgrade_with_ext_bz2_picks_single_stream() {
+        // BZh magic alone is ambiguous between plain .bz2 and .tar.bz2;
+        // the .bz2 extension narrows it to Bzip2 (v7) instead of Unknown.
+        let p = Path::new("payload.bz2");
+        assert_eq!(upgrade_with_extension(ArchiveFormat::TarBz2, p), ArchiveFormat::Bzip2);
+    }
+
+    #[test]
+    fn upgrade_with_ext_xz_picks_single_stream() {
+        let p = Path::new("payload.xz");
+        assert_eq!(upgrade_with_extension(ArchiveFormat::TarXz, p), ArchiveFormat::Xz);
     }
 }

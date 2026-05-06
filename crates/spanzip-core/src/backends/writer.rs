@@ -63,6 +63,13 @@ pub(crate) fn open_writer(
         ArchiveFormat::TarBz2 | ArchiveFormat::TarXz => Err(SpanzipError::FeatureDisabled(
             ".tar.bz2 / .tar.xz creation lands post-MVP",
         )),
+        // Phase 7+ option Y (PR-F1) added Bzip2/Xz/Lzma single-stream
+        // *extract* paths. Single-stream **creation** (PR-F7) ships in a
+        // later sprint; until then refuse cleanly so callers don't write
+        // empty files. See docs/05-build/phase-7-plus-plan.md.
+        ArchiveFormat::Bzip2 | ArchiveFormat::Xz | ArchiveFormat::Lzma => Err(
+            SpanzipError::FeatureDisabled("single-stream create (Bzip2/Xz/Lzma) — PR-F7"),
+        ),
         ArchiveFormat::Unknown => Err(SpanzipError::InvalidArgument("unknown create format")),
     }
 }

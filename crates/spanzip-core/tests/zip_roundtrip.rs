@@ -154,27 +154,21 @@ fn path_traversal_is_blocked_by_default() {
 }
 
 #[test]
-fn unsupported_formats_rejected() {
-    // Write raw gzip magic + a minimal stream so `detect` classifies the
-    // file as `ArchiveFormat::Gzip`. We don't need a valid decompressible
-    // stream — Sprint 1 rejects before decoding.
+fn truly_unsupported_format_rejected() {
+    // Phase 7+ option Y (PR-F1) made bare GZIP / BZIP2 / XZ / LZMA into
+    // first-class single-stream archive backends, closing the schema §5.2
+    // gap. The original `unsupported_formats_rejected` test treated a
+    // lone .gz as the canonical "rejected" case — which no longer holds.
+    //
+    // The contract we still need to verify is: a file that detect() can't
+    // classify (no magic match, no extension hint) must yield
+    // `UnsupportedFormat`. Use random non-magic bytes to exercise that.
     let td = tempdir().unwrap();
-    let gz_path = td.path().join("only.gz");
-    let bytes: &[u8] = &[
-        0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff, // header (deflate + OS=unknown)
-        0x01, 0x00, 0x00, 0xff, 0xff, // empty stored block
-        0, 0, 0, 0, // CRC32 = 0
-        0, 0, 0, 0, // ISIZE = 0
-    ];
-    fs::write(&gz_path, bytes).unwrap();
-
-    let err = Archive::open(&gz_path, OpenMode::Read).unwrap_err();
-    // Sprint 3: detection now classifies plain gzip-as-tarball-tentative,
-    // and the dispatcher returns FeatureDisabled because we don't model
-    // bare single-stream gzip as an "archive" (use .tar.gz).
+    let bogus = td.path().join("payload.bogusext");
+    fs::write(&bogus, b"\x00\x01\x02\x03not-a-real-archive\x00").unwrap();
+    let err = Archive::open(&bogus, OpenMode::Read).unwrap_err();
     match err {
-        spanzip_core::SpanzipError::UnsupportedFormat(_)
-        | spanzip_core::SpanzipError::FeatureDisabled(_) => {}
-        other => panic!("expected UnsupportedFormat / FeatureDisabled, got {other:?}"),
+        spanzip_core::SpanzipError::UnsupportedFormat(_) => {}
+        other => panic!("expected UnsupportedFormat for bogus extension, got {other:?}"),
     }
 }

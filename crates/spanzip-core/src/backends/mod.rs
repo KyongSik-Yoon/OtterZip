@@ -14,6 +14,7 @@ use crate::entry::Entry;
 use crate::error::{Result, SpanzipError};
 
 pub(crate) mod sevenz;
+pub(crate) mod single_stream;
 pub(crate) mod tar_family;
 pub(crate) mod writer;
 pub(crate) mod zip;
@@ -99,9 +100,26 @@ pub(crate) fn open_backend(
             path,
             self::tar_family::Compression::Xz,
         )?)),
-        F::Gzip => Err(SpanzipError::FeatureDisabled(
-            "single-stream gzip extraction (use .tar.gz)",
-        )),
+        // Phase 7+ option Y (PR-F1): single-stream backends.
+        // GZIP was previously FeatureDisabled despite schema §5.2 listing it
+        // as supported — the gap closes here so the four single-stream
+        // formats route through the same SingleStreamBackend.
+        F::Gzip => Ok(Box::new(self::single_stream::SingleStreamBackend::open(
+            path,
+            self::single_stream::SingleStreamKind::Gzip,
+        )?)),
+        F::Bzip2 => Ok(Box::new(self::single_stream::SingleStreamBackend::open(
+            path,
+            self::single_stream::SingleStreamKind::Bzip2,
+        )?)),
+        F::Xz => Ok(Box::new(self::single_stream::SingleStreamBackend::open(
+            path,
+            self::single_stream::SingleStreamKind::Xz,
+        )?)),
+        F::Lzma => Ok(Box::new(self::single_stream::SingleStreamBackend::open(
+            path,
+            self::single_stream::SingleStreamKind::Lzma,
+        )?)),
         F::Rar => Err(SpanzipError::FeatureDisabled("RAR backend (Sprint 4+)")),
         F::Unknown => Err(SpanzipError::UnsupportedFormat(None)),
     }
