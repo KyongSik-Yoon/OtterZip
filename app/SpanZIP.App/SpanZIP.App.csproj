@@ -52,6 +52,31 @@
     <NoWarn>$(NoWarn);CA1515;CA1724;CA1003;CA1031;CA1822;CA5392;MA0046;MA0049;IL2026;IL3050</NoWarn>
   </PropertyGroup>
 
+  <!--
+    VS UI integration — what makes "Project right-click → Deploy"
+    and "Package and Publish" menus actually appear.
+
+    Side-by-side analysis with a known-working WinUI 3 project
+    (LumiFiles) showed our csproj had every packaging *property*
+    set correctly (GenerateAppxPackageOnBuild, signing thumbprint,
+    AppxPackageDir, etc.) but was missing the two **capability**
+    declarations VS reads to decide whether a project is an MSIX
+    target at all. Without these two tags VS treats the project
+    as a plain WinExe, hides the Deploy / Package menus, and the
+    .sln Deploy.0 line we added earlier sits idle.
+
+    The conditions match LumiFiles's pattern verbatim so the
+    `Disable*` opt-out hooks keep working for any future tooling
+    that wants to suppress them.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
