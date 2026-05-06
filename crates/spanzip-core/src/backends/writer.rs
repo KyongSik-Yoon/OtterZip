@@ -63,23 +63,26 @@ pub(crate) fn open_writer(
         ArchiveFormat::TarBz2 | ArchiveFormat::TarXz => Err(SpanzipError::FeatureDisabled(
             ".tar.bz2 / .tar.xz creation lands post-MVP",
         )),
-        // Phase 7+ option Y (PR-F1) added Bzip2/Xz/Lzma single-stream
-        // *extract* paths. Single-stream **creation** (PR-F7) ships in a
-        // later sprint; until then refuse cleanly so callers don't write
-        // empty files. See docs/05-build/phase-7-plus-plan.md.
-        ArchiveFormat::Bzip2 | ArchiveFormat::Xz | ArchiveFormat::Lzma => Err(
-            SpanzipError::FeatureDisabled("single-stream create (Bzip2/Xz/Lzma) — PR-F7"),
-        ),
-        // PR-F2 — Zstd / LZ4 single-stream + tar variants. Same gate as
-        // above; `.tar.zst` / `.tar.lz4` creation is also a PR-F7 item
-        // because we'd need writer-side support in TarBackend that the
-        // current `ArchiveWriter` trait doesn't model yet.
+        // PR-F7 — XZ single-stream writer. Bzip2 / Lzma single-stream
+        // creation can land in a follow-up; the plan acceptance
+        // explicitly calls for `.xz` only since `.bz2` and `.lzma`
+        // single-stream are niche compared to .xz / .tar.xz.
+        ArchiveFormat::Xz => Ok(Box::new(XzWriterBackend::create(path, opts)?)),
+        ArchiveFormat::Bzip2 | ArchiveFormat::Lzma => Err(SpanzipError::FeatureDisabled(
+            "Bzip2 / Lzma single-stream create — follow-up to PR-F7",
+        )),
+        // PR-F2 — Zstd / LZ4 single-stream + tar variants stay
+        // disabled. Adding writer support requires extending
+        // TarBackend's writer side; out of PR-F7 scope.
         ArchiveFormat::Zstd
         | ArchiveFormat::Lz4
         | ArchiveFormat::TarZst
         | ArchiveFormat::TarLz4 => Err(SpanzipError::FeatureDisabled(
-            "Zstd/LZ4 family create (single + tar) — PR-F7",
+            "Zstd/LZ4 family create (single + tar) — follow-up to PR-F7",
         )),
+        // PR-F7 — ZIPX writer. zip-rs with bzip2 / lzma method
+        // extensions; output reads cleanly in Bandizip / 7-Zip.
+        ArchiveFormat::Zipx => Ok(Box::new(ZipxWriterBackend::create(path, opts, password)?)),
         // PR-F5 — ISO9660 is extract-only by policy. Disk-image
         // creation belongs to dedicated authoring tools (mkisofs /
         // oscdimg / xorriso); the schema explicitly OUTs it.
@@ -562,3 +565,187 @@ fn compose_entry_name(root: &Path, current: &Path, entry_prefix: &str) -> String
 const _: fn() = || {
     let _: Option<PathBuf> = None;
 };
+
+// =========================================================================
+// PR-F7 — Single-stream XZ writer
+// =========================================================================
+//
+// Symmetric to the read-side `single_stream::SingleStreamBackend` but
+// for the writer dispatch path. A single-stream archive contains
+// **exactly one** logical file, so `add_entry` is allowed only once;
+// any subsequent call returns `FeatureDisabled`. Directories are
+// rejected outright (the format has no concept of an entry hierarchy).
+
+pub(crate) struct XzWriterBackend {
+    /// `None` after `add_entry` has consumed the encoder. The state
+    /// transition guards against the second-add case at the type
+    /// level rather than via a boolean flag.
+    encoder: Option<xz2::write::XzEncoder<BufWriter<File>>>,
+    /// True after the first add succeeds; second add becomes an
+    /// explicit error.
+    written: bool,
+}
+
+impl XzWriterBackend {
+    fn create(path: &Path, opts: &CreateOptions) -> Result<Self> {
+        let file = File::create(path)?;
+        // Map our 0..=9 level to xz2's 0..=9 (passes through 1:1).
+        // Level 6 is xz's tradeoff sweet spot; default to that when
+        // the caller leaves the level at 0.
+        let level = if opts.compression_level == 0 {
+            6
+        } else {
+            u32::from(opts.compression_level.clamp(1, 9))
+        };
+        let encoder = xz2::write::XzEncoder::new(BufWriter::new(file), level);
+        Ok(Self {
+            encoder: Some(encoder),
+            written: false,
+        })
+    }
+}
+
+impl ArchiveWriter for XzWriterBackend {
+    fn add_entry(
+        &mut self,
+        entry_path: &str,
+        data: &mut dyn Read,
+        _size_hint: Option<u64>,
+        is_directory: bool,
+    ) -> Result<()> {
+        if is_directory {
+            return Err(SpanzipError::FeatureDisabled(
+                "XZ single-stream cannot encode directory entries",
+            ));
+        }
+        if self.written {
+            return Err(SpanzipError::FeatureDisabled(
+                "XZ single-stream allows exactly one entry",
+            ));
+        }
+        let _ = entry_path; // single-stream has no in-archive name; ignore.
+        let encoder = self
+            .encoder
+            .as_mut()
+            .ok_or(SpanzipError::InvalidArgument("xz writer already committed"))?;
+        std::io::copy(data, encoder)?;
+        self.written = true;
+        Ok(())
+    }
+
+    fn commit(mut self: Box<Self>) -> Result<()> {
+        if let Some(enc) = self.encoder.take() {
+            // `finish` flushes the trailing XZ stream footer + index;
+            // dropping without it produces a truncated archive that
+            // most extractors refuse.
+            let inner = enc.finish().map_err(SpanzipError::Io)?;
+            // Drop drains the BufWriter to disk.
+            drop(inner);
+        }
+        Ok(())
+    }
+}
+
+// =========================================================================
+// PR-F7 — ZIPX writer (zip-rs with bzip2 / lzma method extensions)
+// =========================================================================
+//
+// "ZIPX" is informally any ZIP whose entries use a method beyond the
+// classic Stored / Deflated set -- typically BZIP2 or LZMA. We re-use
+// the `zip` crate (now built with the bzip2 + lzma feature flags) and
+// pick the method from `CreateOptions::compression`. Output is a
+// regular `.zipx` file that 7-Zip / Bandizip / WinRAR can read.
+
+pub(crate) struct ZipxWriterBackend {
+    inner: Option<zip::ZipWriter<BufWriter<File>>>,
+    options: zip::write::SimpleFileOptions,
+}
+
+impl ZipxWriterBackend {
+    fn create(
+        path: &Path,
+        opts: &CreateOptions,
+        _password: Option<&Zeroizing<String>>,
+    ) -> Result<Self> {
+        let file = File::create(path)?;
+        let writer = zip::ZipWriter::new(BufWriter::new(file));
+
+        // Pick the method from the public CreateOptions. The zip 2.x
+        // crate currently writes Bzip2 reliably under the `bzip2`
+        // feature flag, but its LZMA support is read-only -- writer
+        // returns "LZMA isn't supported for compression" if asked.
+        // We surface that as FeatureDisabled rather than letting the
+        // caller hit a generic BackendError mid-add_entry.
+        let method = match opts.compression {
+            CompressionMethod::Bzip2 => zip::CompressionMethod::Bzip2,
+            CompressionMethod::Lzma => {
+                return Err(SpanzipError::FeatureDisabled(
+                    "ZIPX LZMA write -- zip crate is read-only for LZMA; \
+                     pick CompressionMethod::Bzip2 for ZIPX creation",
+                ));
+            }
+            CompressionMethod::Store => zip::CompressionMethod::Stored,
+            CompressionMethod::Deflate | CompressionMethod::Deflate64 => {
+                zip::CompressionMethod::Deflated
+            }
+            // Any other method (Zstd / Ppmd / Lzma2 / Unknown) maps
+            // to Bzip2 -- the de-facto ZIPX baseline on Windows.
+            _ => zip::CompressionMethod::Bzip2,
+        };
+        // Level 0 is invalid for Bzip2 (the codec accepts 1..=9).
+        // Map "let backend pick" to a sensible default rather than
+        // letting the zip crate raise "Unsupported compression
+        // level" at add_entry time.
+        let raw_level = opts.compression_level;
+        let level = if raw_level == 0 {
+            // Bzip2's sweet spot per the bzip2 manual; matches
+            // 7-Zip's default for ZIPX output.
+            6
+        } else {
+            i64::from(raw_level.clamp(1, 9))
+        };
+
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(method)
+            .compression_level(Some(level))
+            .unix_permissions(0o644);
+
+        Ok(Self {
+            inner: Some(writer),
+            options,
+        })
+    }
+}
+
+impl ArchiveWriter for ZipxWriterBackend {
+    fn add_entry(
+        &mut self,
+        entry_path: &str,
+        data: &mut dyn Read,
+        _size_hint: Option<u64>,
+        is_directory: bool,
+    ) -> Result<()> {
+        let writer = self
+            .inner
+            .as_mut()
+            .ok_or(SpanzipError::InvalidArgument("zipx writer already committed"))?;
+        if is_directory {
+            writer
+                .add_directory(entry_path, self.options)
+                .map_err(map_zip_err)?;
+            return Ok(());
+        }
+        writer
+            .start_file(entry_path, self.options)
+            .map_err(map_zip_err)?;
+        std::io::copy(data, writer)?;
+        Ok(())
+    }
+
+    fn commit(mut self: Box<Self>) -> Result<()> {
+        if let Some(writer) = self.inner.take() {
+            writer.finish().map_err(map_zip_err)?;
+        }
+        Ok(())
+    }
+}

@@ -86,7 +86,7 @@ pub(crate) fn open_backend(
 ) -> Result<Box<dyn ArchiveBackend + Send>> {
     use crate::format::ArchiveFormat as F;
     match format {
-        F::Zip => Ok(Box::new(self::zip::ZipBackend::open(path, password)?)),
+        F::Zip | F::Zipx => Ok(Box::new(self::zip::ZipBackend::open(path, password)?)),
         F::SevenZ => Ok(Box::new(self::sevenz::SevenZBackend::open(path, password)?)),
         F::Tar => Ok(Box::new(self::tar_family::TarBackend::open(
             path,

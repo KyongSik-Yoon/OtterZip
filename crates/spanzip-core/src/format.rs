@@ -29,10 +29,16 @@ pub enum ArchiveFormat {
     TarZst = 14, // .tar.zst
     Lz4 = 15,    // .lz4 (frame format)
     TarLz4 = 16, // .tar.lz4
+    // PR-F7 — ZIPX (informal name for any ZIP whose entries use a
+    // method beyond Stored / Deflated, typically BZIP2 / LZMA).
+    // Read uses the standard ZipBackend (zip crate handles every
+    // method when the bzip2 / lzma features are enabled); write
+    // uses a dedicated ZipxWriterBackend to pick the method.
+    Zipx = 17,
     // PR-F5 — ISO9660 disk image (read-only). Joliet + Rock Ridge
     // extensions handled by the iso9660-rs backend; UDF is detected
     // separately and returns Unsupported (deferred to v1.1).
-    Iso = 18,    // slot 17 (Zipx) is reserved for a later PR
+    Iso = 18,
     // PR-F6 — Windows installer family (read-only). CAB is a
     // standalone container; MSI is an OLE2 Compound Document that
     // typically embeds one or more CAB streams plus tabular metadata.
@@ -242,6 +248,11 @@ fn upgrade_with_extension(tentative: ArchiveFormat, path: &Path) -> ArchiveForma
     let stem = stem_lower.as_deref();
 
     match tentative {
+        // PR-F7 — `.zipx` extensions still match the ZIP magic;
+        // promote to Zipx so the writer dispatch (and the UI label
+        // for the ZIPX-classified read path) can treat it as the
+        // method-extended variant.
+        ArchiveFormat::Zip if matches!(ext, Some("zipx")) => ArchiveFormat::Zipx,
         ArchiveFormat::Gzip => {
             if matches!(ext, Some("tgz")) || matches!(stem, Some("tar.gz")) {
                 ArchiveFormat::TarGz
@@ -396,6 +407,13 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
         // backend layer; here we only need the extension fallback
         // for truncated / empty .deb fixtures.
         (Some("deb"), _) => Some(ArchiveFormat::Deb),
+        // PR-F7 — `.zipx` extension. ZIP magic still applies (the
+        // file is a real PK-prefixed ZIP), so detect_bytes already
+        // routes the magic case to `Zip`. We bias the extension to
+        // the Zipx slot so writers can re-use the same dispatcher
+        // for round-trips and the UI label is honest about the
+        // method-extended nature of the file.
+        (Some("zipx"), _) => Some(ArchiveFormat::Zipx),
         // PR-F2 — Zstd / LZ4 single-stream + tar variants.
         (Some("zst"), _) | (Some("tzst"), _) => {
             if matches!(stem_lower.as_deref(), Some("tar.zst"))
