@@ -81,4 +81,49 @@
     </AppxManifest>
   </ItemGroup>
 
+  <!--
+    Visual Studio "Project right-click → Deploy" menu activation.
+    These properties are only meaningful when WindowsPackageType=MSIX
+    (= Release in our branch). They tell the MSBuild MSIX targets to:
+      1. Generate the .msix during the build (not just publish).
+      2. Sign it with the dev cert checked into build/ (paired with
+         the dev-cert.pfx that tools/dev-cert.ps1 produces).
+      3. Drop the output under bin/<Config>/<Platform>/AppPackages so
+         VS knows where to look when invoking Add-AppxPackage.
+    `build-msix.bat` already passes these as `/p:` overrides; codifying
+    them here lets the IDE's Deploy command work without the batch
+    script.
+  -->
+  <PropertyGroup Condition="'$(WindowsPackageType)' != 'None'">
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <AppxBundle>Never</AppxBundle>
+    <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
+    <AppxPackageDir>$(MSBuildThisFileDirectory)bin\$(Configuration)\$(Platform)\AppPackages\</AppxPackageDir>
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <!--
+      The .NET SDK MSIX targets ignore PackageCertificatePassword
+      (that pair is wapproj-specific). For VS Deploy to sign the
+      package automatically the cert must live in the user's
+      personal certificate store and be referenced by thumbprint.
+      Onboarding step (run once on a new dev machine):
+
+          $pwd = ConvertTo-SecureString "spanzip-dev-only" `
+                   -AsPlainText -Force
+          Import-PfxCertificate `
+              -FilePath build\dev-cert.pfx `
+              -CertStoreLocation Cert:\CurrentUser\My `
+              -Password $pwd
+
+      Thumbprint below matches the dev-cert.pfx checked into
+      build/. Regenerating the cert (tools/dev-cert.ps1) requires
+      updating both this value and build/dev-cert.thumbprint.txt.
+    -->
+    <PackageCertificateThumbprint>61A88ECD6F4BEFC512B38EC2910F0D7D43D13788</PackageCertificateThumbprint>
+    <!-- AOT incompatible with MSIX packaging — explicit OFF so VS
+         Deploy doesn't accidentally enable it for Release. -->
+    <PublishAot>false</PublishAot>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
 </Project>
