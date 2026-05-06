@@ -13,7 +13,9 @@ use zeroize::Zeroizing;
 use crate::entry::Entry;
 use crate::error::{Result, SpanzipError};
 
+pub(crate) mod cab;
 pub(crate) mod iso;
+pub(crate) mod msi;
 pub(crate) mod sevenz;
 pub(crate) mod single_stream;
 pub(crate) mod tar_family;
@@ -160,6 +162,12 @@ pub(crate) fn open_backend(
         // UDF goes via the same enum slot but the open path returns
         // UnsupportedFormat with a hint -- see iso::map_iso_err.
         F::Iso => Ok(Box::new(self::iso::IsoBackend::open(path)?)),
+        // PR-F6 — Windows installer family (read-only). Both routes
+        // surface UnsupportedFormat for non-matching payloads so the
+        // detect path can still report "this isn't a real CAB / MSI"
+        // without leaking io::Error to callers.
+        F::Cab => Ok(Box::new(self::cab::CabBackend::open(path)?)),
+        F::Msi => Ok(Box::new(self::msi::MsiBackend::open(path)?)),
         F::Rar => Err(SpanzipError::FeatureDisabled("RAR backend (Sprint 4+)")),
         F::Unknown => Err(SpanzipError::UnsupportedFormat(None)),
     }

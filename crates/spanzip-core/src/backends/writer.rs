@@ -86,6 +86,13 @@ pub(crate) fn open_writer(
         ArchiveFormat::Iso => Err(SpanzipError::FeatureDisabled(
             "ISO9660 creation is out of scope (extract-only by design)",
         )),
+        // PR-F6 — Windows installer family. CAB authoring is feasible
+        // (cab crate has a Builder) but explicitly out of v1.0 scope
+        // -- users who want to *create* CABs reach for makecab.exe.
+        // MSI authoring is well outside scope (Wix / WiX Toolset).
+        ArchiveFormat::Cab | ArchiveFormat::Msi => Err(SpanzipError::FeatureDisabled(
+            "CAB / MSI creation is out of scope (extract-only)",
+        )),
         ArchiveFormat::Unknown => Err(SpanzipError::InvalidArgument("unknown create format")),
     }
 }

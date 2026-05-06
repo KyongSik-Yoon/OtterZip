@@ -32,7 +32,12 @@ pub enum ArchiveFormat {
     // PR-F5 — ISO9660 disk image (read-only). Joliet + Rock Ridge
     // extensions handled by the iso9660-rs backend; UDF is detected
     // separately and returns Unsupported (deferred to v1.1).
-    Iso = 18,    // slot 17 (Zipx) is reserved for PR-F6
+    Iso = 18,    // slot 17 (Zipx) is reserved for a later PR
+    // PR-F6 — Windows installer family (read-only). CAB is a
+    // standalone container; MSI is an OLE2 Compound Document that
+    // typically embeds one or more CAB streams plus tabular metadata.
+    Cab = 19,
+    Msi = 20,
 }
 
 #[repr(u32)]
@@ -78,6 +83,14 @@ const MAGIC_XZ: &[u8] = &[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
 // uniquely identify their respective stream containers.
 const MAGIC_ZSTD: &[u8] = &[0x28, 0xB5, 0x2F, 0xFD];
 const MAGIC_LZ4_FRAME: &[u8] = &[0x04, 0x22, 0x4D, 0x18];
+// PR-F6 — Microsoft Cabinet header magic ("MSCF") and OLE2 / Compound
+// File Binary signature (used by MSI, .doc, .xls, .ppt). The CFB
+// signature is shared by every OLE2 product so an extension check is
+// still required to distinguish MSI from a Word doc; that's why we
+// route the signature to ArchiveFormat::Msi *only* when the extension
+// agrees (handled in `detect`).
+const MAGIC_CAB: &[u8] = b"MSCF";
+const MAGIC_OLE2: &[u8] = &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
 const TAR_USTAR_OFFSET: usize = 257;
 const TAR_USTAR_MAGIC: &[u8] = b"ustar";
@@ -156,6 +169,19 @@ pub fn detect_bytes(prefix: &[u8]) -> Option<ArchiveFormat> {
     }
     if starts_with(prefix, MAGIC_LZ4_FRAME) {
         return Some(ArchiveFormat::Lz4);
+    }
+    // PR-F6 — Microsoft Cabinet ("MSCF") is unambiguous.
+    if starts_with(prefix, MAGIC_CAB) {
+        return Some(ArchiveFormat::Cab);
+    }
+    // PR-F6 — OLE2 / CFB signature is shared with .doc / .xls / .ppt
+    // and many other Microsoft formats, so we tentatively classify as
+    // MSI. `upgrade_with_extension` keeps the MSI classification only
+    // when the extension agrees; otherwise it falls back to Unknown
+    // so the caller doesn't receive a misleading "MSI" for a Word
+    // document.
+    if starts_with(prefix, MAGIC_OLE2) {
+        return Some(ArchiveFormat::Msi);
     }
 
     // TAR: ustar magic at offset 257. Accept POSIX "ustar\0" and GNU "ustar ".
@@ -243,6 +269,17 @@ fn upgrade_with_extension(tentative: ArchiveFormat, path: &Path) -> ArchiveForma
                 ArchiveFormat::Lz4
             }
         }
+        // PR-F6 — OLE2 / CFB signature: keep `Msi` only when the
+        // extension agrees. Word / Excel / PowerPoint share the
+        // signature but aren't archive formats; misclassifying them
+        // as MSI would cause confusing extraction failures.
+        ArchiveFormat::Msi => {
+            if matches!(ext, Some("msi")) {
+                ArchiveFormat::Msi
+            } else {
+                ArchiveFormat::Unknown
+            }
+        }
         other => other,
     }
 }
@@ -320,6 +357,13 @@ fn extension_hint(path: &Path) -> Option<ArchiveFormat> {
         // dumps. UDF (.udf) intentionally NOT routed here -- v1.1
         // backlog.
         (Some("iso"), _) | (Some("img"), _) => Some(ArchiveFormat::Iso),
+        // PR-F6 — Windows installer family. Cabinet uses the "MSCF"
+        // magic so detect_bytes already routes most cases; the
+        // extension hint covers truncated / empty fixtures. MSI
+        // shares the OLE2 signature with other Microsoft formats so
+        // the extension is what disambiguates it.
+        (Some("cab"), _) => Some(ArchiveFormat::Cab),
+        (Some("msi"), _) => Some(ArchiveFormat::Msi),
         // PR-F2 — Zstd / LZ4 single-stream + tar variants.
         (Some("zst"), _) | (Some("tzst"), _) => {
             if matches!(stem_lower.as_deref(), Some("tar.zst"))

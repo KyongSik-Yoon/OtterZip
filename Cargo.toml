@@ -44,6 +44,11 @@ lz4_flex    = { version = "0.13", default-features = false, features = ["frame",
 # for cdfs. See docs/05-build/phase-7-plus-plan.md §7 for the swap log.
 iso9660-rs  = { version = "1", default-features = false, features = ["all-extensions"] }
 gpt_disk_io = "0.16"
+# Phase 7+ option Y (PR-F6): Microsoft Cabinet + Compound File Binary
+# (MSI is an OLE2/CFB container that often embeds CABs). Both pure-Rust
+# crates, MIT, no system deps.
+cab         = "0.6"
+cfb         = "0.10"
 
 # --- dev ---
 criterion = { version = "0.5", features = ["html_reports"] }
