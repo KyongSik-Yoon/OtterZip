@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  OtterZip 색상 토큰 + SolidColorBrush 정의
+  참조: docs/02-design/design-tokens.md §1
+
+  규칙:
+  - 모든 커스텀 색상 토큰은 Light / Dark / HighContrast 3개 테마 필수 정의
+  - 리터럴 hex 값은 본 파일 내부 ThemeDictionary에만 등장
+  - 기타 XAML/C#에서는 반드시 `{ThemeResource <Key>}` 참조
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ============================================================ -->
+        <!--  LIGHT                                                        -->
+        <!-- ============================================================ -->
+        <ResourceDictionary x:Key="Light">
+
+            <!-- OtterZip brand (Phase 6+ rev 5):
+                 deeper teal at light theme so the icon reads on a Mica-light
+                 backdrop. Used for accent surfaces (titlebar icon, lock
+                 active state, drop overlay border) so the app keeps a
+                 distinct identity even when the user has changed their
+                 Windows accent colour. -->
+            <Color x:Key="OtterzipBrandColor">#00A1AC</Color>
+            <Color x:Key="OtterzipBrandSoftColor">#1400B7C3</Color>
+
+            <!-- DropOverlay (rev 5 polish): nearly opaque so the panel
+                 cards behind don't bleed through, with a faint brand tint.
+                 Reject variant uses the system critical color instead. -->
+            <Color x:Key="DropOverlayBackgroundColor">#F2EAFCFD</Color>
+            <Color x:Key="DropOverlayRejectBackgroundColor">#F2FDECEC</Color>
+            <Color x:Key="DropOverlayCardBackgroundColor">#FFFFFFFF</Color>
+
+            <!-- Dropzone -->
+            <Color x:Key="DropzoneIdleBorderColor">#33000000</Color>
+            <Color x:Key="DropzoneHoverFillColor">#1400B7C3</Color>
+
+            <!-- Archive formats (포맷별 식별 뱃지용) -->
+            <Color x:Key="ArchiveFormatZipColor">#FFC300</Color>
+            <Color x:Key="ArchiveFormatSevenZColor">#FF6B35</Color>
+            <Color x:Key="ArchiveFormatTarColor">#8B5A2B</Color>
+            <Color x:Key="ArchiveFormatRarColor">#7B1FA2</Color>
+
+            <!-- Progress ring track -->
+            <Color x:Key="ProgressRingTrackColor">#1A000000</Color>
+
+            <!-- Brushes -->
+            <SolidColorBrush x:Key="OtterzipBrandBrush" Color="{ThemeResource OtterzipBrandColor}" />
+            <SolidColorBrush x:Key="OtterzipBrandSoftBrush" Color="{ThemeResource OtterzipBrandSoftColor}" />
+            <SolidColorBrush x:Key="DropzoneIdleBorderBrush" Color="{ThemeResource DropzoneIdleBorderColor}" />
+            <SolidColorBrush x:Key="DropzoneHoverBorderBrush" Color="{ThemeResource OtterzipBrandColor}" />
+            <SolidColorBrush x:Key="DropzoneHoverFillBrush" Color="{ThemeResource DropzoneHoverFillColor}" />
+            <SolidColorBrush x:Key="DropOverlayBackgroundBrush" Color="{ThemeResource DropOverlayBackgroundColor}" />
+            <SolidColorBrush x:Key="DropOverlayRejectBackgroundBrush" Color="{ThemeResource DropOverlayRejectBackgroundColor}" />
+            <SolidColorBrush x:Key="DropOverlayCardBackgroundBrush" Color="{ThemeResource DropOverlayCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatZipBrush" Color="{ThemeResource ArchiveFormatZipColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatSevenZBrush" Color="{ThemeResource ArchiveFormatSevenZColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatTarBrush" Color="{ThemeResource ArchiveFormatTarColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatRarBrush" Color="{ThemeResource ArchiveFormatRarColor}" />
+            <SolidColorBrush x:Key="ProgressRingTrackBrush" Color="{ThemeResource ProgressRingTrackColor}" />
+
+        </ResourceDictionary>
+
+        <!-- ============================================================ -->
+        <!--  DARK                                                         -->
+        <!-- ============================================================ -->
+        <ResourceDictionary x:Key="Dark">
+
+            <!-- OtterZip brand — brighter cyan for dark Mica backdrop. -->
+            <Color x:Key="OtterzipBrandColor">#4DD0E1</Color>
+            <Color x:Key="OtterzipBrandSoftColor">#1F4DD0E1</Color>
+
+            <!-- DropOverlay — dark variant. Slightly tinted toward brand,
+                 nearly opaque so backing cards are obscured. -->
+            <Color x:Key="DropOverlayBackgroundColor">#F21A2326</Color>
+            <Color x:Key="DropOverlayRejectBackgroundColor">#F22A1B1B</Color>
+            <Color x:Key="DropOverlayCardBackgroundColor">#FF2D3437</Color>
+
+            <Color x:Key="DropzoneIdleBorderColor">#33FFFFFF</Color>
+            <Color x:Key="DropzoneHoverFillColor">#14FFFFFF</Color>
+
+            <Color x:Key="ArchiveFormatZipColor">#FFC300</Color>
+            <Color x:Key="ArchiveFormatSevenZColor">#FF6B35</Color>
+            <Color x:Key="ArchiveFormatTarColor">#B58863</Color>
+            <Color x:Key="ArchiveFormatRarColor">#BA68C8</Color>
+
+            <Color x:Key="ProgressRingTrackColor">#1AFFFFFF</Color>
+
+            <SolidColorBrush x:Key="OtterzipBrandBrush" Color="{ThemeResource OtterzipBrandColor}" />
+            <SolidColorBrush x:Key="OtterzipBrandSoftBrush" Color="{ThemeResource OtterzipBrandSoftColor}" />
+            <SolidColorBrush x:Key="DropzoneIdleBorderBrush" Color="{ThemeResource DropzoneIdleBorderColor}" />
+            <SolidColorBrush x:Key="DropzoneHoverBorderBrush" Color="{ThemeResource OtterzipBrandColor}" />
+            <SolidColorBrush x:Key="DropzoneHoverFillBrush" Color="{ThemeResource DropzoneHoverFillColor}" />
+            <SolidColorBrush x:Key="DropOverlayBackgroundBrush" Color="{ThemeResource DropOverlayBackgroundColor}" />
+            <SolidColorBrush x:Key="DropOverlayRejectBackgroundBrush" Color="{ThemeResource DropOverlayRejectBackgroundColor}" />
+            <SolidColorBrush x:Key="DropOverlayCardBackgroundBrush" Color="{ThemeResource DropOverlayCardBackgroundColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatZipBrush" Color="{ThemeResource ArchiveFormatZipColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatSevenZBrush" Color="{ThemeResource ArchiveFormatSevenZColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatTarBrush" Color="{ThemeResource ArchiveFormatTarColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatRarBrush" Color="{ThemeResource ArchiveFormatRarColor}" />
+            <SolidColorBrush x:Key="ProgressRingTrackBrush" Color="{ThemeResource ProgressRingTrackColor}" />
+
+        </ResourceDictionary>
+
+        <!-- ============================================================ -->
+        <!--  HIGH CONTRAST                                                -->
+        <!--  접근성 — 시스템 색상에 위임                                  -->
+        <!-- ============================================================ -->
+        <ResourceDictionary x:Key="HighContrast">
+
+            <SolidColorBrush x:Key="OtterzipBrandBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="OtterzipBrandSoftBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="DropzoneIdleBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DropzoneHoverBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="DropzoneHoverFillBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="DropOverlayBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DropOverlayRejectBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DropOverlayCardBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+
+            <SolidColorBrush x:Key="ArchiveFormatZipBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatSevenZBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatTarBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="ArchiveFormatRarBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="ProgressRingTrackBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

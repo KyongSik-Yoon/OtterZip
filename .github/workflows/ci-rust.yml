@@ -71,12 +71,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Regenerate spanzip.h
-        run: cargo build -p spanzip-ffi
+      - name: Regenerate otterzip.h
+        run: cargo build -p otterzip-ffi
       - name: Verify no uncommitted header changes
         run: |
-          git diff --exit-code crates/spanzip-ffi/include/spanzip.h || (
-            echo "::error::spanzip.h changed but not committed. Update ABI version + commit header."
+          git diff --exit-code crates/otterzip-ffi/include/otterzip.h || (
+            echo "::error::otterzip.h changed but not committed. Update ABI version + commit header."
             exit 1
           )
         shell: bash
@@ -91,7 +91,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Compile benches
-        run: cargo bench --no-run -p spanzip-core
+        run: cargo bench --no-run -p otterzip-core
       - name: Quick run (synthetic fixture, ~30s)
-        run: cargo bench -p spanzip-core --bench extract -- --quick --warm-up-time 1 --measurement-time 2
+        run: cargo bench -p otterzip-core --bench extract -- --quick --warm-up-time 1 --measurement-time 2
         shell: bash

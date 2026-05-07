@@ -1,0 +1,48 @@
+[package]
+name = "otterzip-core"
+description = "OtterZip — archive format core (ZIP/7z/RAR/TAR/GZIP)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+tracing   = { workspace = true }
+zeroize   = { workspace = true }
+rayon     = { workspace = true }
+memmap2   = { workspace = true }
+
+libdeflater = { workspace = true }
+zstd        = { workspace = true }
+bzip2       = { workspace = true }
+xz2         = { workspace = true }
+flate2      = { workspace = true }
+tar         = { workspace = true }
+zip         = { workspace = true }
+sevenz-rust = { workspace = true }
+unrar       = { workspace = true }
+lz4_flex    = { workspace = true }
+iso9660-rs  = { workspace = true }
+gpt_disk_io = { workspace = true }
+cab         = { workspace = true }
+cfb         = { workspace = true }
+
+[dev-dependencies]
+proptest  = { workspace = true }
+criterion = { workspace = true }
+tempfile  = "3"
+# Enable the AES write side-channel of `zip` only for tests so we can build
+# an encrypted-ZIP fixture without polluting the production feature set.
+zip       = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
+
+[features]
+default = []
+# 특정 백엔드를 조건부 비활성화할 때 사용 (예: no-rar feature).
+# 현재는 all-on. Feature 분리는 필요 시 추후.
+
+[[bench]]
+name = "extract"
+harness = false

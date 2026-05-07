@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Settings → Integration tab. (Phase 6+ rev 3)
+  3 items: master toggle / submenu mode / extract-here as default.
+  All three are gated on Sprint S body availability — disabled in MVP.
+-->
+<UserControl
+    x:Class="OtterZip.App.Dialogs.IntegrationSettingsSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
+        <StackPanel Spacing="{StaticResource SpacingMValue}"
+                    Padding="{StaticResource SpacingL}">
+
+            <!-- PR-7E: ShellMenuEnabled is now wired end-to-end (C++
+                 GetState reads LocalSettings under a 5s cache). The
+                 mode + default-action toggles save state but their
+                 effect is manifest-driven — see ShellExtractHere
+                 GetFlags comment for why ECF flags can't bold a verb
+                 at runtime. -->
+            <StackPanel>
+                <CheckBox x:Name="ShellMenuEnabledCheck"
+                          x:Uid="Settings_ShellMenuEnabled"
+                          MinHeight="0"
+                          Checked="OnToggle"
+                          Unchecked="OnToggle"
+                          Tag="Settings_ShellMenuEnabled" />
+                <TextBlock x:Uid="Settings_ShellMenuEnabledSub"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Margin="28,0,0,2"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </StackPanel>
+
+            <Grid ColumnSpacing="{StaticResource SpacingMValue}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           x:Uid="Settings_ShellMenuModeLabel"
+                           VerticalAlignment="Top"
+                           Margin="0,8,0,0"
+                           Style="{StaticResource BodyTextStyle}" />
+                <RadioButtons Grid.Column="1"
+                              x:Name="ShellMenuModeRadios"
+                              MaxColumns="1"
+                              SelectionChanged="OnShellMenuModeChanged">
+                    <RadioButton x:Uid="Settings_ShellMenuModeFlat"   Tag="flat" />
+                    <RadioButton x:Uid="Settings_ShellMenuModeNested" Tag="nested" />
+                </RadioButtons>
+            </Grid>
+
+            <CheckBox x:Name="ExtractHereDefaultCheck"
+                      x:Uid="Settings_ShellExtractHereAsDefault"
+                      MinHeight="0"
+                      Checked="OnToggle"
+                      Unchecked="OnToggle"
+                      Tag="Settings_ShellExtractHereAsDefault" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

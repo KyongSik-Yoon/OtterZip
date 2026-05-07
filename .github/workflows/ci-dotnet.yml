@@ -8,7 +8,7 @@ on:
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
       - 'global.json'
-      - 'SpanZIP.sln'
+      - 'OtterZip.sln'
       - '.github/workflows/ci-dotnet.yml'
   pull_request:
     paths:
@@ -16,7 +16,7 @@ on:
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
       - 'global.json'
-      - 'SpanZIP.sln'
+      - 'OtterZip.sln'
 
 jobs:
   build:
@@ -29,26 +29,26 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Native spanzip_ffi.dll from Rust build (used by Interop copy target)
+      # Native otterzip_ffi.dll from Rust build (used by Interop copy target)
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p spanzip-ffi --release
+      - run: cargo build -p otterzip-ffi --release
 
       - name: Restore
-        run: dotnet restore SpanZIP.sln
+        run: dotnet restore OtterZip.sln
 
       - name: Build
-        run: dotnet build SpanZIP.sln --configuration Release --no-restore /p:Platform=x64
+        run: dotnet build OtterZip.sln --configuration Release --no-restore /p:Platform=x64
 
       - name: Test
-        run: dotnet test SpanZIP.sln --configuration Release --no-build /p:Platform=x64
+        run: dotnet test OtterZip.sln --configuration Release --no-build /p:Platform=x64
 
       # AOT trim check — ensure no NEW IL2xxx/IL3xxx warnings slip in.
       # Known WebView2 transitive warnings are silenced via NoWarn in
-      # SpanZIP.App.csproj; new entries from our own code surface here.
+      # OtterZip.App.csproj; new entries from our own code surface here.
       - name: Publish AOT (smoke)
         run: |
-          dotnet publish app\SpanZIP.App\SpanZIP.App.csproj -c Release -r win-x64 /p:Platform=x64 /p:WarningsAsErrors=true
+          dotnet publish app\OtterZip.App\OtterZip.App.csproj -c Release -r win-x64 /p:Platform=x64 /p:WarningsAsErrors=true
 
   hardcoding-scan:
     name: UI Hard rules (no literals)
@@ -80,8 +80,8 @@ jobs:
         run: |
           # Match only <data name="..."> rows; the previous loose regex also caught
           # schema-level <resheader name="..."> attributes and produced false diffs.
-          KO_KEYS=$(grep -oE '<data\s+name="[^"]+"' app/SpanZIP.App/Strings/ko-KR/Resources.resw | sort -u)
-          EN_KEYS=$(grep -oE '<data\s+name="[^"]+"' app/SpanZIP.App/Strings/en-US/Resources.resw | sort -u)
+          KO_KEYS=$(grep -oE '<data\s+name="[^"]+"' app/OtterZip.App/Strings/ko-KR/Resources.resw | sort -u)
+          EN_KEYS=$(grep -oE '<data\s+name="[^"]+"' app/OtterZip.App/Strings/en-US/Resources.resw | sort -u)
           if [ "$KO_KEYS" != "$EN_KEYS" ]; then
             echo "::error::.resw <data> keys are not identical across ko-KR and en-US"
             diff <(echo "$KO_KEYS") <(echo "$EN_KEYS")

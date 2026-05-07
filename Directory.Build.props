@@ -15,9 +15,9 @@
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
 
     <!-- Source metadata -->
-    <Authors>SpanZIP Contributors</Authors>
-    <Copyright>Copyright 짤 2026 SpanZIP. All Rights Reserved.</Copyright>
-    <Product>SpanZIP</Product>
+    <Authors>OtterZip Contributors</Authors>
+    <Copyright>Copyright 짤 2026 OtterZip. All Rights Reserved.</Copyright>
+    <Product>OtterZip</Product>
     <Version>0.1.0</Version>
   </PropertyGroup>
 

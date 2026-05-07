@@ -1,10 +1,10 @@
-# SpanZIP
+# OtterZip
 
 > Fast archive tool — Rust core + WinUI 3 (Windows) + SwiftUI (macOS, planned).
 > Built for speed. Competes with 7-Zip, WinRAR, Bandizip, PeaZip.
 
-[![Rust CI](https://github.com/spanzip/spanzip/actions/workflows/ci-rust.yml/badge.svg)](./.github/workflows/ci-rust.yml)
-[![.NET CI](https://github.com/spanzip/spanzip/actions/workflows/ci-dotnet.yml/badge.svg)](./.github/workflows/ci-dotnet.yml)
+[![Rust CI](https://github.com/otterzip/otterzip/actions/workflows/ci-rust.yml/badge.svg)](./.github/workflows/ci-rust.yml)
+[![.NET CI](https://github.com/otterzip/otterzip/actions/workflows/ci-dotnet.yml/badge.svg)](./.github/workflows/ci-dotnet.yml)
 
 ---
 
@@ -25,19 +25,19 @@
 ```
 ┌────────────────────────┐
 │   WinUI 3 App (C#)     │  Native AOT, MSIX 패키징
-│   SpanZIP.App          │  다국어/다크/라이트
+│   OtterZip.App          │  다국어/다크/라이트
 ├────────────────────────┤
-│   SpanZIP.Interop (C#) │  P/Invoke + SafeHandle
+│   OtterZip.Interop (C#) │  P/Invoke + SafeHandle
 ├────────────────────────┤
-│   spanzip_ffi.dll (Rust)   │  C ABI (cbindgen 자동 생성)
-│   spanzip-ffi          │
+│   otterzip_ffi.dll (Rust)   │  C ABI (cbindgen 자동 생성)
+│   otterzip-ffi          │
 ├────────────────────────┤
-│   spanzip-core (Rust)  │  Archive + 포맷 백엔드
+│   otterzip-core (Rust)  │  Archive + 포맷 백엔드
 │                        │  libdeflate / zstd / liblzma / ...
 └────────────────────────┘
 
 ┌────────────────────────┐
-│ SpanZIP.Shell.dll      │  C++/WinRT · IExplorerCommand
+│ OtterZip.Shell.dll      │  C++/WinRT · IExplorerCommand
 │ (Windows 셸 확장)      │  MSIX uap3:Extension 등록
 └────────────────────────┘
 ```
@@ -65,22 +65,22 @@
 ### 빌드
 
 ```powershell
-# 1. Rust (네이티브 spanzip_ffi.dll)
+# 1. Rust (네이티브 otterzip_ffi.dll)
 cargo build --workspace
 
 # 2. .NET (빌드 타깃이 Rust 산출물 자동 복사)
-dotnet build SpanZIP.sln
+dotnet build OtterZip.sln
 
 # 3. (개발자) CLI로 smoke
-cargo run -p spanzip-cli
+cargo run -p otterzip-cli
 
 # 4. (개발자) 벤치
-cargo bench -p spanzip-core
+cargo bench -p otterzip-core
 ```
 
 ### 실행
 
-Visual Studio에서 `SpanZIP.App`을 스타트업 프로젝트로 설정 후 F5.
+Visual Studio에서 `OtterZip.App`을 스타트업 프로젝트로 설정 후 F5.
 
 ## 라이선스
 

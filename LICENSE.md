@@ -1,10 +1,10 @@
-# SpanZIP 라이선스 개요
+# OtterZip 라이선스 개요
 
-SpanZIP 저장소는 **두 가지 라이선스 영역**으로 구분됩니다.
+OtterZip 저장소는 **두 가지 라이선스 영역**으로 구분됩니다.
 
 ## 1. Rust 코어 (`crates/**`) — 오픈 소스
 
-`crates/spanzip-core`, `crates/spanzip-ffi`, `crates/spanzip-bench`, `crates/spanzip-cli`의 모든 소스 파일은 다음 라이선스 중 **하나를 선택**하여 사용할 수 있습니다:
+`crates/otterzip-core`, `crates/otterzip-ffi`, `crates/otterzip-bench`, `crates/otterzip-cli`의 모든 소스 파일은 다음 라이선스 중 **하나를 선택**하여 사용할 수 있습니다:
 
 - **MIT License** — 전문: [`crates/LICENSE-MIT`](crates/LICENSE-MIT)
 - **Apache License, Version 2.0** — 전문: [`crates/LICENSE-APACHE`](crates/LICENSE-APACHE)
@@ -15,11 +15,11 @@ SPDX 식별자: `MIT OR Apache-2.0`
 
 ### 기여 (Contributions)
 
-기여자가 SpanZIP의 Rust 코어에 의도적으로 제출하는 모든 기여물은 추가 조건 없이 Apache-2.0 라이선스에 따라 듀얼 라이선스됨에 동의한 것으로 간주합니다 (Apache-2.0 §5).
+기여자가 OtterZip의 Rust 코어에 의도적으로 제출하는 모든 기여물은 추가 조건 없이 Apache-2.0 라이선스에 따라 듀얼 라이선스됨에 동의한 것으로 간주합니다 (Apache-2.0 §5).
 
 ## 2. 애플리케이션 (`app/**`) — Proprietary
 
-`app/SpanZIP.App`, `app/SpanZIP.Interop`, `app/SpanZIP.App.Tests`의 모든 소스 파일, XAML, 에셋, 아이콘, 브랜드는 **All Rights Reserved** 입니다.
+`app/OtterZip.App`, `app/OtterZip.Interop`, `app/OtterZip.App.Tests`의 모든 소스 파일, XAML, 에셋, 아이콘, 브랜드는 **All Rights Reserved** 입니다.
 
 - 전문: [`app/LICENSE`](app/LICENSE)
 - 무단 복제·수정·재배포·역공학을 금합니다.
@@ -38,8 +38,8 @@ SPDX 식별자: `MIT OR Apache-2.0`
 
 ## 5. 브랜드 · 상표
 
-"SpanZIP" 이름, 로고, 아이콘은 라이선스 범위 **밖**이며 소유자에게 권리가 유보됩니다.
-Rust 코어를 fork하여 파생 제품을 만드는 경우 "SpanZIP" 명칭 사용은 허가되지 않습니다.
+"OtterZip" 이름, 로고, 아이콘은 라이선스 범위 **밖**이며 소유자에게 권리가 유보됩니다.
+Rust 코어를 fork하여 파생 제품을 만드는 경우 "OtterZip" 명칭 사용은 허가되지 않습니다.
 
 ## 6. 요약표
 
@@ -50,4 +50,4 @@ Rust 코어를 fork하여 파생 제품을 만드는 경우 "SpanZIP" 명칭 사
 | `docs/**` | `MIT OR Apache-2.0` |
 | `bench/scripts/**`, `scripts/**` | `MIT OR Apache-2.0` |
 | `bench/corpus/**` | 원저작자 라이선스 |
-| "SpanZIP" 상표 | All Rights Reserved |
+| "OtterZip" 상표 | All Rights Reserved |

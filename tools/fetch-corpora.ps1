@@ -1,7 +1,7 @@
 # Sprint 6 RC — Bench corpus downloader.
 #
 # Downloads & stages the standard performance corpora into build\corpora\
-# so cargo bench can pick them up via SPANZIP_BENCH_CORPUS. Idempotent:
+# so cargo bench can pick them up via OTTERZIP_BENCH_CORPUS. Idempotent:
 # already-downloaded files are skipped.
 #
 # Usage (no admin required):
@@ -87,5 +87,5 @@ Get-ChildItem $dest -Filter '*.zip' | ForEach-Object {
 }
 Write-Host ""
 Write-Host "Run benchmarks against one with:" -ForegroundColor Cyan
-Write-Host "  `$Env:SPANZIP_BENCH_CORPUS = '$($dest -replace '\\','\\')\silesia.zip'"
-Write-Host "  cargo bench -p spanzip-core --bench extract -- --warm-up-time 2 --measurement-time 10"
+Write-Host "  `$Env:OTTERZIP_BENCH_CORPUS = '$($dest -replace '\\','\\')\silesia.zip'"
+Write-Host "  cargo bench -p otterzip-core --bench extract -- --warm-up-time 2 --measurement-time 10"

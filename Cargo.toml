@@ -1,18 +1,18 @@
 ﻿[workspace]
 resolver = "2"
 members = [
-    "crates/spanzip-core",
-    "crates/spanzip-ffi",
-    "crates/spanzip-bench",
-    "crates/spanzip-cli",
+    "crates/otterzip-core",
+    "crates/otterzip-ffi",
+    "crates/otterzip-bench",
+    "crates/otterzip-cli",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-authors = ["SpanZIP Contributors"]
-repository = "https://github.com/spanzip/spanzip"
+authors = ["OtterZip Contributors"]
+repository = "https://github.com/otterzip/otterzip"
 rust-version = "1.80"
 
 [workspace.dependencies]

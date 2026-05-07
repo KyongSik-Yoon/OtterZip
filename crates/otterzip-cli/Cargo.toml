@@ -1,0 +1,16 @@
+[package]
+name = "otterzip-cli"
+description = "OtterZip — debug CLI (developer tool)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "otterzip-cli"
+path = "src/main.rs"
+
+[dependencies]
+otterzip-core = { path = "../otterzip-core" }

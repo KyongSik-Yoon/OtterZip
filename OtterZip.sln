@@ -1,0 +1,33 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.0.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OtterZip.App", "app\OtterZip.App\OtterZip.App.csproj", "{408707C8-FA5F-45AE-8E30-191C340C9902}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OtterZip.Interop", "app\OtterZip.Interop\OtterZip.Interop.csproj", "{28719299-077B-435E-9065-C1E878CDA1D1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{408707C8-FA5F-45AE-8E30-191C340C9902}.Debug|x64.ActiveCfg = Debug|x64
+		{408707C8-FA5F-45AE-8E30-191C340C9902}.Debug|x64.Build.0 = Debug|x64
+		{408707C8-FA5F-45AE-8E30-191C340C9902}.Release|x64.ActiveCfg = Release|x64
+		{408707C8-FA5F-45AE-8E30-191C340C9902}.Release|x64.Build.0 = Release|x64
+		{408707C8-FA5F-45AE-8E30-191C340C9902}.Release|x64.Deploy.0 = Release|x64
+		{28719299-077B-435E-9065-C1E878CDA1D1}.Debug|x64.ActiveCfg = Debug|x64
+		{28719299-077B-435E-9065-C1E878CDA1D1}.Debug|x64.Build.0 = Debug|x64
+		{28719299-077B-435E-9065-C1E878CDA1D1}.Release|x64.ActiveCfg = Release|x64
+		{28719299-077B-435E-9065-C1E878CDA1D1}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {40739257-7795-461B-B708-310268998B9E}
+		StartupItem = OtterZip.App\OtterZip.App.csproj
+	EndGlobalSection
+EndGlobal

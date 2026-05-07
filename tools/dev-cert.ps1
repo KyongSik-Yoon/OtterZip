@@ -1,6 +1,6 @@
 # Sprint 6 RC — Developer self-signed certificate for local MSIX testing.
 #
-# The MSIX manifest declares Publisher="CN=SpanZIP". Local installs need a
+# The MSIX manifest declares Publisher="CN=OtterZip". Local installs need a
 # matching cert in the Trusted People store. Run once per machine:
 #
 #   pwsh tools/dev-cert.ps1
@@ -10,10 +10,10 @@
 
 [CmdletBinding()]
 param(
-    [string]$Subject = "CN=SpanZIP",
+    [string]$Subject = "CN=OtterZip",
     [int]$ValidMonths = 12,
     [string]$ExportPath,
-    [string]$Password = "spanzip-dev-only"
+    [string]$Password = "otterzip-dev-only"
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,7 +47,7 @@ else {
         -Type CodeSigningCert `
         -Subject $Subject `
         -KeyUsage DigitalSignature `
-        -FriendlyName "SpanZIP Dev Cert" `
+        -FriendlyName "OtterZip Dev Cert" `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -NotAfter (Get-Date).AddMonths($ValidMonths) `
         -TextExtension @(
@@ -76,4 +76,4 @@ if (-not (Get-ChildItem $trustStore | Where-Object { $_.Thumbprint -eq $cert.Thu
 Write-Host ""
 Write-Host "Thumbprint: $($cert.Thumbprint)"
 Write-Host "PFX path:   $ExportPath"
-Write-Host "Use this PFX with: signtool sign /fd SHA256 /a /f `"$ExportPath`" /p `"$Password`" SpanZIP.msix"
+Write-Host "Use this PFX with: signtool sign /fd SHA256 /a /f `"$ExportPath`" /p `"$Password`" OtterZip.msix"

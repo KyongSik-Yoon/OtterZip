@@ -3,7 +3,7 @@
 The `extract` benches run a synthetic in-memory ZIP by default so CI stays
 hermetic. Real-world numbers (per `docs/01-plan/performance.md` §6) come
 from running the same benches against an external corpus via the
-`SPANZIP_BENCH_CORPUS` environment variable.
+`OTTERZIP_BENCH_CORPUS` environment variable.
 
 ## Recommended corpora
 
@@ -19,13 +19,13 @@ from running the same benches against an external corpus via the
 ```pwsh
 # Stage Silesia as a single ZIP
 $silesia = "C:/corpora/silesia.zip"
-$Env:SPANZIP_BENCH_CORPUS = $silesia
+$Env:OTTERZIP_BENCH_CORPUS = $silesia
 
 # Run the throughput benchmarks
-cargo bench -p spanzip-core --bench extract -- --warm-up-time 2 --measurement-time 10
+cargo bench -p otterzip-core --bench extract -- --warm-up-time 2 --measurement-time 10
 
 # Reset
-Remove-Item Env:SPANZIP_BENCH_CORPUS
+Remove-Item Env:OTTERZIP_BENCH_CORPUS
 ```
 
 The bench JSON output lives in `target/criterion/`. Compare across

@@ -36,7 +36,7 @@ if (-not (Test-VsWhere)) {
 
 Push-Location (Resolve-Path "$PSScriptRoot/..")
 try {
-    cargo build -p spanzip-ffi --release
+    cargo build -p otterzip-ffi --release
     if ($LASTEXITCODE -ne 0) {
         Write-Host "::error::Rust release build failed." -ForegroundColor Red
         exit 1
@@ -44,7 +44,7 @@ try {
 
     $publishArgs = @(
         "publish",
-        "app/SpanZIP.App/SpanZIP.App.csproj",
+        "app/OtterZip.App/OtterZip.App.csproj",
         "-c", "Release",
         "-r", "win-x64",
         "/p:Platform=x64",

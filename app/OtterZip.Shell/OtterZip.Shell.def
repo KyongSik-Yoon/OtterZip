@@ -1,0 +1,7 @@
+; Exports required by an in-proc COM server. Sprint 4 scaffold.
+LIBRARY "OtterZip.Shell"
+EXPORTS
+    DllCanUnloadNow             PRIVATE
+    DllGetClassObject           PRIVATE
+    DllRegisterServer           PRIVATE
+    DllUnregisterServer         PRIVATE

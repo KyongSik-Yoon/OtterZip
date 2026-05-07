@@ -1,0 +1,246 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 mp com desktop4 rescap">
+
+  <Identity Name="OtterZip.OtterZip"
+            Publisher="CN=OtterZip"
+            Version="0.1.0.0" />
+
+  <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000"
+                    PhonePublisherId="00000000-0000-0000-0000-000000000000" />
+
+  <Properties>
+    <DisplayName>OtterZip</DisplayName>
+    <PublisherDisplayName>OtterZip</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop"
+                        MinVersion="10.0.19041.0"
+                        MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="ko-KR" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+                 Executable="$targetnametoken$.exe"
+                 EntryPoint="$targetentrypoint$">
+      <uap:VisualElements DisplayName="OtterZip"
+                          Description="Fast archive tool for Windows"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Square150x150Logo.png"
+                          Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+
+      <!--
+        Sprint 6 RC: real shell context menu wiring. Mirrors
+        app/OtterZip.Shell/Package.Shell.appxmanifest.fragment.xml so the
+        eventual MSIX bundle has the unified manifest in one place.
+        See docs/03-api/shell-extension.md section 2.
+      -->
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="OtterZip Shell Extension">
+              <com:Class Id="22222222-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+              <com:Class Id="44444444-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <!--
+          Phase 7+ (Bandizip mainstream 호환): ItemType 확장.
+          schema.md §1.1 ArchiveFormat enum의 추출 가능 포맷 전체 등록.
+          ZIP 변종 (JAR/WAR/IPA/APK/APPX/XPI 등) 및 TAR alias (TGZ/TBZ/TLZ/TXZ)는
+          enum 추가 없이 detect.rs의 확장자 매핑으로 처리되지만, Explorer 우클릭
+          노출을 위해 매니페스트엔 명시 등록 필요.
+          OUT 포맷 (schema.md §1.1.1)은 등록하지 않음 — Explorer가 자동으로
+          제외 표시.
+        -->
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop4:ItemType Type="*">
+              <desktop4:Verb Id="OtterzipCompress"
+                             Clsid="44444444-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!-- 컨테이너 / 멀티엔트리 -->
+            <desktop4:ItemType Type=".zip">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".zipx">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".7z">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".rar">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".tar">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!-- TAR alias (Zip/TarGz 등 enum 재사용) -->
+            <desktop4:ItemType Type=".tgz">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".tbz">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".tbz2">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".tlz">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".txz">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".tzst">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!-- 단일 스트림 -->
+            <desktop4:ItemType Type=".gz">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".bz2">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".xz">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".lzma">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <!--
+              .z (UNIX compress, LZW) — 옵션 Y 결정으로 OUT.
+              schema.md §1.1.1 "Rust crate 부재" 카테고리.
+              v1.1에서 libarchive 도입 시 재추가 검토.
+            -->
+            <desktop4:ItemType Type=".zst">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".lz4">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!-- ZIP 변종 (Zip enum 재사용, UI 라벨만 분리) -->
+            <desktop4:ItemType Type=".jar">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".war">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".ear">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".ipa">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".apk">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".aab">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".appx">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".msix">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".xpi">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".crx">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!--
+              디스크 이미지 (추출 전용) — 옵션 Y: ISO9660 + Joliet + Rock Ridge만.
+              .udf 확장자는 v1.0에서 미등록 (cdfs UDF 미지원).
+              UDF 컨테이너인 .iso 파일도 detect 시 ISO9660 매직 매칭 실패 →
+              사용자에게 "UDF는 v1.1 예정" 안내 표시.
+            -->
+            <desktop4:ItemType Type=".iso">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".img">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!-- Windows installer (추출 전용) -->
+            <desktop4:ItemType Type=".cab">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+            <desktop4:ItemType Type=".msi">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+
+            <!-- UNIX 패키지 (추출 전용) -->
+            <desktop4:ItemType Type=".deb">
+              <desktop4:Verb Id="OtterzipExtract"
+                             Clsid="22222222-2222-3333-4444-555555555555" />
+            </desktop4:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+      </Extensions>
+
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>

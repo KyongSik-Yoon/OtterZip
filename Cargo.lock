@@ -977,6 +977,62 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
+name = "otterzip-bench"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "otterzip-core",
+]
+
+[[package]]
+name = "otterzip-cli"
+version = "0.1.0"
+dependencies = [
+ "otterzip-core",
+]
+
+[[package]]
+name = "otterzip-core"
+version = "0.1.0"
+dependencies = [
+ "bzip2",
+ "cab",
+ "cfb",
+ "criterion",
+ "flate2",
+ "gpt_disk_io",
+ "iso9660-rs",
+ "libdeflater",
+ "lz4_flex",
+ "memmap2",
+ "proptest",
+ "rayon",
+ "sevenz-rust",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "unrar",
+ "xz2",
+ "zeroize",
+ "zip",
+ "zstd",
+]
+
+[[package]]
+name = "otterzip-ffi"
+version = "0.1.0"
+dependencies = [
+ "cbindgen",
+ "otterzip-core",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "zeroize",
+ "zip",
+]
+
+[[package]]
 name = "pbkdf2"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1356,62 +1412,6 @@ name = "simd-adler32"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
-
-[[package]]
-name = "spanzip-bench"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "spanzip-core",
-]
-
-[[package]]
-name = "spanzip-cli"
-version = "0.1.0"
-dependencies = [
- "spanzip-core",
-]
-
-[[package]]
-name = "spanzip-core"
-version = "0.1.0"
-dependencies = [
- "bzip2",
- "cab",
- "cfb",
- "criterion",
- "flate2",
- "gpt_disk_io",
- "iso9660-rs",
- "libdeflater",
- "lz4_flex",
- "memmap2",
- "proptest",
- "rayon",
- "sevenz-rust",
- "tar",
- "tempfile",
- "thiserror",
- "tracing",
- "unrar",
- "xz2",
- "zeroize",
- "zip",
- "zstd",
-]
-
-[[package]]
-name = "spanzip-ffi"
-version = "0.1.0"
-dependencies = [
- "cbindgen",
- "spanzip-core",
- "tempfile",
- "thiserror",
- "tracing",
- "zeroize",
- "zip",
-]
 
 [[package]]
 name = "strsim"

@@ -30,7 +30,7 @@ if (-not $PSScriptRoot -or $PSScriptRoot.Length -eq 0) {
 }
 $repo = [System.IO.Path]::GetFullPath((Join-Path $scriptDir '..'))
 
-$manifest = Join-Path $repo 'app\SpanZIP.App\Package.appxmanifest'
+$manifest = Join-Path $repo 'app\OtterZip.App\Package.appxmanifest'
 $cargo    = Join-Path $repo 'Cargo.toml'
 $dirProps = Join-Path $repo 'Directory.Build.props'
 

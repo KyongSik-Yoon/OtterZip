@@ -1,7 +1,0 @@
-; Exports required by an in-proc COM server. Sprint 4 scaffold.
-LIBRARY "SpanZIP.Shell"
-EXPORTS
-    DllCanUnloadNow             PRIVATE
-    DllGetClassObject           PRIVATE
-    DllRegisterServer           PRIVATE
-    DllUnregisterServer         PRIVATE

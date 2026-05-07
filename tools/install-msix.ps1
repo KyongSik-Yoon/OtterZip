@@ -6,7 +6,7 @@
 #
 # 사용법 (관리자 PowerShell):
 #   pwsh tools/install-msix.ps1
-#   pwsh tools/install-msix.ps1 -Msix D:\path\to\SpanZIP.msix
+#   pwsh tools/install-msix.ps1 -Msix D:\path\to\OtterZip.msix
 #
 # 필수 사전: tools/dev-cert.ps1 으로 build/dev-cert.pfx + .cer 생성.
 
@@ -15,7 +15,7 @@ param(
     [string]$Msix,
     [string]$Pfx,
     [string]$Cer,
-    [string]$Password = 'spanzip-dev-only'
+    [string]$Password = 'otterzip-dev-only'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,7 +88,7 @@ Write-Host ''
 
 # 3. Install. If a previous install exists we replace it.
 Write-Host '[3/3] Installing MSIX...'
-$existing = Get-AppxPackage -Name 'SpanZIP*' -ErrorAction SilentlyContinue
+$existing = Get-AppxPackage -Name 'OtterZip*' -ErrorAction SilentlyContinue
 if ($existing) {
     Write-Host "  Removing previous install: $($existing.PackageFullName)"
     Remove-AppxPackage -Package $existing.PackageFullName
@@ -97,5 +97,5 @@ Add-AppxPackage -Path $Msix
 Write-Host '[OK] MSIX installed.'
 Write-Host ''
 
-Get-AppxPackage SpanZIP* | Format-List Name, Version, PackageFullName, InstallLocation
+Get-AppxPackage OtterZip* | Format-List Name, Version, PackageFullName, InstallLocation
 Write-Host '=== Done. Right-click any ZIP in Explorer to test. ===' -ForegroundColor Green

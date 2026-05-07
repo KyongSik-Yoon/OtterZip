@@ -1,6 +1,6 @@
-# SpanZIP — Third-Party Notices
+# OtterZip — Third-Party Notices
 
-> 이 문서는 SpanZIP 배포 바이너리에 포함되는 제3자 라이브러리의 라이선스 고지를 기록합니다.
+> 이 문서는 OtterZip 배포 바이너리에 포함되는 제3자 라이브러리의 라이선스 고지를 기록합니다.
 > 법적 요구사항 충족을 위한 필수 문서입니다. **릴리스 전 자동 생성·검증**해야 합니다.
 
 ## 생성 방법
@@ -43,8 +43,8 @@ CI에서 차이 발생 시 PR 블록. 수동 편집 금지 (자동 생성 구간
 
 `unrar` 크레이트는 WinRAR의 `unrar.dll` / `unrar` 소스를 래핑합니다. WinRAR의 라이선스 조건은 다음 사항을 요구합니다:
 
-1. **RAR 해제 전용.** RAR 아카이브 생성에 사용 금지 — SpanZIP은 이를 준수 (`ErrorCode::FeatureDisabled`).
-2. **리버스 엔지니어링을 통한 RAR 포맷 구현 금지.** SpanZIP은 공식 unrar 라이브러리만 사용, 독자 구현 없음.
+1. **RAR 해제 전용.** RAR 아카이브 생성에 사용 금지 — OtterZip은 이를 준수 (`ErrorCode::FeatureDisabled`).
+2. **리버스 엔지니어링을 통한 RAR 포맷 구현 금지.** OtterZip은 공식 unrar 라이브러리만 사용, 독자 구현 없음.
 3. **배포 시 WinRAR 저작권 고지 포함 필수.** 본 문서와 애플리케이션 정보 화면에 표시.
 
 **필수 고지문 (About 화면에 표시 예정):**
@@ -71,8 +71,8 @@ MIT 라이선스 텍스트 전문은 `dotnet list package --include-transitive`�
 ## About 화면 템플릿 (앱 UI에 반영)
 
 ```
-SpanZIP {version}
-Copyright © 2026 SpanZIP. All Rights Reserved.
+OtterZip {version}
+Copyright © 2026 OtterZip. All Rights Reserved.
 
 Built with:
   • Rust core (MIT OR Apache-2.0) — see /legal/rust-core

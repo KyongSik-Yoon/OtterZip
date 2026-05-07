@@ -1,0 +1,660 @@
+//! ZIP backend — wraps the `zip` crate for Sprint 1 read path.
+//!
+//! Performance notes (per `performance.md` §2, §5):
+//! * The archive file is opened once with `BufReader` so random-access
+//!   reads during entry iteration don't cause syscall storms.
+//! * Entry enumeration allocates per-entry only for the owned
+//!   `String` fields of the public `Entry` POD (unavoidable per the
+//!   API contract in `rust-core-api.md` §1.2). No per-byte allocations
+//!   occur in the extraction path.
+
+use std::cell::RefCell;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read};
+use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
+
+use rayon::prelude::*;
+use zeroize::Zeroizing;
+use zip::ZipArchive;
+
+use crate::archive::ExtractWarning;
+use crate::backends::{ArchiveBackend, StreamingExtractCtx};
+use crate::entry::{Entry, HostOs};
+use crate::error::{Result, OtterzipError};
+use crate::format::{CompressionMethod, EncryptionMethod};
+use crate::options::OverwritePolicy;
+use crate::progress::{Progress, ProgressPhase};
+
+/// Wrapper around `zip::ZipArchive<BufReader<File>>`.
+///
+/// Held behind `Box<dyn ArchiveBackend>` in `Archive`. The inner archive
+/// is wrapped in a `RefCell` because the `zip` crate requires `&mut self`
+/// on every read, while our public API exposes `&self` methods per
+/// `rust-core-api.md` §1.1. Safety of `RefCell` here relies on `Archive`
+/// being `!Sync` — the doc contract already forbids cross-thread sharing
+/// without a mutex (§5).
+pub(crate) struct ZipBackend {
+    inner: RefCell<ZipArchive<BufReader<File>>>,
+    /// Held in zeroized memory so the bytes are wiped on drop. We clone
+    /// when calling into the `zip` crate's password APIs; the source-of-
+    /// truth string lives here and is never logged or formatted.
+    password: Option<Zeroizing<String>>,
+    /// Path to the underlying file. Held so worker threads in
+    /// [`ZipBackend::extract_all_streaming`] can re-open their own
+    /// archive handle for parallel decompression.
+    path: PathBuf,
+}
+
+impl ZipBackend {
+    pub(crate) fn open(path: &Path, password: Option<&Zeroizing<String>>) -> Result<Self> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
+        Ok(Self {
+            inner: RefCell::new(inner),
+            password: password.cloned(),
+            path: path.to_path_buf(),
+        })
+    }
+
+    /// Resolve a name to an open `ZipFile`, applying the stored password
+    /// when the entry is encrypted. Wrapped here so both `extract_entry`
+    /// and `open_entry_stream` get the same decryption discipline.
+    fn read_by_name<'a>(
+        archive: &'a mut ZipArchive<BufReader<File>>,
+        name: &str,
+        password: Option<&Zeroizing<String>>,
+    ) -> Result<zip::read::ZipFile<'a>> {
+        // Probe the entry to see whether it needs a password. We trial
+        // `by_name`, classify the error, and only *then* re-borrow with
+        // `by_name_decrypt`. The probe's borrow is released at the end of
+        // the match block because `probe_outcome` is a `bool`, not a
+        // reference back into `archive`.
+        enum Outcome {
+            Plain,
+            NeedsPassword,
+            NotFound,
+            Other(OtterzipError),
+        }
+        let outcome = {
+            match archive.by_name(name) {
+                Ok(_) => Outcome::Plain,
+                Err(zip::result::ZipError::FileNotFound) => Outcome::NotFound,
+                Err(zip::result::ZipError::UnsupportedArchive(msg))
+                    if msg_indicates_encryption(msg) =>
+                {
+                    Outcome::NeedsPassword
+                }
+                Err(other) => Outcome::Other(map_zip_err(other)),
+            }
+        };
+        match outcome {
+            Outcome::Plain => archive.by_name(name).map_err(|e| match e {
+                zip::result::ZipError::FileNotFound => {
+                    OtterzipError::EntryNotFound(name.to_string())
+                }
+                other => map_zip_err(other),
+            }),
+            Outcome::NeedsPassword => {
+                let p = password
+                    .ok_or_else(|| {
+                        // Trace the *fact* of a missing password, never
+                        // the value. Useful for distinguishing genuine
+                        // user errors from instrumentation noise.
+                        tracing::info!(
+                            target: "otterzip::security",
+                            event = "wrong_password",
+                            reason = "no_password_supplied",
+                            "encrypted entry without password"
+                        );
+                        OtterzipError::WrongPassword
+                    })?
+                    .as_bytes();
+                archive.by_name_decrypt(name, p).map_err(|e| match e {
+                    zip::result::ZipError::InvalidPassword => {
+                        tracing::info!(
+                            target: "otterzip::security",
+                            event = "wrong_password",
+                            reason = "invalid_password",
+                            "decryption failed for entry"
+                        );
+                        OtterzipError::WrongPassword
+                    }
+                    zip::result::ZipError::FileNotFound => {
+                        OtterzipError::EntryNotFound(name.to_string())
+                    }
+                    other => map_zip_err(other),
+                })
+            }
+            Outcome::NotFound => Err(OtterzipError::EntryNotFound(name.to_string())),
+            Outcome::Other(e) => Err(e),
+        }
+    }
+}
+
+/// True when an `UnsupportedArchive` message signals that the entry is
+/// encrypted (zip 2.x emits "Password required to decrypt file" or similar
+/// — exact wording varies between versions, so we match loosely).
+fn msg_indicates_encryption(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("password") || lower.contains("encrypt")
+}
+
+impl ArchiveBackend for ZipBackend {
+    fn entries(&self) -> Result<Box<dyn Iterator<Item = Result<Entry>> + '_>> {
+        // We materialize all entries up front. `ZipArchive::by_index`
+        // returns a `ZipFile` that mutably borrows the archive, so a lazy
+        // iterator would need self-referential storage. Enumeration is
+        // not in a hot loop (per `performance.md` §2 — hot loops are the
+        // per-byte decompression paths inside backends), so the one-shot
+        // Vec allocation is negligible relative to I/O.
+        let mut archive = self.inner.borrow_mut();
+        let count = archive.len();
+        let mut collected: Vec<Result<Entry>> = Vec::with_capacity(count);
+        for i in 0..count {
+            collected.push(entry_at(&mut *archive, i));
+        }
+        Ok(Box::new(collected.into_iter()))
+    }
+
+    fn extract_entry(&self, entry_path: &str, out: &mut dyn std::io::Write) -> Result<u64> {
+        let mut archive = self.inner.borrow_mut();
+        let mut zf = Self::read_by_name(&mut archive, entry_path, self.password.as_ref())?;
+        let written = std::io::copy(&mut zf, out)?;
+        Ok(written)
+    }
+
+    fn open_entry_stream(&self, entry_path: &str) -> Result<Box<dyn Read + Send + '_>> {
+        // `zip::ZipFile` is not `Send` and borrows the archive mutably.
+        // Sprint 1 compromise: eagerly copy into an in-memory `Vec` and
+        // hand back a `Cursor`. Large-entry streaming is deferred to
+        // Sprint 3 once the backend contract grows a proper streaming
+        // method that respects `RefCell` borrow scoping.
+        let mut archive = self.inner.borrow_mut();
+        let mut zf = Self::read_by_name(&mut archive, entry_path, self.password.as_ref())?;
+        let expected = zf.size();
+        let cap = usize::try_from(expected).unwrap_or(0);
+        let mut buf = Vec::with_capacity(cap);
+        std::io::copy(&mut zf, &mut buf)?;
+        Ok(Box::new(std::io::Cursor::new(buf)))
+    }
+
+    fn extract_all_streaming(
+        &self,
+        ctx: &mut StreamingExtractCtx<'_>,
+    ) -> Option<Result<()>> {
+        // Decision rule (per `performance.md` §4): only switch to the
+        // parallel path when there's enough work to amortise the
+        // per-thread `ZipArchive::new` cost (re-parses the central
+        // directory). For small archives the serial path in
+        // `archive.rs::extract_all` is faster — return None to fall back.
+        let entries = match self.inner.borrow_mut().len() {
+            0 => return None,
+            n => n,
+        };
+        let total_compressed: u64 = {
+            let mut a = self.inner.borrow_mut();
+            (0..a.len())
+                .filter_map(|i| a.by_index_raw(i).ok().map(|f| f.compressed_size()))
+                .sum()
+        };
+        const PARALLEL_MIN_BYTES: u64 = 4 * 1024 * 1024;
+        const PARALLEL_MIN_ENTRIES: usize = 8;
+        // Tiny-file regression guard: 1024 × 1 KiB archives extract slower
+        // in parallel because NTFS serialises metadata ops anyway. Require
+        // at least 32 KiB average compressed size before going parallel.
+        // (Tuned 2026-04-27 against the bench harness; re-tune if S5+
+        // backends grow rayon-aware extract paths.)
+        const PARALLEL_MIN_AVG_ENTRY_BYTES: u64 = 32 * 1024;
+        let avg = if entries == 0 {
+            0
+        } else {
+            total_compressed / entries as u64
+        };
+        if entries < PARALLEL_MIN_ENTRIES
+            || total_compressed < PARALLEL_MIN_BYTES
+            || avg < PARALLEL_MIN_AVG_ENTRY_BYTES
+        {
+            return None;
+        }
+        Some(self.extract_all_parallel(ctx))
+    }
+}
+
+impl ZipBackend {
+    /// rayon-driven entry-level parallel extractor. Each worker re-opens
+    /// the source archive on its own file descriptor — `ZipArchive` is
+    /// cheap to construct (one central-directory parse) but **not** safe
+    /// to share across threads, so per-thread handles are the simplest
+    /// correct path. See `performance.md` §4 for the design rationale.
+    fn extract_all_parallel(&self, ctx: &mut StreamingExtractCtx<'_>) -> Result<()> {
+        let dest_root = ctx.dest_root.to_path_buf();
+        let opts = ctx.opts.clone();
+        let start = ctx.start;
+        // PR-7A: clone the borrowed motw payload into an owned Arc so
+        // each worker can read it without lifetime gymnastics. None
+        // when the user disabled the toggle or source has no MOTW.
+        let motw_payload: Option<std::sync::Arc<Vec<u8>>> =
+            ctx.motw_payload.map(|p| std::sync::Arc::new(p.to_vec()));
+        // Pull the data we need into the closure without aliasing `self`
+        // (which holds a `!Sync` `RefCell`). `path` and `password` are
+        // cheap to clone; everything else lives in the `ctx`.
+        let archive_path = self.path.clone();
+        let password = self.password.clone();
+
+        // First pass: gather entry POD + total bytes (metadata-only — we
+        // borrow `RefCell` mutably here, but it's released before we
+        // hand work to rayon).
+        let mut metas: Vec<Entry> = Vec::with_capacity(64);
+        {
+            let mut archive = self.inner.borrow_mut();
+            let count = archive.len();
+            for i in 0..count {
+                let entry = entry_at(&mut archive, i)?;
+                metas.push(entry);
+            }
+        }
+        let total_bytes: u64 = metas.iter().map(|m| m.uncompressed_size).sum();
+        let total_entries = u32::try_from(metas.len()).unwrap_or(u32::MAX);
+
+        // Cancellation / progress / accounting is shared across workers.
+        // We update the report atomically per-entry; progress fires on a
+        // best-effort basis (UI doesn't need every tick).
+        let bytes_done = std::sync::atomic::AtomicU64::new(0);
+        let entries_done = std::sync::atomic::AtomicU32::new(0);
+        let entries_skipped = std::sync::atomic::AtomicU32::new(0);
+        let canceled = std::sync::atomic::AtomicBool::new(false);
+        // Errors collapse to the *first* one observed — once any worker
+        // reports failure we set `canceled` to short-circuit the rest.
+        let first_err: Mutex<Option<OtterzipError>> = Mutex::new(None);
+        let warnings: Mutex<Vec<ExtractWarning>> = Mutex::new(Vec::new());
+        let progress_lock: Mutex<&mut dyn crate::progress::ProgressSink> = Mutex::new(ctx.progress);
+
+        // `for_each_init` gives each rayon worker its own re-opened
+        // archive handle, amortising the central-directory parse over
+        // every entry the worker takes — critical for small-entry
+        // archives where the per-entry overhead would otherwise dominate.
+        let path_for_init = archive_path.clone();
+        metas.par_iter().for_each_init(
+            || open_local(&path_for_init).ok(),
+            |local_handle, entry| {
+            if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+
+            // ZIP-bomb gate (same heuristic as the serial path).
+            if let Some(err) = crate::archive::__check_bomb_for_streaming(entry, &opts) {
+                set_first_err(&first_err, &canceled, err);
+                return;
+            }
+
+            if entry.is_symlink && !opts.follow_symlinks {
+                warnings.lock().unwrap().push(ExtractWarning::SymlinkSkipped {
+                    path: entry.path.clone(),
+                    target: String::new(),
+                });
+                entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+
+            let out_path = match resolve_output_path(&dest_root, &entry.path, &opts) {
+                Ok(p) => p,
+                Err(orig) => {
+                    if opts.block_path_traversal {
+                        set_first_err(
+                            &first_err,
+                            &canceled,
+                            OtterzipError::PathTraversalBlocked(orig),
+                        );
+                    } else {
+                        warnings.lock().unwrap().push(ExtractWarning::PathTraversalClamped {
+                            original: orig,
+                            clamped: dest_root.clone(),
+                        });
+                        entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    return;
+                }
+            };
+
+            if entry.is_directory {
+                if let Err(e) = std::fs::create_dir_all(&out_path) {
+                    set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                    return;
+                }
+                entries_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+
+            if let Some(parent) = out_path.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                    return;
+                }
+            }
+
+            if out_path.exists() {
+                match opts.overwrite {
+                    OverwritePolicy::Never => {
+                        set_first_err(
+                            &first_err,
+                            &canceled,
+                            OtterzipError::Io(std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                out_path.display().to_string(),
+                            )),
+                        );
+                        return;
+                    }
+                    OverwritePolicy::Always => {}
+                    OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
+                        entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        return;
+                    }
+                }
+            }
+
+            // Per-worker archive handle. Each rayon thread pays the
+            // central-directory parse cost once via this construction —
+            // amortised across the entries it processes in this call.
+            // Re-using a thread-local handle would be a future
+            // optimisation but adds lifetime complexity for marginal gain.
+            let local_archive = match local_handle.as_mut() {
+                Some(a) => a,
+                None => {
+                    set_first_err(
+                        &first_err,
+                        &canceled,
+                        OtterzipError::BackendError(
+                            "worker failed to open archive handle".into(),
+                        ),
+                    );
+                    return;
+                }
+            };
+            let mut zf = match Self::read_by_name(
+                local_archive,
+                &entry.path,
+                password.as_ref(),
+            ) {
+                Ok(zf) => zf,
+                Err(e) => {
+                    set_first_err(&first_err, &canceled, e);
+                    return;
+                }
+            };
+            let file = match File::create(&out_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                    return;
+                }
+            };
+            let mut writer = BufWriter::new(file);
+            let written = match std::io::copy(&mut zf, &mut writer) {
+                Ok(n) => n,
+                Err(e) => {
+                    set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                    return;
+                }
+            };
+            if let Err(e) = std::io::Write::flush(&mut writer) {
+                set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                return;
+            }
+            // PR-7A: propagate Zone.Identifier from source archive.
+            // Best-effort, never aborts the worker.
+            if let Some(p) = motw_payload.as_ref() {
+                if let Err(e) = crate::motw::write_zone_identifier(&out_path, &p[..]) {
+                    tracing::warn!(
+                        target: "otterzip::motw",
+                        path = %out_path.display(),
+                        error = %e,
+                        "MOTW propagation skipped (parallel zip extract)"
+                    );
+                }
+            }
+
+            bytes_done.fetch_add(written, std::sync::atomic::Ordering::Relaxed);
+            let entries_so_far = entries_done
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
+
+            // Phase 7 cumulative bomb gate. We accumulate atomically so the
+            // exact ordering of worker writes doesn't matter; the moment
+            // either the absolute byte cap or the aggregate ratio crosses
+            // the configured threshold we fail-fast.
+            let _ = (written, entry.compressed_size);
+            // (Note: per-entry uncompressed bytes are already counted by
+            // `bytes_done`; we additionally check the aggregate against the
+            // caller-configured caps. We synthesize a `__BombMonitor`-like
+            // check inline because the parallel path can't carry mutable
+            // state across worker invocations.)
+            if opts.max_total_output_bytes > 0
+                && bytes_done.load(std::sync::atomic::Ordering::Relaxed)
+                    > opts.max_total_output_bytes
+            {
+                set_first_err(
+                    &first_err,
+                    &canceled,
+                    OtterzipError::ZipBombSuspected {
+                        entry: "<aggregate>".to_string(),
+                        ratio: 0,
+                        limit: opts.max_total_compression_ratio,
+                    },
+                );
+                return;
+            }
+
+            // Progress update: best-effort, only every 8 entries to keep
+            // contention on the sink lock minimal.
+            if entries_so_far % 8 == 0 || entries_so_far == total_entries {
+                if let Ok(mut sink) = progress_lock.try_lock() {
+                    let snapshot = Progress {
+                        bytes_processed: bytes_done.load(std::sync::atomic::Ordering::Relaxed),
+                        bytes_total: total_bytes,
+                        entries_processed: entries_so_far,
+                        entries_total: total_entries,
+                        current_entry: Some(entry.path.clone()),
+                        phase: ProgressPhase::Writing,
+                        elapsed: start.elapsed(),
+                    };
+                    if !sink.update(&snapshot) {
+                        canceled.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+            }
+            },
+        );
+
+        if let Some(err) = first_err.into_inner().unwrap() {
+            return Err(err);
+        }
+        if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(OtterzipError::Canceled);
+        }
+
+        // Flush counters into the report.
+        ctx.report.bytes_written += bytes_done.load(std::sync::atomic::Ordering::Relaxed);
+        ctx.report.entries_extracted += entries_done.load(std::sync::atomic::Ordering::Relaxed);
+        ctx.report.entries_skipped += entries_skipped.load(std::sync::atomic::Ordering::Relaxed);
+        ctx.report
+            .warnings
+            .extend(warnings.into_inner().unwrap());
+        Ok(())
+    }
+}
+
+fn set_first_err(
+    slot: &Mutex<Option<OtterzipError>>,
+    canceled: &std::sync::atomic::AtomicBool,
+    err: OtterzipError,
+) {
+    let mut guard = slot.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(err);
+    }
+    canceled.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn open_local(path: &Path) -> Result<ZipArchive<BufReader<File>>> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    ZipArchive::new(reader).map_err(map_zip_err)
+}
+
+fn resolve_output_path(
+    dest_root: &Path,
+    entry_path: &str,
+    opts: &crate::options::ExtractOptions,
+) -> std::result::Result<PathBuf, String> {
+    let as_path = Path::new(entry_path);
+    if opts.flatten_paths {
+        let name = as_path
+            .file_name()
+            .map_or_else(|| PathBuf::from(entry_path), PathBuf::from);
+        return Ok(dest_root.join(name));
+    }
+    let mut out = dest_root.to_path_buf();
+    for comp in as_path.components() {
+        match comp {
+            Component::Normal(c) => {
+                let s = c.to_string_lossy();
+                if crate::archive::__validate_component(&s).is_err() {
+                    return Err(entry_path.to_string());
+                }
+                out.push(c);
+            }
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
+                return Err(entry_path.to_string());
+            }
+        }
+    }
+    if !out.starts_with(dest_root) {
+        return Err(entry_path.to_string());
+    }
+    Ok(out)
+}
+
+/// Read entry `i` and convert it to our POD. Pulling this out of the
+/// iterator body keeps the enumeration loop easy to audit. We use the
+/// `_raw` variant so encrypted entries don't trip the metadata pass — the
+/// caller still has to provide a password to actually *read* their bytes,
+/// but listing them is allowed.
+fn entry_at(archive: &mut ZipArchive<BufReader<File>>, i: usize) -> Result<Entry> {
+    let zf = archive.by_index_raw(i).map_err(map_zip_err)?;
+
+    let path = zf.name().to_string();
+    let is_directory = zf.is_dir();
+    let external = zf.unix_mode();
+    let is_symlink = external.is_some_and(|m| (m & 0o170_000) == 0o120_000);
+
+    let compression = map_compression(zf.compression());
+    let encryption = if zf.encrypted() {
+        EncryptionMethod::ZipCrypto
+    } else {
+        EncryptionMethod::None
+    };
+
+    let crc32 = Some(zf.crc32());
+    // `last_modified()` in zip 2.x returns `Option<DateTime>`. If a future
+    // version reverts to plain `DateTime`, collapse the `.and_then(...)`
+    // to a direct conversion.
+    let modified = zf.last_modified().and_then(zip_datetime_to_system_time);
+    let comment_raw = zf.comment();
+    let comment = if comment_raw.is_empty() {
+        None
+    } else {
+        Some(comment_raw.to_string())
+    };
+    let attributes = external.unwrap_or(0);
+    let uncompressed_size = zf.size();
+    let compressed_size = zf.compressed_size();
+
+    Ok(Entry {
+        path,
+        is_directory,
+        is_symlink,
+        uncompressed_size,
+        compressed_size,
+        compression,
+        encryption,
+        crc32,
+        modified,
+        accessed: None,
+        created: None,
+        attributes,
+        comment,
+        host_os: HostOs::Unknown,
+    })
+}
+
+/// Convert a `ZipError` into our error taxonomy without losing context.
+fn map_zip_err(e: zip::result::ZipError) -> OtterzipError {
+    use zip::result::ZipError as Z;
+    match e {
+        Z::Io(io) => OtterzipError::Io(io),
+        Z::InvalidArchive(msg) => OtterzipError::Corrupted {
+            reason: msg.to_string(),
+            entry: None,
+        },
+        Z::UnsupportedArchive(msg) => OtterzipError::UnsupportedFormat(Some(msg.to_string())),
+        Z::FileNotFound => OtterzipError::EntryNotFound(String::new()),
+        other => OtterzipError::BackendError(other.to_string()),
+    }
+}
+
+fn map_compression(m: zip::CompressionMethod) -> CompressionMethod {
+    use zip::CompressionMethod as Z;
+    // Only `Stored` and `Deflated` are guaranteed by our feature flags
+    // (`default-features = false, features = ["deflate"]` in workspace
+    // Cargo.toml). Other codec variants are feature-gated in the `zip`
+    // crate; we fall through to `Unknown` rather than listing them and
+    // risking compile errors under minimal features.
+    match m {
+        Z::Stored => CompressionMethod::Store,
+        Z::Deflated => CompressionMethod::Deflate,
+        _ => CompressionMethod::Unknown,
+    }
+}
+
+/// Convert a `zip::DateTime` to a `SystemTime`.
+///
+/// ZIP stores DOS-era wall-clock with 2-second resolution and no timezone,
+/// so the result is interpreted as UTC. This is lossy by design.
+#[allow(clippy::needless_pass_by_value)] // DateTime is Copy-ish, trivial
+fn zip_datetime_to_system_time(dt: zip::DateTime) -> Option<std::time::SystemTime> {
+    let year = i32::from(dt.year());
+    let month = u32::from(dt.month());
+    let day = u32::from(dt.day());
+    let hour = u32::from(dt.hour());
+    let minute = u32::from(dt.minute());
+    let second = u32::from(dt.second());
+
+    let days = days_from_civil(year, month, day)?;
+    let secs = i64::from(days) * 86_400
+        + i64::from(hour) * 3600
+        + i64::from(minute) * 60
+        + i64::from(second);
+    let secs_u64 = u64::try_from(secs).ok()?;
+    Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs_u64))
+}
+
+/// Days since 1970-01-01 for a (proleptic Gregorian) date.
+/// Howard Hinnant's civil-from-days algorithm (inverse); O(1), branchless.
+fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i32> {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let civil_year = if month <= 2 { year - 1 } else { year };
+    let era = civil_year.div_euclid(400);
+    let yoe = u32::try_from(civil_year.rem_euclid(400)).ok()?; // 0..=399
+    let month_offset = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * month_offset + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era.checked_mul(146_097)?
+        .checked_add(i32::try_from(doe).ok()?)?
+        .checked_sub(719_468)
+}
