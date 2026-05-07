@@ -96,6 +96,38 @@
   </ItemGroup>
 
   <!--
+    PR-7D: Bundle the C++/WinRT shell extension (SpanZIP.Shell.dll)
+    into the MSIX so Explorer's right-click menu picks it up.
+    Without this Target the host EXE installs cleanly but no
+    SpanZIP entry appears in the context menu, because the shell
+    DLL never makes it into Program Files\WindowsApps\SpanZIP.SpanZIP_*.
+
+    Pattern adapted from LumiFiles's IncludeThumbsInPackage Target
+    (LumiFiles\LumiFiles.csproj). Inject the Content item BEFORE
+    AssignTargetPaths so MSIX packaging treats it like any other
+    content file. The Shell vcxproj must be built separately
+    (build-msix.bat handles that, or run msbuild
+    SpanZIP.Shell.vcxproj /p:Configuration=Release /p:Platform=x64
+    standalone). This Target only stages the output; it does not
+    invoke the C++ build itself.
+  -->
+  <Target Name="IncludeShellExtensionInPackage"
+          BeforeTargets="AssignTargetPaths;GetCopyToOutputDirectoryItems"
+          Condition="'$(WindowsPackageType)' != 'None'">
+    <PropertyGroup>
+      <_ShellBinDir>$(MSBuildThisFileDirectory)..\SpanZIP.Shell\$(Platform)\$(Configuration)\</_ShellBinDir>
+    </PropertyGroup>
+    <ItemGroup Condition="Exists('$(_ShellBinDir)SpanZIP.Shell.dll')">
+      <Content Include="$(_ShellBinDir)SpanZIP.Shell.dll"
+               Link="SpanZIP.Shell.dll"
+               CopyToOutputDirectory="Always"
+               Visible="false" />
+    </ItemGroup>
+    <Warning Condition="!Exists('$(_ShellBinDir)SpanZIP.Shell.dll')"
+             Text="SpanZIP.Shell.dll not found at $(_ShellBinDir). Right-click context menu will be inactive. Build SpanZIP.Shell.vcxproj first." />
+  </Target>
+
+  <!--
     Sprint 6 RC: keep the manifest under source control so MSIX packaging
     sees it, but only attach it when MSIX tooling is actually enabled.
     Unpackaged dev build (WindowsPackageType=None) ignores it.
