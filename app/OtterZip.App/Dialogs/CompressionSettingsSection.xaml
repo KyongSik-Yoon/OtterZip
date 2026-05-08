@@ -34,16 +34,24 @@
                            x:Uid="Settings_DefaultFormatLabel"
                            VerticalAlignment="Center"
                            Style="{StaticResource BodyTextStyle}" />
+                <!--
+                  Reuse the ConfigPanel_Format* resource keys so Settings
+                  and the main window agree on the format labels (and so
+                  the eight new locales added in this commit get one
+                  translation per format, not two).
+                -->
                 <ComboBox Grid.Row="0" Grid.Column="1"
                           x:Name="DefaultFormatCombo"
                           HorizontalAlignment="Stretch"
                           SelectionChanged="OnDefaultFormatChanged">
-                    <ComboBoxItem Content="ZIP"     Tag="ZIP" />
-                    <ComboBoxItem Content="7z"      Tag="7z" />
-                    <ComboBoxItem Content="tar"     Tag="tar" />
-                    <ComboBoxItem Content="tar.gz"  Tag="tar.gz" />
-                    <ComboBoxItem Content="tar.bz2" Tag="tar.bz2" />
-                    <ComboBoxItem Content="tar.xz"  Tag="tar.xz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatZip"     Tag="ZIP" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ"  Tag="7z" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTar"     Tag="tar" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz"   Tag="tar.gz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2"  Tag="tar.bz2" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz"   Tag="tar.xz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatXz"      Tag="xz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatZipx"    Tag="zipx" />
                 </ComboBox>
 
                 <!-- Default method -->

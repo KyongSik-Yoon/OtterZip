@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Russian (ru-RU) — must mirror every key in en-US/Resources.resw. -->
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="App_WindowTitle"><value>OtterZip</value></data>
+  <data name="App_WindowTitleLabel.Text"><value>OtterZip</value></data>
+  <data name="Main_StatusBarIdleText.Text"><value>Готово</value></data>
+  <data name="Main_StatusBarExtractingFormat.Text"><value>Извлечение {0}…</value></data>
+  <data name="Main_StatusBarDoneFormat.Text"><value>Извлечено {0} элементов · {1}</value></data>
+  <data name="Main_StatusBarErrorFormat.Text"><value>Ошибка: {0}</value></data>
+  <data name="Main_StatusBarUnsupportedFormat.Text"><value>Неподдерживаемый формат ({0})</value></data>
+  <data name="Main_StatusBarCompressingFormat.Text"><value>Сжатие → {0}…</value></data>
+  <data name="Main_StatusBarCompressDoneFormat.Text"><value>Создан {0} · {1}</value></data>
+  <data name="Main_StatusBarUnknownInvokeFormat"><value>Неизвестная команда вызова: {0}</value></data>
+  <data name="Main_StatusBarVerifyingFormat.Text"><value>Проверка {0}…</value></data>
+
+  <data name="Main_SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>Параметры</value></data>
+  <data name="Main_SettingsButton.AutomationProperties.Name"><value>Параметры</value></data>
+
+  <data name="PasswordDialog_TitleFormat.Text"><value>Требуется пароль для {0}</value></data>
+  <data name="PasswordDialog_Placeholder.Text"><value>Пароль</value></data>
+  <data name="PasswordDialog_OK.Text"><value>Разблокировать</value></data>
+  <data name="PasswordDialog_Cancel.Text"><value>Отмена</value></data>
+
+  <data name="ExtractDialog_TitleFormat"><value>Извлечь {0}</value></data>
+  <data name="ExtractDialog_DestinationLabel.Text"><value>Папка назначения</value></data>
+  <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
+  <data name="ExtractDialog_BrowseButton.Content"><value>Обзор…</value></data>
+  <data name="ExtractDialog_PrimaryButton.Text"><value>Извлечь</value></data>
+  <data name="ExtractDialog_SecondaryButton.Text"><value>Извлечь сюда</value></data>
+  <data name="ExtractDialog_CancelButton.Text"><value>Отмена</value></data>
+
+  <data name="Settings_DialogTitle.Title"><value>Параметры</value></data>
+  <data name="Settings_TitleLabel.Text"><value>Параметры</value></data>
+
+  <data name="Settings_NavGeneral.Content"><value>Общие</value></data>
+  <data name="Settings_NavCompression.Content"><value>Сжатие</value></data>
+  <data name="Settings_NavExtraction.Content"><value>Извлечение</value></data>
+  <data name="Settings_NavPassword.Content"><value>Пароль</value></data>
+  <data name="Settings_NavIntegration.Content"><value>Интеграция</value></data>
+  <data name="Settings_NavInfo.Content"><value>Сведения</value></data>
+
+  <data name="Settings_DefaultActionLabel.Text"><value>Действие по умолчанию</value></data>
+  <data name="Settings_DefaultActionAuto.Content"><value>Авто (по типу файла)</value></data>
+  <data name="Settings_DefaultActionCompress.Content"><value>Всегда сжимать</value></data>
+  <data name="Settings_DefaultActionExtract.Content"><value>Всегда извлекать</value></data>
+  <data name="Settings_ConfirmExitWhileBusy.Content"><value>Подтверждать выход при выполнении задачи</value></data>
+  <data name="Settings_ShowToast.Content"><value>Показывать уведомления</value></data>
+
+  <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>новый архив</value></data>
+
+  <data name="Toast_CompressTitle.Text"><value>Сжатие завершено</value></data>
+  <data name="Toast_CompressBodyFormat.Text"><value>{0} · {1}</value></data>
+  <data name="Toast_ExtractTitle.Text"><value>Извлечение завершено</value></data>
+  <data name="Toast_ExtractBodyFormat.Text"><value>{0} элементов · {1}</value></data>
+
+  <data name="ExitConfirm_Title.Text"><value>Выполняется задача</value></data>
+  <data name="ExitConfirm_Body.Text"><value>Выход сейчас отменит выполняющуюся задачу сжатия / извлечения. Продолжить?</value></data>
+  <data name="ExitConfirm_Quit.Text"><value>Отменить и выйти</value></data>
+  <data name="ExitConfirm_Stay.Text"><value>Продолжить работу</value></data>
+  <data name="Settings_OpenDefaultApps.Content"><value>Сделать OtterZip приложением по умолчанию</value></data>
+
+  <data name="Settings_UseParentFolderName.Content"><value>Использовать имя родительской папки при сжатии нескольких файлов</value></data>
+  <data name="Settings_FilenameTemplateLabel.Text"><value>Шаблон имени файла</value></data>
+  <data name="Settings_FilenameTemplatePlaceholder.PlaceholderText"><value>{name}</value></data>
+  <data name="Settings_FilenameTemplateSub.Text"><value>Токены: {name} {date} {time} {count} {parent}. Пусто = правило по умолчанию.</value></data>
+  <data name="Settings_AlwaysPromptPassword.Content"><value>Всегда запрашивать пароль при сжатии</value></data>
+
+  <data name="Settings_ExtractLocationLabel.Text"><value>Папка извлечения</value></data>
+  <data name="Settings_ExtractLocationSame.Content"><value>Та же, что и архив</value></data>
+  <data name="Settings_ExtractLocationCustom.Content"><value>Указанная папка…</value></data>
+  <data name="Settings_PreserveZoneIdentifier.Content"><value>Сохранять метку карантина (MOTW)</value></data>
+  <data name="Settings_PreserveZoneIdentifierSub.Text"><value>Применяет метку безопасности Zone.Identifier исходного архива к извлечённым файлам.</value></data>
+
+  <data name="Settings_DefaultPasswordLabel.Text"><value>Пароль по умолчанию</value></data>
+  <data name="Settings_DefaultPasswordPlaceholder.PlaceholderText"><value>Не задан</value></data>
+  <data name="Settings_DefaultPasswordOnCompress.Content"><value>Применять автоматически к новым архивам</value></data>
+  <data name="Settings_DefaultPasswordOnExtract.Content"><value>Пробовать автоматически при извлечении</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPassword.Content"><value>Требовать аутентификацию перед использованием сохранённого пароля</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPasswordSub.Text"><value>Требует проверку Windows Hello (отпечаток / лицо / ПИН) перед использованием сохранённого пароля.</value></data>
+
+  <data name="Auth_ReasonCompress.Text"><value>Пройдите аутентификацию для шифрования нового архива сохранённым паролем</value></data>
+  <data name="Auth_ReasonExtract.Text"><value>Пройдите аутентификацию для извлечения защищённого архива сохранённым паролем</value></data>
+
+  <data name="Settings_ShellMenuModeLabel.Text"><value>Режим подменю</value></data>
+  <data name="Settings_ShellMenuModeFlat.Content"><value>Плоский (верхний уровень)</value></data>
+  <data name="Settings_ShellMenuModeNested.Content"><value>Вложенный (внутри подменю OtterZip)</value></data>
+  <data name="Settings_ShellExtractHereAsDefault.Content"><value>Сделать «Извлечь сюда» действием по умолчанию</value></data>
+
+  <data name="Settings_SectionGeneral.Text"><value>Общие</value></data>
+  <data name="Settings_LanguageLabel.Text"><value>Язык</value></data>
+  <data name="Settings_LanguageSystem.Content"><value>Как в системе</value></data>
+  <data name="Settings_LanguageKo.Content"><value>한국어</value></data>
+  <data name="Settings_LanguageEn.Content"><value>English</value></data>
+  <data name="Settings_ThemeSectionLabel.Text"><value>Тема</value></data>
+  <data name="Theme_Light.Content"><value>Светлая</value></data>
+  <data name="Theme_Dark.Content"><value>Тёмная</value></data>
+  <data name="Theme_System.Content"><value>Как в системе</value></data>
+  <data name="Settings_DefaultFormatLabel.Text"><value>Формат архива по умолчанию</value></data>
+  <data name="Settings_DefaultMethodLabel.Text"><value>Метод сжатия по умолчанию</value></data>
+  <data name="Settings_MethodStore.Content"><value>Без сжатия</value></data>
+  <data name="Settings_MethodFast.Content"><value>Быстрое</value></data>
+  <data name="Settings_MethodNormal.Content"><value>Обычное</value></data>
+  <data name="Settings_MethodBest.Content"><value>Максимальное</value></data>
+  <data name="Settings_SaveLocationLabel.Text"><value>Папка сохранения</value></data>
+  <data name="Settings_SaveLocationSame.Content"><value>Как у источника</value></data>
+  <data name="Settings_SaveLocationCustom.Content"><value>Указанная папка…</value></data>
+  <data name="Settings_BrowseButton.Content"><value>Обзор…</value></data>
+
+  <data name="Settings_SectionBehavior.Text"><value>Поведение</value></data>
+  <data name="Settings_CompressGroupLabel.Text"><value>После сжатия</value></data>
+  <data name="Settings_PlaySoundOnCompress.Content"><value>Воспроизводить звук</value></data>
+  <data name="Settings_RevealAfterCompress.Content"><value>Показывать результат в Проводнике</value></data>
+  <data name="Settings_DeleteSourceAfterCompress.Content"><value>Перемещать исходные файлы в Корзину</value></data>
+  <data name="Settings_ExtractGroupLabel.Text"><value>После извлечения</value></data>
+  <data name="Settings_PlaySoundOnExtract.Content"><value>Воспроизводить звук</value></data>
+  <data name="Settings_RevealAfterExtract.Content"><value>Показывать результат в Проводнике</value></data>
+  <data name="Settings_DeleteArchiveAfterExtract.Content"><value>Перемещать архив в Корзину</value></data>
+  <data name="Settings_AlwaysExtractToSubfolder.Content"><value>Всегда извлекать во вложенную папку</value></data>
+  <data name="Settings_VerifyAfterCompress.Content"><value>Проверять целостность после сжатия</value></data>
+  <data name="Settings_ExcludeSystemMetadata.Content"><value>Исключать файлы системных метаданных</value></data>
+  <data name="Settings_ExcludeSystemMetadataSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini · $RECYCLE.BIN</value></data>
+
+  <data name="Settings_SectionIntegration.Text"><value>Интеграция</value></data>
+  <data name="Settings_ShellMenuEnabled.Content"><value>Показывать OtterZip в контекстном меню Проводника Windows</value></data>
+  <data name="Settings_ShellMenuEnabledSub.Text"><value>После отключения требуется перезагрузка Windows для исчезновения меню.</value></data>
+
+  <data name="Settings_SectionInfo.Text"><value>Сведения</value></data>
+  <data name="Settings_VersionLabel.Text"><value>Версия</value></data>
+  <data name="Settings_OpenLicense.Content"><value>Просмотреть лицензию</value></data>
+  <data name="Settings_OpenThirdParty.Content"><value>Уведомления третьих сторон</value></data>
+  <data name="Settings_UnrarNotice.Text"><value>Этот продукт использует исходный код unrar Александра Рошаля для извлечения RAR-архивов. © Александр Рошаль. Лицензия только на извлечение RAR — создание RAR-архивов запрещено.</value></data>
+
+  <data name="Settings_TelemetryEnabled.Content"><value>Отправлять анонимные отчёты о сбоях</value></data>
+  <data name="Settings_TelemetryEnabledSub.Text"><value>Передаёт диагностику сбоев разработчикам. Личные данные, содержимое файлов и пароли удаляются перед передачей. По умолчанию выключено.</value></data>
+
+  <data name="Settings_CloseButton.Text"><value>Закрыть</value></data>
+
+  <data name="ConfigPanel_Region.AutomationProperties.Name"><value>Панель параметров сжатия</value></data>
+
+  <data name="ConfigPanel_FormatLabel.Text"><value>Формат:</value></data>
+  <data name="ConfigPanel_FormatZip.Content"><value>ZIP</value></data>
+  <data name="ConfigPanel_FormatSevenZ.Content"><value>7z</value></data>
+  <data name="ConfigPanel_FormatTar.Content"><value>tar</value></data>
+  <data name="ConfigPanel_FormatTarGz.Content"><value>tar.gz</value></data>
+  <data name="ConfigPanel_FormatTarBz2.Content"><value>tar.bz2</value></data>
+  <data name="ConfigPanel_FormatTarXz.Content"><value>tar.xz</value></data>
+  <data name="ConfigPanel_FormatXz.Content"><value>xz (одиночный)</value></data>
+  <data name="ConfigPanel_FormatZipx.Content"><value>zipx (Bzip2)</value></data>
+
+  <data name="ConfigPanel_MethodHeaderFormat"><value>Метод сжатия: {0}</value></data>
+  <data name="ConfigPanel_MethodStore.Text"><value>Без сжатия</value></data>
+  <data name="ConfigPanel_MethodFast.Text"><value>Быстрое</value></data>
+  <data name="ConfigPanel_MethodNormal.Text"><value>Обычное</value></data>
+  <data name="ConfigPanel_MethodBest.Text"><value>Максимальное</value></data>
+
+  <data name="ConfigPanel_SplitLabel.Text"><value>Разделить архив:</value></data>
+  <data name="ConfigPanel_SplitNone.Content"><value>Нет</value></data>
+  <data name="ConfigPanel_Split10Mb.Content"><value>10 МБ</value></data>
+  <data name="ConfigPanel_Split100Mb.Content"><value>100 МБ</value></data>
+  <data name="ConfigPanel_Split700Mb.Content"><value>700 МБ</value></data>
+  <data name="ConfigPanel_Split1Gb.Content"><value>1 ГБ</value></data>
+  <data name="ConfigPanel_Split47Gb.Content"><value>4,7 ГБ</value></data>
+  <data name="ConfigPanel_SplitCustom.Content"><value>Другой…</value></data>
+
+  <data name="ConfigPanel_PasswordLabel.Text"><value>Пароль:</value></data>
+  <data name="ConfigPanel_AdvancedExpander.Header"><value>Дополнительно</value></data>
+  <data name="ConfigPanel_DropHintTitle.Text"><value>Перетащите файлы сюда</value></data>
+  <data name="ConfigPanel_DropHintSubtitle.Text"><value>Или щёлкните, чтобы выбрать вручную</value></data>
+  <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>Пароль</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>Показать / скрыть пароль</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.AutomationProperties.Name"><value>Переключить видимость пароля</value></data>
+  <data name="ConfigPanel_UseAes256.Content"><value>Использовать шифрование AES-256</value></data>
+
+  <data name="ConfigPanel_ExcludeSystemMeta.Content"><value>Исключать файлы системных метаданных</value></data>
+  <data name="ConfigPanel_ExcludeSystemMetaSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini</value></data>
+  <data name="ConfigPanel_VerifyAfterCompress.Content"><value>Проверять архив после сжатия</value></data>
+  <data name="ConfigPanel_DeleteSourceAfter.Content"><value>Удалять источник после сжатия</value></data>
+  <data name="ConfigPanel_CompressSeparately.Content"><value>Сжимать элементы по отдельности</value></data>
+
+  <data name="DropOverlay_HoverTitle.Text"><value>Перетащите сюда</value></data>
+  <data name="DropOverlay_WillCompressFormat"><value>Сжать {0} элементов в {1}</value></data>
+  <data name="DropOverlay_WillExtractFormat"><value>Извлечь {0}</value></data>
+  <data name="DropOverlay_WillExtractMultipleFormat"><value>Извлечь {0} архивов</value></data>
+  <data name="DropOverlay_MixedRejectText.Text"><value>Перетаскивайте только один тип за раз</value></data>
+  <data name="DropOverlay_EmptyReject.Text"><value>Папка пуста</value></data>
+
+  <data name="WindowMenu_AddFiles.Text"><value>Добавить файлы…</value></data>
+  <data name="WindowMenu_AddFolder.Text"><value>Добавить папку…</value></data>
+  <data name="WindowMenu_Settings.Text"><value>Параметры…</value></data>
+
+</root>

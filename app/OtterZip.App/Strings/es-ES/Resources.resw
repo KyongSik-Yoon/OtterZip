@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Spanish (es-ES) — must mirror every key in en-US/Resources.resw. -->
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="App_WindowTitle"><value>OtterZip</value></data>
+  <data name="App_WindowTitleLabel.Text"><value>OtterZip</value></data>
+  <data name="Main_StatusBarIdleText.Text"><value>Listo</value></data>
+  <data name="Main_StatusBarExtractingFormat.Text"><value>Extrayendo {0}…</value></data>
+  <data name="Main_StatusBarDoneFormat.Text"><value>{0} entradas extraídas · {1}</value></data>
+  <data name="Main_StatusBarErrorFormat.Text"><value>Error: {0}</value></data>
+  <data name="Main_StatusBarUnsupportedFormat.Text"><value>Formato no compatible ({0})</value></data>
+  <data name="Main_StatusBarCompressingFormat.Text"><value>Comprimiendo → {0}…</value></data>
+  <data name="Main_StatusBarCompressDoneFormat.Text"><value>{0} creado · {1}</value></data>
+  <data name="Main_StatusBarUnknownInvokeFormat"><value>Verbo de invocación desconocido: {0}</value></data>
+  <data name="Main_StatusBarVerifyingFormat.Text"><value>Verificando {0}…</value></data>
+
+  <data name="Main_SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>Configuración</value></data>
+  <data name="Main_SettingsButton.AutomationProperties.Name"><value>Configuración</value></data>
+
+  <data name="PasswordDialog_TitleFormat.Text"><value>Se requiere contraseña para {0}</value></data>
+  <data name="PasswordDialog_Placeholder.Text"><value>Contraseña</value></data>
+  <data name="PasswordDialog_OK.Text"><value>Desbloquear</value></data>
+  <data name="PasswordDialog_Cancel.Text"><value>Cancelar</value></data>
+
+  <data name="ExtractDialog_TitleFormat"><value>Extraer {0}</value></data>
+  <data name="ExtractDialog_DestinationLabel.Text"><value>Carpeta de destino</value></data>
+  <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
+  <data name="ExtractDialog_BrowseButton.Content"><value>Examinar…</value></data>
+  <data name="ExtractDialog_PrimaryButton.Text"><value>Extraer</value></data>
+  <data name="ExtractDialog_SecondaryButton.Text"><value>Extraer aquí</value></data>
+  <data name="ExtractDialog_CancelButton.Text"><value>Cancelar</value></data>
+
+  <data name="Settings_DialogTitle.Title"><value>Configuración</value></data>
+  <data name="Settings_TitleLabel.Text"><value>Configuración</value></data>
+
+  <data name="Settings_NavGeneral.Content"><value>General</value></data>
+  <data name="Settings_NavCompression.Content"><value>Compresión</value></data>
+  <data name="Settings_NavExtraction.Content"><value>Extracción</value></data>
+  <data name="Settings_NavPassword.Content"><value>Contraseña</value></data>
+  <data name="Settings_NavIntegration.Content"><value>Integración</value></data>
+  <data name="Settings_NavInfo.Content"><value>Información</value></data>
+
+  <data name="Settings_DefaultActionLabel.Text"><value>Acción predeterminada</value></data>
+  <data name="Settings_DefaultActionAuto.Content"><value>Automática (decidir por tipo de archivo)</value></data>
+  <data name="Settings_DefaultActionCompress.Content"><value>Comprimir siempre</value></data>
+  <data name="Settings_DefaultActionExtract.Content"><value>Extraer siempre</value></data>
+  <data name="Settings_ConfirmExitWhileBusy.Content"><value>Confirmar antes de salir mientras una tarea está en curso</value></data>
+  <data name="Settings_ShowToast.Content"><value>Mostrar notificaciones</value></data>
+
+  <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>archivo nuevo</value></data>
+
+  <data name="Toast_CompressTitle.Text"><value>Compresión completada</value></data>
+  <data name="Toast_CompressBodyFormat.Text"><value>{0} · {1}</value></data>
+  <data name="Toast_ExtractTitle.Text"><value>Extracción completada</value></data>
+  <data name="Toast_ExtractBodyFormat.Text"><value>{0} entradas · {1}</value></data>
+
+  <data name="ExitConfirm_Title.Text"><value>Hay una tarea en curso</value></data>
+  <data name="ExitConfirm_Body.Text"><value>Salir ahora cancelará la tarea de compresión / extracción en ejecución. ¿Continuar?</value></data>
+  <data name="ExitConfirm_Quit.Text"><value>Cancelar y salir</value></data>
+  <data name="ExitConfirm_Stay.Text"><value>Seguir trabajando</value></data>
+  <data name="Settings_OpenDefaultApps.Content"><value>Establecer OtterZip como aplicación predeterminada</value></data>
+
+  <data name="Settings_UseParentFolderName.Content"><value>Usar nombre de carpeta principal al comprimir varios archivos</value></data>
+  <data name="Settings_FilenameTemplateLabel.Text"><value>Plantilla de nombre de archivo</value></data>
+  <data name="Settings_FilenameTemplatePlaceholder.PlaceholderText"><value>{name}</value></data>
+  <data name="Settings_FilenameTemplateSub.Text"><value>Tokens: {name} {date} {time} {count} {parent}. Vacío = regla predeterminada.</value></data>
+  <data name="Settings_AlwaysPromptPassword.Content"><value>Solicitar siempre contraseña al comprimir</value></data>
+
+  <data name="Settings_ExtractLocationLabel.Text"><value>Ubicación de extracción</value></data>
+  <data name="Settings_ExtractLocationSame.Content"><value>Igual que el archivo</value></data>
+  <data name="Settings_ExtractLocationCustom.Content"><value>Carpeta específica…</value></data>
+  <data name="Settings_PreserveZoneIdentifier.Content"><value>Conservar cuarentena de descarga (MOTW)</value></data>
+  <data name="Settings_PreserveZoneIdentifierSub.Text"><value>Aplica la marca de seguridad Zone.Identifier del archivo de origen a los archivos extraídos.</value></data>
+
+  <data name="Settings_DefaultPasswordLabel.Text"><value>Contraseña predeterminada</value></data>
+  <data name="Settings_DefaultPasswordPlaceholder.PlaceholderText"><value>Sin definir</value></data>
+  <data name="Settings_DefaultPasswordOnCompress.Content"><value>Aplicar automáticamente a archivos nuevos</value></data>
+  <data name="Settings_DefaultPasswordOnExtract.Content"><value>Probar automáticamente al extraer</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPassword.Content"><value>Requerir autenticación antes de usar la contraseña guardada</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPasswordSub.Text"><value>Requiere verificación de Windows Hello (huella / cara / PIN) antes de usar la contraseña guardada.</value></data>
+
+  <data name="Auth_ReasonCompress.Text"><value>Autentíquese para cifrar un nuevo archivo con su contraseña guardada</value></data>
+  <data name="Auth_ReasonExtract.Text"><value>Autentíquese para extraer un archivo protegido con su contraseña guardada</value></data>
+
+  <data name="Settings_ShellMenuModeLabel.Text"><value>Modo de submenú</value></data>
+  <data name="Settings_ShellMenuModeFlat.Content"><value>Plano (entradas de nivel superior)</value></data>
+  <data name="Settings_ShellMenuModeNested.Content"><value>Anidado (dentro del submenú OtterZip)</value></data>
+  <data name="Settings_ShellExtractHereAsDefault.Content"><value>Hacer de "Extraer aquí" la acción predeterminada</value></data>
+
+  <data name="Settings_SectionGeneral.Text"><value>General</value></data>
+  <data name="Settings_LanguageLabel.Text"><value>Idioma</value></data>
+  <data name="Settings_LanguageSystem.Content"><value>Seguir el sistema</value></data>
+  <data name="Settings_LanguageKo.Content"><value>한국어</value></data>
+  <data name="Settings_LanguageEn.Content"><value>English</value></data>
+  <data name="Settings_ThemeSectionLabel.Text"><value>Tema</value></data>
+  <data name="Theme_Light.Content"><value>Claro</value></data>
+  <data name="Theme_Dark.Content"><value>Oscuro</value></data>
+  <data name="Theme_System.Content"><value>Seguir el sistema</value></data>
+  <data name="Settings_DefaultFormatLabel.Text"><value>Formato de archivo predeterminado</value></data>
+  <data name="Settings_DefaultMethodLabel.Text"><value>Método de compresión predeterminado</value></data>
+  <data name="Settings_MethodStore.Content"><value>Almacenar</value></data>
+  <data name="Settings_MethodFast.Content"><value>Rápido</value></data>
+  <data name="Settings_MethodNormal.Content"><value>Normal</value></data>
+  <data name="Settings_MethodBest.Content"><value>Máximo</value></data>
+  <data name="Settings_SaveLocationLabel.Text"><value>Ubicación de guardado</value></data>
+  <data name="Settings_SaveLocationSame.Content"><value>Igual que el origen</value></data>
+  <data name="Settings_SaveLocationCustom.Content"><value>Carpeta específica…</value></data>
+  <data name="Settings_BrowseButton.Content"><value>Examinar…</value></data>
+
+  <data name="Settings_SectionBehavior.Text"><value>Comportamiento</value></data>
+  <data name="Settings_CompressGroupLabel.Text"><value>Después de comprimir</value></data>
+  <data name="Settings_PlaySoundOnCompress.Content"><value>Reproducir sonido</value></data>
+  <data name="Settings_RevealAfterCompress.Content"><value>Mostrar resultado en el Explorador</value></data>
+  <data name="Settings_DeleteSourceAfterCompress.Content"><value>Mover archivos de origen a la papelera</value></data>
+  <data name="Settings_ExtractGroupLabel.Text"><value>Después de extraer</value></data>
+  <data name="Settings_PlaySoundOnExtract.Content"><value>Reproducir sonido</value></data>
+  <data name="Settings_RevealAfterExtract.Content"><value>Mostrar resultado en el Explorador</value></data>
+  <data name="Settings_DeleteArchiveAfterExtract.Content"><value>Mover archivo a la papelera</value></data>
+  <data name="Settings_AlwaysExtractToSubfolder.Content"><value>Extraer siempre a una subcarpeta</value></data>
+  <data name="Settings_VerifyAfterCompress.Content"><value>Verificar integridad tras comprimir</value></data>
+  <data name="Settings_ExcludeSystemMetadata.Content"><value>Excluir archivos de metadatos del sistema</value></data>
+  <data name="Settings_ExcludeSystemMetadataSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini · $RECYCLE.BIN</value></data>
+
+  <data name="Settings_SectionIntegration.Text"><value>Integración</value></data>
+  <data name="Settings_ShellMenuEnabled.Content"><value>Mostrar OtterZip en el menú contextual del Explorador de Windows</value></data>
+  <data name="Settings_ShellMenuEnabledSub.Text"><value>Tras desactivar, requiere reiniciar Windows para que el menú desaparezca.</value></data>
+
+  <data name="Settings_SectionInfo.Text"><value>Información</value></data>
+  <data name="Settings_VersionLabel.Text"><value>Versión</value></data>
+  <data name="Settings_OpenLicense.Content"><value>Ver licencia</value></data>
+  <data name="Settings_OpenThirdParty.Content"><value>Avisos de terceros</value></data>
+  <data name="Settings_UnrarNotice.Text"><value>Este producto utiliza el código fuente unrar de Alexander Roshal para extraer archivos RAR. © Alexander Roshal. Licencia solo para extracción RAR — la creación de archivos RAR está prohibida.</value></data>
+
+  <data name="Settings_TelemetryEnabled.Content"><value>Enviar informes de errores anónimos</value></data>
+  <data name="Settings_TelemetryEnabledSub.Text"><value>Reenvía diagnósticos de errores a los desarrolladores. La PII, contenidos de archivos y contraseñas se eliminan antes de la transmisión. Desactivado de forma predeterminada.</value></data>
+
+  <data name="Settings_CloseButton.Text"><value>Cerrar</value></data>
+
+  <data name="ConfigPanel_Region.AutomationProperties.Name"><value>Panel de configuración de compresión</value></data>
+
+  <data name="ConfigPanel_FormatLabel.Text"><value>Formato:</value></data>
+  <data name="ConfigPanel_FormatZip.Content"><value>ZIP</value></data>
+  <data name="ConfigPanel_FormatSevenZ.Content"><value>7z</value></data>
+  <data name="ConfigPanel_FormatTar.Content"><value>tar</value></data>
+  <data name="ConfigPanel_FormatTarGz.Content"><value>tar.gz</value></data>
+  <data name="ConfigPanel_FormatTarBz2.Content"><value>tar.bz2</value></data>
+  <data name="ConfigPanel_FormatTarXz.Content"><value>tar.xz</value></data>
+  <data name="ConfigPanel_FormatXz.Content"><value>xz (único)</value></data>
+  <data name="ConfigPanel_FormatZipx.Content"><value>zipx (Bzip2)</value></data>
+
+  <data name="ConfigPanel_MethodHeaderFormat"><value>Método de compresión: {0}</value></data>
+  <data name="ConfigPanel_MethodStore.Text"><value>Almacenar</value></data>
+  <data name="ConfigPanel_MethodFast.Text"><value>Rápido</value></data>
+  <data name="ConfigPanel_MethodNormal.Text"><value>Normal</value></data>
+  <data name="ConfigPanel_MethodBest.Text"><value>Máximo</value></data>
+
+  <data name="ConfigPanel_SplitLabel.Text"><value>Dividir archivo:</value></data>
+  <data name="ConfigPanel_SplitNone.Content"><value>Ninguno</value></data>
+  <data name="ConfigPanel_Split10Mb.Content"><value>10 MB</value></data>
+  <data name="ConfigPanel_Split100Mb.Content"><value>100 MB</value></data>
+  <data name="ConfigPanel_Split700Mb.Content"><value>700 MB</value></data>
+  <data name="ConfigPanel_Split1Gb.Content"><value>1 GB</value></data>
+  <data name="ConfigPanel_Split47Gb.Content"><value>4,7 GB</value></data>
+  <data name="ConfigPanel_SplitCustom.Content"><value>Personalizado…</value></data>
+
+  <data name="ConfigPanel_PasswordLabel.Text"><value>Contraseña:</value></data>
+  <data name="ConfigPanel_AdvancedExpander.Header"><value>Avanzado</value></data>
+  <data name="ConfigPanel_DropHintTitle.Text"><value>Suelta los archivos aquí</value></data>
+  <data name="ConfigPanel_DropHintSubtitle.Text"><value>O haz clic para elegirlos</value></data>
+  <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>Contraseña</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>Mostrar / ocultar contraseña</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.AutomationProperties.Name"><value>Alternar visibilidad de la contraseña</value></data>
+  <data name="ConfigPanel_UseAes256.Content"><value>Usar cifrado AES-256</value></data>
+
+  <data name="ConfigPanel_ExcludeSystemMeta.Content"><value>Excluir archivos de metadatos del sistema</value></data>
+  <data name="ConfigPanel_ExcludeSystemMetaSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini</value></data>
+  <data name="ConfigPanel_VerifyAfterCompress.Content"><value>Verificar archivo tras la compresión</value></data>
+  <data name="ConfigPanel_DeleteSourceAfter.Content"><value>Eliminar origen tras la compresión</value></data>
+  <data name="ConfigPanel_CompressSeparately.Content"><value>Comprimir elementos por separado</value></data>
+
+  <data name="DropOverlay_HoverTitle.Text"><value>Soltar aquí</value></data>
+  <data name="DropOverlay_WillCompressFormat"><value>Comprimir {0} elementos como {1}</value></data>
+  <data name="DropOverlay_WillExtractFormat"><value>Extraer {0}</value></data>
+  <data name="DropOverlay_WillExtractMultipleFormat"><value>Extraer {0} archivos</value></data>
+  <data name="DropOverlay_MixedRejectText.Text"><value>Suelta solo un tipo a la vez</value></data>
+  <data name="DropOverlay_EmptyReject.Text"><value>La carpeta está vacía</value></data>
+
+  <data name="WindowMenu_AddFiles.Text"><value>Agregar archivos…</value></data>
+  <data name="WindowMenu_AddFolder.Text"><value>Agregar carpeta…</value></data>
+  <data name="WindowMenu_Settings.Text"><value>Configuración…</value></data>
+
+</root>

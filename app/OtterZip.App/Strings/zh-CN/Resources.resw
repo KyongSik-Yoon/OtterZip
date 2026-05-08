@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Chinese Simplified (zh-CN) — must mirror every key in en-US/Resources.resw. -->
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <!-- Main Window -->
+  <data name="App_WindowTitle"><value>OtterZip</value></data>
+  <data name="App_WindowTitleLabel.Text"><value>OtterZip</value></data>
+  <data name="Main_StatusBarIdleText.Text"><value>就绪</value></data>
+  <data name="Main_StatusBarExtractingFormat.Text"><value>正在解压 {0}…</value></data>
+  <data name="Main_StatusBarDoneFormat.Text"><value>已解压 {0} 项 · {1}</value></data>
+  <data name="Main_StatusBarErrorFormat.Text"><value>错误：{0}</value></data>
+  <data name="Main_StatusBarUnsupportedFormat.Text"><value>不支持的格式 ({0})</value></data>
+  <data name="Main_StatusBarCompressingFormat.Text"><value>正在压缩 → {0}…</value></data>
+  <data name="Main_StatusBarCompressDoneFormat.Text"><value>已创建 {0} · {1}</value></data>
+  <data name="Main_StatusBarUnknownInvokeFormat"><value>未知的调用动词：{0}</value></data>
+  <data name="Main_StatusBarVerifyingFormat.Text"><value>正在验证 {0}…</value></data>
+
+  <data name="Main_SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>设置</value></data>
+  <data name="Main_SettingsButton.AutomationProperties.Name"><value>设置</value></data>
+
+  <!-- Password Dialog -->
+  <data name="PasswordDialog_TitleFormat.Text"><value>{0} 需要密码</value></data>
+  <data name="PasswordDialog_Placeholder.Text"><value>密码</value></data>
+  <data name="PasswordDialog_OK.Text"><value>解锁</value></data>
+  <data name="PasswordDialog_Cancel.Text"><value>取消</value></data>
+
+  <!-- Extract Dialog -->
+  <data name="ExtractDialog_TitleFormat"><value>解压 {0}</value></data>
+  <data name="ExtractDialog_DestinationLabel.Text"><value>目标文件夹</value></data>
+  <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
+  <data name="ExtractDialog_BrowseButton.Content"><value>浏览…</value></data>
+  <data name="ExtractDialog_PrimaryButton.Text"><value>解压</value></data>
+  <data name="ExtractDialog_SecondaryButton.Text"><value>解压到此处</value></data>
+  <data name="ExtractDialog_CancelButton.Text"><value>取消</value></data>
+
+  <!-- Settings Dialog -->
+  <data name="Settings_DialogTitle.Title"><value>设置</value></data>
+  <data name="Settings_TitleLabel.Text"><value>设置</value></data>
+
+  <!-- Nav tab labels -->
+  <data name="Settings_NavGeneral.Content"><value>常规</value></data>
+  <data name="Settings_NavCompression.Content"><value>压缩</value></data>
+  <data name="Settings_NavExtraction.Content"><value>解压</value></data>
+  <data name="Settings_NavPassword.Content"><value>密码</value></data>
+  <data name="Settings_NavIntegration.Content"><value>集成</value></data>
+  <data name="Settings_NavInfo.Content"><value>信息</value></data>
+
+  <!-- General tab -->
+  <data name="Settings_DefaultActionLabel.Text"><value>默认操作</value></data>
+  <data name="Settings_DefaultActionAuto.Content"><value>自动（按文件类型决定）</value></data>
+  <data name="Settings_DefaultActionCompress.Content"><value>始终压缩</value></data>
+  <data name="Settings_DefaultActionExtract.Content"><value>始终解压</value></data>
+  <data name="Settings_ConfirmExitWhileBusy.Content"><value>有任务进行中时退出前确认</value></data>
+  <data name="Settings_ShowToast.Content"><value>显示通知</value></data>
+
+  <!-- Compress password prompt -->
+  <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>新压缩包</value></data>
+
+  <!-- Toast notifications -->
+  <data name="Toast_CompressTitle.Text"><value>压缩完成</value></data>
+  <data name="Toast_CompressBodyFormat.Text"><value>{0} · {1}</value></data>
+  <data name="Toast_ExtractTitle.Text"><value>解压完成</value></data>
+  <data name="Toast_ExtractBodyFormat.Text"><value>{0} 项 · {1}</value></data>
+
+  <!-- ConfirmExit dialog -->
+  <data name="ExitConfirm_Title.Text"><value>有任务正在进行</value></data>
+  <data name="ExitConfirm_Body.Text"><value>立即退出将取消正在运行的压缩 / 解压任务。是否继续？</value></data>
+  <data name="ExitConfirm_Quit.Text"><value>取消并退出</value></data>
+  <data name="ExitConfirm_Stay.Text"><value>继续工作</value></data>
+  <data name="Settings_OpenDefaultApps.Content"><value>将 OtterZip 设为默认应用</value></data>
+
+  <!-- Compression tab -->
+  <data name="Settings_UseParentFolderName.Content"><value>压缩多个文件时使用父文件夹名称</value></data>
+  <data name="Settings_FilenameTemplateLabel.Text"><value>文件名模板</value></data>
+  <data name="Settings_FilenameTemplatePlaceholder.PlaceholderText"><value>{name}</value></data>
+  <data name="Settings_FilenameTemplateSub.Text"><value>占位符：{name} {date} {time} {count} {parent}。留空则使用默认规则。</value></data>
+  <data name="Settings_AlwaysPromptPassword.Content"><value>压缩时始终提示输入密码</value></data>
+
+  <!-- Extraction tab -->
+  <data name="Settings_ExtractLocationLabel.Text"><value>解压位置</value></data>
+  <data name="Settings_ExtractLocationSame.Content"><value>与压缩包相同</value></data>
+  <data name="Settings_ExtractLocationCustom.Content"><value>指定文件夹…</value></data>
+  <data name="Settings_PreserveZoneIdentifier.Content"><value>保留下载隔离标记 (MOTW)</value></data>
+  <data name="Settings_PreserveZoneIdentifierSub.Text"><value>将原压缩包的 Zone.Identifier 安全标记应用到解压后的文件。</value></data>
+
+  <!-- Password tab -->
+  <data name="Settings_DefaultPasswordLabel.Text"><value>默认密码</value></data>
+  <data name="Settings_DefaultPasswordPlaceholder.PlaceholderText"><value>未设置</value></data>
+  <data name="Settings_DefaultPasswordOnCompress.Content"><value>自动应用到新压缩包</value></data>
+  <data name="Settings_DefaultPasswordOnExtract.Content"><value>解压时自动尝试</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPassword.Content"><value>使用保存的密码前需要身份验证</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPasswordSub.Text"><value>使用保存的密码前需要 Windows Hello（指纹 / 面部 / PIN）验证。</value></data>
+
+  <!-- Hello prompt reasons -->
+  <data name="Auth_ReasonCompress.Text"><value>验证身份以使用保存的密码加密新压缩包</value></data>
+  <data name="Auth_ReasonExtract.Text"><value>验证身份以使用保存的密码解压受保护的压缩包</value></data>
+
+  <!-- Integration tab -->
+  <data name="Settings_ShellMenuModeLabel.Text"><value>子菜单模式</value></data>
+  <data name="Settings_ShellMenuModeFlat.Content"><value>扁平（顶级菜单）</value></data>
+  <data name="Settings_ShellMenuModeNested.Content"><value>嵌套（OtterZip 子菜单内）</value></data>
+  <data name="Settings_ShellExtractHereAsDefault.Content"><value>将"解压到此处"设为默认操作</value></data>
+
+  <!-- Section 1: General -->
+  <data name="Settings_SectionGeneral.Text"><value>常规</value></data>
+  <data name="Settings_LanguageLabel.Text"><value>语言</value></data>
+  <data name="Settings_LanguageSystem.Content"><value>跟随系统</value></data>
+  <data name="Settings_LanguageKo.Content"><value>한국어</value></data>
+  <data name="Settings_LanguageEn.Content"><value>English</value></data>
+  <data name="Settings_ThemeSectionLabel.Text"><value>主题</value></data>
+  <data name="Theme_Light.Content"><value>浅色</value></data>
+  <data name="Theme_Dark.Content"><value>深色</value></data>
+  <data name="Theme_System.Content"><value>跟随系统</value></data>
+  <data name="Settings_DefaultFormatLabel.Text"><value>默认压缩格式</value></data>
+  <data name="Settings_DefaultMethodLabel.Text"><value>默认压缩方法</value></data>
+  <data name="Settings_MethodStore.Content"><value>仅存储</value></data>
+  <data name="Settings_MethodFast.Content"><value>快速</value></data>
+  <data name="Settings_MethodNormal.Content"><value>标准</value></data>
+  <data name="Settings_MethodBest.Content"><value>最佳</value></data>
+  <data name="Settings_SaveLocationLabel.Text"><value>保存位置</value></data>
+  <data name="Settings_SaveLocationSame.Content"><value>与源相同</value></data>
+  <data name="Settings_SaveLocationCustom.Content"><value>指定文件夹…</value></data>
+  <data name="Settings_BrowseButton.Content"><value>浏览…</value></data>
+
+  <!-- Section 2: Behavior -->
+  <data name="Settings_SectionBehavior.Text"><value>行为</value></data>
+  <data name="Settings_CompressGroupLabel.Text"><value>压缩之后</value></data>
+  <data name="Settings_PlaySoundOnCompress.Content"><value>播放声音</value></data>
+  <data name="Settings_RevealAfterCompress.Content"><value>在资源管理器中显示结果</value></data>
+  <data name="Settings_DeleteSourceAfterCompress.Content"><value>将源文件移到回收站</value></data>
+  <data name="Settings_ExtractGroupLabel.Text"><value>解压之后</value></data>
+  <data name="Settings_PlaySoundOnExtract.Content"><value>播放声音</value></data>
+  <data name="Settings_RevealAfterExtract.Content"><value>在资源管理器中显示结果</value></data>
+  <data name="Settings_DeleteArchiveAfterExtract.Content"><value>将压缩包移到回收站</value></data>
+  <data name="Settings_AlwaysExtractToSubfolder.Content"><value>始终解压到子文件夹</value></data>
+  <data name="Settings_VerifyAfterCompress.Content"><value>压缩后验证完整性</value></data>
+  <data name="Settings_ExcludeSystemMetadata.Content"><value>排除系统元数据文件</value></data>
+  <data name="Settings_ExcludeSystemMetadataSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini · $RECYCLE.BIN</value></data>
+
+  <!-- Section 3: Integration -->
+  <data name="Settings_SectionIntegration.Text"><value>集成</value></data>
+  <data name="Settings_ShellMenuEnabled.Content"><value>在 Windows 资源管理器右键菜单中显示 OtterZip</value></data>
+  <data name="Settings_ShellMenuEnabledSub.Text"><value>禁用后需要重启 Windows 才能使菜单消失。</value></data>
+
+  <!-- Section 4: Info -->
+  <data name="Settings_SectionInfo.Text"><value>信息</value></data>
+  <data name="Settings_VersionLabel.Text"><value>版本</value></data>
+  <data name="Settings_OpenLicense.Content"><value>查看许可证</value></data>
+  <data name="Settings_OpenThirdParty.Content"><value>第三方声明</value></data>
+  <data name="Settings_UnrarNotice.Text"><value>本产品使用 Alexander Roshal 的 unrar 源代码进行 RAR 压缩包解压。© Alexander Roshal。仅授权用于 RAR 解压 — 禁止创建 RAR 压缩包。</value></data>
+
+  <!-- Telemetry -->
+  <data name="Settings_TelemetryEnabled.Content"><value>发送匿名崩溃报告</value></data>
+  <data name="Settings_TelemetryEnabledSub.Text"><value>将崩溃诊断信息转发给开发者。传输前会移除个人信息、文件内容和密码。默认关闭。</value></data>
+
+  <!-- Close button -->
+  <data name="Settings_CloseButton.Text"><value>关闭</value></data>
+
+  <!-- ConfigPanel -->
+  <data name="ConfigPanel_Region.AutomationProperties.Name"><value>压缩设置面板</value></data>
+
+  <!-- Card 0: Format -->
+  <data name="ConfigPanel_FormatLabel.Text"><value>格式：</value></data>
+  <data name="ConfigPanel_FormatZip.Content"><value>ZIP</value></data>
+  <data name="ConfigPanel_FormatSevenZ.Content"><value>7z</value></data>
+  <data name="ConfigPanel_FormatTar.Content"><value>tar</value></data>
+  <data name="ConfigPanel_FormatTarGz.Content"><value>tar.gz</value></data>
+  <data name="ConfigPanel_FormatTarBz2.Content"><value>tar.bz2</value></data>
+  <data name="ConfigPanel_FormatTarXz.Content"><value>tar.xz</value></data>
+  <data name="ConfigPanel_FormatXz.Content"><value>xz（单文件）</value></data>
+  <data name="ConfigPanel_FormatZipx.Content"><value>zipx (Bzip2)</value></data>
+
+  <!-- Card 1: Compression Method -->
+  <data name="ConfigPanel_MethodHeaderFormat"><value>压缩方法：{0}</value></data>
+  <data name="ConfigPanel_MethodStore.Text"><value>仅存储</value></data>
+  <data name="ConfigPanel_MethodFast.Text"><value>快速</value></data>
+  <data name="ConfigPanel_MethodNormal.Text"><value>标准</value></data>
+  <data name="ConfigPanel_MethodBest.Text"><value>最佳</value></data>
+
+  <!-- Card 2: Split -->
+  <data name="ConfigPanel_SplitLabel.Text"><value>分卷压缩：</value></data>
+  <data name="ConfigPanel_SplitNone.Content"><value>无</value></data>
+  <data name="ConfigPanel_Split10Mb.Content"><value>10 MB</value></data>
+  <data name="ConfigPanel_Split100Mb.Content"><value>100 MB</value></data>
+  <data name="ConfigPanel_Split700Mb.Content"><value>700 MB</value></data>
+  <data name="ConfigPanel_Split1Gb.Content"><value>1 GB</value></data>
+  <data name="ConfigPanel_Split47Gb.Content"><value>4.7 GB</value></data>
+  <data name="ConfigPanel_SplitCustom.Content"><value>自定义…</value></data>
+
+  <!-- Card 3: Password + AES -->
+  <data name="ConfigPanel_PasswordLabel.Text"><value>密码：</value></data>
+  <data name="ConfigPanel_AdvancedExpander.Header"><value>高级</value></data>
+  <data name="ConfigPanel_DropHintTitle.Text"><value>将文件拖到这里</value></data>
+  <data name="ConfigPanel_DropHintSubtitle.Text"><value>或点击手动选择</value></data>
+  <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>密码</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>显示 / 隐藏密码</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.AutomationProperties.Name"><value>切换密码可见性</value></data>
+  <data name="ConfigPanel_UseAes256.Content"><value>使用 AES-256 加密</value></data>
+
+  <!-- Bottom checkboxes -->
+  <data name="ConfigPanel_ExcludeSystemMeta.Content"><value>排除系统元数据文件</value></data>
+  <data name="ConfigPanel_ExcludeSystemMetaSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini</value></data>
+  <data name="ConfigPanel_VerifyAfterCompress.Content"><value>压缩后验证压缩包</value></data>
+  <data name="ConfigPanel_DeleteSourceAfter.Content"><value>压缩后删除源文件</value></data>
+  <data name="ConfigPanel_CompressSeparately.Content"><value>分别压缩各项</value></data>
+
+  <!-- Window Drop Overlay -->
+  <data name="DropOverlay_HoverTitle.Text"><value>拖放到此处</value></data>
+  <data name="DropOverlay_WillCompressFormat"><value>将 {0} 项压缩为 {1}</value></data>
+  <data name="DropOverlay_WillExtractFormat"><value>解压 {0}</value></data>
+  <data name="DropOverlay_WillExtractMultipleFormat"><value>解压 {0} 个压缩包</value></data>
+  <data name="DropOverlay_MixedRejectText.Text"><value>一次只能拖放一种类型</value></data>
+  <data name="DropOverlay_EmptyReject.Text"><value>文件夹为空</value></data>
+
+  <!-- Right-click Menu (window-level) -->
+  <data name="WindowMenu_AddFiles.Text"><value>添加文件…</value></data>
+  <data name="WindowMenu_AddFolder.Text"><value>添加文件夹…</value></data>
+  <data name="WindowMenu_Settings.Text"><value>设置…</value></data>
+
+</root>

@@ -29,8 +29,17 @@
   </Dependencies>
 
   <Resources>
-    <Resource Language="ko-KR" />
+    <!-- Tier-1 markets for global launch (ordered by Microsoft Store revenue weight). -->
     <Resource Language="en-US" />
+    <Resource Language="zh-CN" />
+    <Resource Language="ja-JP" />
+    <Resource Language="ko-KR" />
+    <Resource Language="de-DE" />
+    <Resource Language="fr-FR" />
+    <Resource Language="es-ES" />
+    <Resource Language="pt-BR" />
+    <Resource Language="ru-RU" />
+    <Resource Language="it-IT" />
   </Resources>
 
   <Applications>

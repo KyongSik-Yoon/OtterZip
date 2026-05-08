@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- Japanese (ja-JP) — must mirror every key in en-US/Resources.resw. -->
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="App_WindowTitle"><value>OtterZip</value></data>
+  <data name="App_WindowTitleLabel.Text"><value>OtterZip</value></data>
+  <data name="Main_StatusBarIdleText.Text"><value>準備完了</value></data>
+  <data name="Main_StatusBarExtractingFormat.Text"><value>{0} を解凍中…</value></data>
+  <data name="Main_StatusBarDoneFormat.Text"><value>{0} 個のエントリを解凍しました · {1}</value></data>
+  <data name="Main_StatusBarErrorFormat.Text"><value>エラー: {0}</value></data>
+  <data name="Main_StatusBarUnsupportedFormat.Text"><value>サポートされていない形式 ({0})</value></data>
+  <data name="Main_StatusBarCompressingFormat.Text"><value>圧縮中 → {0}…</value></data>
+  <data name="Main_StatusBarCompressDoneFormat.Text"><value>{0} を作成しました · {1}</value></data>
+  <data name="Main_StatusBarUnknownInvokeFormat"><value>不明な呼び出し動詞: {0}</value></data>
+  <data name="Main_StatusBarVerifyingFormat.Text"><value>{0} を検証中…</value></data>
+
+  <data name="Main_SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>設定</value></data>
+  <data name="Main_SettingsButton.AutomationProperties.Name"><value>設定</value></data>
+
+  <data name="PasswordDialog_TitleFormat.Text"><value>{0} にはパスワードが必要です</value></data>
+  <data name="PasswordDialog_Placeholder.Text"><value>パスワード</value></data>
+  <data name="PasswordDialog_OK.Text"><value>解除</value></data>
+  <data name="PasswordDialog_Cancel.Text"><value>キャンセル</value></data>
+
+  <data name="ExtractDialog_TitleFormat"><value>{0} を解凍</value></data>
+  <data name="ExtractDialog_DestinationLabel.Text"><value>展開先フォルダー</value></data>
+  <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
+  <data name="ExtractDialog_BrowseButton.Content"><value>参照…</value></data>
+  <data name="ExtractDialog_PrimaryButton.Text"><value>解凍</value></data>
+  <data name="ExtractDialog_SecondaryButton.Text"><value>ここに解凍</value></data>
+  <data name="ExtractDialog_CancelButton.Text"><value>キャンセル</value></data>
+
+  <data name="Settings_DialogTitle.Title"><value>設定</value></data>
+  <data name="Settings_TitleLabel.Text"><value>設定</value></data>
+
+  <data name="Settings_NavGeneral.Content"><value>全般</value></data>
+  <data name="Settings_NavCompression.Content"><value>圧縮</value></data>
+  <data name="Settings_NavExtraction.Content"><value>解凍</value></data>
+  <data name="Settings_NavPassword.Content"><value>パスワード</value></data>
+  <data name="Settings_NavIntegration.Content"><value>統合</value></data>
+  <data name="Settings_NavInfo.Content"><value>情報</value></data>
+
+  <data name="Settings_DefaultActionLabel.Text"><value>既定の動作</value></data>
+  <data name="Settings_DefaultActionAuto.Content"><value>自動 (ファイルの種類で判断)</value></data>
+  <data name="Settings_DefaultActionCompress.Content"><value>常に圧縮</value></data>
+  <data name="Settings_DefaultActionExtract.Content"><value>常に解凍</value></data>
+  <data name="Settings_ConfirmExitWhileBusy.Content"><value>処理中の終了時に確認する</value></data>
+  <data name="Settings_ShowToast.Content"><value>通知を表示する</value></data>
+
+  <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>新しいアーカイブ</value></data>
+
+  <data name="Toast_CompressTitle.Text"><value>圧縮完了</value></data>
+  <data name="Toast_CompressBodyFormat.Text"><value>{0} · {1}</value></data>
+  <data name="Toast_ExtractTitle.Text"><value>解凍完了</value></data>
+  <data name="Toast_ExtractBodyFormat.Text"><value>{0} エントリ · {1}</value></data>
+
+  <data name="ExitConfirm_Title.Text"><value>処理が進行中です</value></data>
+  <data name="ExitConfirm_Body.Text"><value>今終了すると実行中の圧縮 / 解凍ジョブがキャンセルされます。続行しますか?</value></data>
+  <data name="ExitConfirm_Quit.Text"><value>キャンセルして終了</value></data>
+  <data name="ExitConfirm_Stay.Text"><value>作業を続ける</value></data>
+  <data name="Settings_OpenDefaultApps.Content"><value>OtterZip を既定のアプリに設定</value></data>
+
+  <data name="Settings_UseParentFolderName.Content"><value>複数ファイルの圧縮時に親フォルダー名を使用する</value></data>
+  <data name="Settings_FilenameTemplateLabel.Text"><value>ファイル名テンプレート</value></data>
+  <data name="Settings_FilenameTemplatePlaceholder.PlaceholderText"><value>{name}</value></data>
+  <data name="Settings_FilenameTemplateSub.Text"><value>トークン: {name} {date} {time} {count} {parent}。空にすると既定のルールに戻ります。</value></data>
+  <data name="Settings_AlwaysPromptPassword.Content"><value>圧縮時は常にパスワードを確認する</value></data>
+
+  <data name="Settings_ExtractLocationLabel.Text"><value>展開先</value></data>
+  <data name="Settings_ExtractLocationSame.Content"><value>アーカイブと同じ場所</value></data>
+  <data name="Settings_ExtractLocationCustom.Content"><value>指定フォルダー…</value></data>
+  <data name="Settings_PreserveZoneIdentifier.Content"><value>ダウンロード検疫マークを保持 (MOTW)</value></data>
+  <data name="Settings_PreserveZoneIdentifierSub.Text"><value>元のアーカイブの Zone.Identifier セキュリティマークを抽出ファイルに適用します。</value></data>
+
+  <data name="Settings_DefaultPasswordLabel.Text"><value>既定のパスワード</value></data>
+  <data name="Settings_DefaultPasswordPlaceholder.PlaceholderText"><value>未設定</value></data>
+  <data name="Settings_DefaultPasswordOnCompress.Content"><value>新しいアーカイブに自動的に適用</value></data>
+  <data name="Settings_DefaultPasswordOnExtract.Content"><value>解凍時に自動的に試行</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPassword.Content"><value>保存されたパスワード使用前に認証を要求</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPasswordSub.Text"><value>保存されたパスワードを使用する前に Windows Hello (指紋 / 顔 / PIN) 認証が必要です。</value></data>
+
+  <data name="Auth_ReasonCompress.Text"><value>保存されたパスワードで新しいアーカイブを暗号化するため認証してください</value></data>
+  <data name="Auth_ReasonExtract.Text"><value>保存されたパスワードで保護されたアーカイブを解凍するため認証してください</value></data>
+
+  <data name="Settings_ShellMenuModeLabel.Text"><value>サブメニューモード</value></data>
+  <data name="Settings_ShellMenuModeFlat.Content"><value>フラット (トップレベル項目)</value></data>
+  <data name="Settings_ShellMenuModeNested.Content"><value>ネスト (OtterZip サブメニュー内)</value></data>
+  <data name="Settings_ShellExtractHereAsDefault.Content"><value>「ここに解凍」を既定の動作にする</value></data>
+
+  <data name="Settings_SectionGeneral.Text"><value>全般</value></data>
+  <data name="Settings_LanguageLabel.Text"><value>言語</value></data>
+  <data name="Settings_LanguageSystem.Content"><value>システムに従う</value></data>
+  <data name="Settings_LanguageKo.Content"><value>한국어</value></data>
+  <data name="Settings_LanguageEn.Content"><value>English</value></data>
+  <data name="Settings_ThemeSectionLabel.Text"><value>テーマ</value></data>
+  <data name="Theme_Light.Content"><value>ライト</value></data>
+  <data name="Theme_Dark.Content"><value>ダーク</value></data>
+  <data name="Theme_System.Content"><value>システムに従う</value></data>
+  <data name="Settings_DefaultFormatLabel.Text"><value>既定のアーカイブ形式</value></data>
+  <data name="Settings_DefaultMethodLabel.Text"><value>既定の圧縮方法</value></data>
+  <data name="Settings_MethodStore.Content"><value>無圧縮</value></data>
+  <data name="Settings_MethodFast.Content"><value>高速</value></data>
+  <data name="Settings_MethodNormal.Content"><value>標準</value></data>
+  <data name="Settings_MethodBest.Content"><value>最高</value></data>
+  <data name="Settings_SaveLocationLabel.Text"><value>保存場所</value></data>
+  <data name="Settings_SaveLocationSame.Content"><value>元と同じ場所</value></data>
+  <data name="Settings_SaveLocationCustom.Content"><value>指定フォルダー…</value></data>
+  <data name="Settings_BrowseButton.Content"><value>参照…</value></data>
+
+  <data name="Settings_SectionBehavior.Text"><value>動作</value></data>
+  <data name="Settings_CompressGroupLabel.Text"><value>圧縮後</value></data>
+  <data name="Settings_PlaySoundOnCompress.Content"><value>サウンドを再生</value></data>
+  <data name="Settings_RevealAfterCompress.Content"><value>エクスプローラーで結果を表示</value></data>
+  <data name="Settings_DeleteSourceAfterCompress.Content"><value>元ファイルをごみ箱に移動</value></data>
+  <data name="Settings_ExtractGroupLabel.Text"><value>解凍後</value></data>
+  <data name="Settings_PlaySoundOnExtract.Content"><value>サウンドを再生</value></data>
+  <data name="Settings_RevealAfterExtract.Content"><value>エクスプローラーで結果を表示</value></data>
+  <data name="Settings_DeleteArchiveAfterExtract.Content"><value>アーカイブをごみ箱に移動</value></data>
+  <data name="Settings_AlwaysExtractToSubfolder.Content"><value>常にサブフォルダーに解凍</value></data>
+  <data name="Settings_VerifyAfterCompress.Content"><value>圧縮後に整合性を検証</value></data>
+  <data name="Settings_ExcludeSystemMetadata.Content"><value>システムメタデータファイルを除外</value></data>
+  <data name="Settings_ExcludeSystemMetadataSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini · $RECYCLE.BIN</value></data>
+
+  <data name="Settings_SectionIntegration.Text"><value>統合</value></data>
+  <data name="Settings_ShellMenuEnabled.Content"><value>Windows エクスプローラーの右クリックメニューに OtterZip を表示</value></data>
+  <data name="Settings_ShellMenuEnabledSub.Text"><value>無効化後、メニューが消えるまで Windows の再起動が必要です。</value></data>
+
+  <data name="Settings_SectionInfo.Text"><value>情報</value></data>
+  <data name="Settings_VersionLabel.Text"><value>バージョン</value></data>
+  <data name="Settings_OpenLicense.Content"><value>ライセンスを表示</value></data>
+  <data name="Settings_OpenThirdParty.Content"><value>サードパーティの通知</value></data>
+  <data name="Settings_UnrarNotice.Text"><value>本製品は RAR アーカイブの解凍に Alexander Roshal 氏の unrar ソースを使用しています。© Alexander Roshal。RAR の解凍のみライセンスされています — RAR アーカイブの作成は禁止されています。</value></data>
+
+  <data name="Settings_TelemetryEnabled.Content"><value>匿名のクラッシュレポートを送信</value></data>
+  <data name="Settings_TelemetryEnabledSub.Text"><value>クラッシュ診断を開発者に転送します。送信前に PII、ファイル内容、パスワードは除去されます。既定はオフ。</value></data>
+
+  <data name="Settings_CloseButton.Text"><value>閉じる</value></data>
+
+  <data name="ConfigPanel_Region.AutomationProperties.Name"><value>圧縮設定パネル</value></data>
+
+  <data name="ConfigPanel_FormatLabel.Text"><value>形式:</value></data>
+  <data name="ConfigPanel_FormatZip.Content"><value>ZIP</value></data>
+  <data name="ConfigPanel_FormatSevenZ.Content"><value>7z</value></data>
+  <data name="ConfigPanel_FormatTar.Content"><value>tar</value></data>
+  <data name="ConfigPanel_FormatTarGz.Content"><value>tar.gz</value></data>
+  <data name="ConfigPanel_FormatTarBz2.Content"><value>tar.bz2</value></data>
+  <data name="ConfigPanel_FormatTarXz.Content"><value>tar.xz</value></data>
+  <data name="ConfigPanel_FormatXz.Content"><value>xz (単一)</value></data>
+  <data name="ConfigPanel_FormatZipx.Content"><value>zipx (Bzip2)</value></data>
+
+  <data name="ConfigPanel_MethodHeaderFormat"><value>圧縮方法: {0}</value></data>
+  <data name="ConfigPanel_MethodStore.Text"><value>無圧縮</value></data>
+  <data name="ConfigPanel_MethodFast.Text"><value>高速</value></data>
+  <data name="ConfigPanel_MethodNormal.Text"><value>標準</value></data>
+  <data name="ConfigPanel_MethodBest.Text"><value>最高</value></data>
+
+  <data name="ConfigPanel_SplitLabel.Text"><value>分割:</value></data>
+  <data name="ConfigPanel_SplitNone.Content"><value>なし</value></data>
+  <data name="ConfigPanel_Split10Mb.Content"><value>10 MB</value></data>
+  <data name="ConfigPanel_Split100Mb.Content"><value>100 MB</value></data>
+  <data name="ConfigPanel_Split700Mb.Content"><value>700 MB</value></data>
+  <data name="ConfigPanel_Split1Gb.Content"><value>1 GB</value></data>
+  <data name="ConfigPanel_Split47Gb.Content"><value>4.7 GB</value></data>
+  <data name="ConfigPanel_SplitCustom.Content"><value>カスタム…</value></data>
+
+  <data name="ConfigPanel_PasswordLabel.Text"><value>パスワード:</value></data>
+  <data name="ConfigPanel_AdvancedExpander.Header"><value>詳細設定</value></data>
+  <data name="ConfigPanel_DropHintTitle.Text"><value>ファイルをここにドロップ</value></data>
+  <data name="ConfigPanel_DropHintSubtitle.Text"><value>またはクリックして選択</value></data>
+  <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>パスワード</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip"><value>パスワードを表示 / 非表示</value></data>
+  <data name="ConfigPanel_PasswordRevealButton.AutomationProperties.Name"><value>パスワードの表示切替</value></data>
+  <data name="ConfigPanel_UseAes256.Content"><value>AES-256 暗号化を使用</value></data>
+
+  <data name="ConfigPanel_ExcludeSystemMeta.Content"><value>システムメタデータファイルを除外</value></data>
+  <data name="ConfigPanel_ExcludeSystemMetaSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini</value></data>
+  <data name="ConfigPanel_VerifyAfterCompress.Content"><value>圧縮後にアーカイブを検証</value></data>
+  <data name="ConfigPanel_DeleteSourceAfter.Content"><value>圧縮後に元ファイルを削除</value></data>
+  <data name="ConfigPanel_CompressSeparately.Content"><value>項目ごとに別々に圧縮</value></data>
+
+  <data name="DropOverlay_HoverTitle.Text"><value>ここにドロップ</value></data>
+  <data name="DropOverlay_WillCompressFormat"><value>{0} 個の項目を {1} として圧縮</value></data>
+  <data name="DropOverlay_WillExtractFormat"><value>{0} を解凍</value></data>
+  <data name="DropOverlay_WillExtractMultipleFormat"><value>{0} 個のアーカイブを解凍</value></data>
+  <data name="DropOverlay_MixedRejectText.Text"><value>同時にドロップできるのは 1 種類だけです</value></data>
+  <data name="DropOverlay_EmptyReject.Text"><value>フォルダーが空です</value></data>
+
+  <data name="WindowMenu_AddFiles.Text"><value>ファイルを追加…</value></data>
+  <data name="WindowMenu_AddFolder.Text"><value>フォルダーを追加…</value></data>
+  <data name="WindowMenu_Settings.Text"><value>設定…</value></data>
+
+</root>
