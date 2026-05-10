@@ -25,10 +25,14 @@
                         VerticalAlignment="Center"
                         Spacing="8"
                         Margin="14,0,0,0">
-                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                          Glyph="&#xE713;"
-                          FontSize="14"
-                          Foreground="{ThemeResource OtterzipBrandBrush}" />
+                <!-- Same otter mascot as MainWindow so the brand mark stays
+                     consistent across every program window. (The gear glyph
+                     stays for the General nav item below — that one is
+                     contextual, not branding.) -->
+                <Image Source="ms-appx:///Assets/Square150x150Logo.png"
+                       Width="20"
+                       Height="20"
+                       VerticalAlignment="Center" />
                 <TextBlock x:Uid="Settings_TitleLabel"
                            Style="{StaticResource CaptionTextStyle}"
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"

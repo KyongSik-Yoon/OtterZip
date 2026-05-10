@@ -78,6 +78,12 @@ public sealed partial class SettingsWindow : Window
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+
+            // Same icon as MainWindow so the taskbar identity stays unified
+            // even when Settings is the only visible window. See MainWindow
+            // for the working-directory rationale.
+            MainWindow.TrySetWindowIcon(appWindow);
+
             uint dpi = GetDpiForWindow(hwnd);
             double scale = dpi / 96.0;
             int physW = (int)(width * scale);

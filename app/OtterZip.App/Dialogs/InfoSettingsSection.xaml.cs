@@ -15,8 +15,11 @@ public sealed partial class InfoSettingsSection : UserControl
         InitializeComponent();
         Loaded += (_, _) =>
         {
-            VersionText.Text = $"OtterZip {AssemblyInfoService.Version} "
-                + $"(build {AssemblyInfoService.GitHash}, {AssemblyInfoService.BuildDate})";
+            // Two-line metadata layout — Version row shows the semver, the
+            // Build row shows the git hash + date in monospace so a user
+            // can copy/paste it cleanly into a bug report.
+            VersionText.Text = AssemblyInfoService.Version;
+            BuildText.Text = $"{AssemblyInfoService.GitHash} · {AssemblyInfoService.BuildDate}";
             TelemetryEnabledCheck.IsChecked =
                 SettingsService.Get<bool>("Settings_TelemetryEnabled", false);
         };

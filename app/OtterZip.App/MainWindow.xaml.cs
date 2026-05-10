@@ -75,16 +75,53 @@ public sealed partial class MainWindow : Window
         // Phase 6+ rev 4: hook AppWindow.Closing so an in-flight job can
         // prompt the user before the window vanishes. WinUI 3 Window.Closed
         // is non-cancellable; AppWindow.Closing carries `args.Cancel`.
+        WireAppWindow();
+    }
+
+    /// <summary>
+    /// Bind to the underlying AppWindow for both the Closing-confirm hook
+    /// and the otter mascot icon. Best-effort: if either step fails the
+    /// window still works, just without the close prompt or custom icon.
+    /// </summary>
+    private void WireAppWindow()
+    {
         try
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             appWindow.Closing += OnAppWindowClosing;
+            TrySetWindowIcon(appWindow);
         }
         catch (Exception)
         {
             // Best-effort — closing-confirm degrades to "always allow close".
+        }
+    }
+
+    /// <summary>
+    /// Apply the otter mascot to the window. AppWindow.SetIcon resolves
+    /// relative paths against the *working directory*, not the EXE — which
+    /// burns us when VS launches the unpackaged build with a different CWD.
+    /// We resolve against AppContext.BaseDirectory and pre-check existence
+    /// so the call site stays predictable; the all-Exception catch keeps a
+    /// future WindowsAppSDK regression from crashing the app over a purely
+    /// cosmetic asset.
+    /// </summary>
+    internal static void TrySetWindowIcon(Microsoft.UI.Windowing.AppWindow appWindow)
+    {
+        try
+        {
+            string iconPath = System.IO.Path.Combine(
+                AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            if (System.IO.File.Exists(iconPath))
+            {
+                appWindow.SetIcon(iconPath);
+            }
+        }
+        catch (Exception)
+        {
+            // Cosmetic asset — falls back to the EXE-embedded ApplicationIcon.
         }
     }
 

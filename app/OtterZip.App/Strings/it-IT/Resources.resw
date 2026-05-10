@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- Italian (it-IT) — must mirror every key in en-US/Resources.resw. -->
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -133,7 +133,9 @@
   <data name="Settings_VersionLabel.Text"><value>Versione</value></data>
   <data name="Settings_OpenLicense.Content"><value>Visualizza licenza</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>Avvisi di terze parti</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>Questo prodotto utilizza il codice sorgente unrar di Alexander Roshal per l'estrazione di archivi RAR. © Alexander Roshal. Concesso in licenza solo per l'estrazione RAR — la creazione di archivi RAR è proibita.</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>Strumento di archiviazione rapido per Windows</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>Build</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>Questo prodotto utilizza il codice sorgente unrar di Alexander Roshal per l'estrazione di archivi RAR. © Alexander Roshal. Concesso in licenza solo per l'estrazione RAR — la creazione di archivi RAR è proibita.</value></data>
 
   <data name="Settings_TelemetryEnabled.Content"><value>Invia segnalazioni di arresto anonime</value></data>
   <data name="Settings_TelemetryEnabledSub.Text"><value>Inoltra le diagnostiche di arresto agli sviluppatori. Informazioni personali, contenuti dei file e password vengono rimossi prima della trasmissione. Disattivato per impostazione predefinita.</value></data>

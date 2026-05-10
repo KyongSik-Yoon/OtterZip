@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!--
     OtterZip 다국어 리소스 — 한국어 (ko-KR, 기본)
@@ -192,7 +192,9 @@
   <data name="Settings_VersionLabel.Text"><value>버전</value></data>
   <data name="Settings_OpenLicense.Content"><value>라이선스 보기</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>제3자 고지</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>이 제품은 RAR 아카이브 해제를 위해 Alexander Roshal의 unrar 소스를 사용합니다. © Alexander Roshal. RAR 해제 목적에 한해 사용이 허가되었으며, RAR 아카이브 생성에 사용할 수 없습니다.</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>Windows를 위한 빠른 아카이브 도구</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>빌드</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>이 제품은 RAR 아카이브 해제를 위해 Alexander Roshal의 unrar 소스를 사용합니다. © Alexander Roshal. RAR 해제 목적에 한해 사용이 허가되었으며, RAR 아카이브 생성에 사용할 수 없습니다.</value></data>
 
   <!-- Telemetry / crash reporting (PR-7F, opt-in) -->
   <data name="Settings_TelemetryEnabled.Content"><value>익명 크래시 리포트 전송</value></data>

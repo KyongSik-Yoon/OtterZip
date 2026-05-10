@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- Russian (ru-RU) — must mirror every key in en-US/Resources.resw. -->
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -133,7 +133,9 @@
   <data name="Settings_VersionLabel.Text"><value>Версия</value></data>
   <data name="Settings_OpenLicense.Content"><value>Просмотреть лицензию</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>Уведомления третьих сторон</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>Этот продукт использует исходный код unrar Александра Рошаля для извлечения RAR-архивов. © Александр Рошаль. Лицензия только на извлечение RAR — создание RAR-архивов запрещено.</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>Быстрый инструмент архивирования для Windows</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>Сборка</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>Этот продукт использует исходный код unrar Александра Рошаля для извлечения RAR-архивов. © Александр Рошаль. Лицензия только на извлечение RAR — создание RAR-архивов запрещено.</value></data>
 
   <data name="Settings_TelemetryEnabled.Content"><value>Отправлять анонимные отчёты о сбоях</value></data>
   <data name="Settings_TelemetryEnabledSub.Text"><value>Передаёт диагностику сбоев разработчикам. Личные данные, содержимое файлов и пароли удаляются перед передачей. По умолчанию выключено.</value></data>

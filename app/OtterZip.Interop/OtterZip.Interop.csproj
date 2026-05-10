@@ -28,19 +28,51 @@
     <PackageReference Include="Sentry" />
   </ItemGroup>
 
-  <!-- Map .NET Configuration to Rust cargo profile directory name -->
+  <!--
+    Map .NET Configuration to Rust cargo profile directory name.
+
+    Resolution order:
+      1. target/<config-matched>/otterzip_ffi.dll
+         (debug for .NET Debug, release for .NET Release)
+      2. target/release/otterzip_ffi.dll  (fallback)
+      3. target/debug/otterzip_ffi.dll    (last-resort fallback)
+
+    Why the fallback chain: WinUI 3 Debug builds are mostly used for
+    fast UI iteration. Cargo Debug binaries are notably slower at
+    runtime, and most devs only run cargo release-build once and then
+    cycle the .NET project repeatedly. Without the fallback, those
+    Debug F5 launches crashed with "Unable to load DLL otterzip_ffi"
+    (0x8007007E) because target/debug/ was empty.
+
+    The fallback only trips when the matched profile dll is missing,
+    so once you do run "cargo build", the Debug dll naturally takes
+    precedence on the next .NET build.
+  -->
   <PropertyGroup>
     <_RustProfile Condition="'$(Configuration)' == 'Release'">release</_RustProfile>
     <_RustProfile Condition="'$(_RustProfile)' == ''">debug</_RustProfile>
-    <_RustDllPath>$(MSBuildThisFileDirectory)..\..\target\$(_RustProfile)\otterzip_ffi.dll</_RustDllPath>
+    <_RustDllMatched>$(MSBuildThisFileDirectory)..\..\target\$(_RustProfile)\otterzip_ffi.dll</_RustDllMatched>
+    <_RustDllRelease>$(MSBuildThisFileDirectory)..\..\target\release\otterzip_ffi.dll</_RustDllRelease>
+    <_RustDllDebug>$(MSBuildThisFileDirectory)..\..\target\debug\otterzip_ffi.dll</_RustDllDebug>
+
+    <_RustDllPath Condition="Exists('$(_RustDllMatched)')">$(_RustDllMatched)</_RustDllPath>
+    <_RustDllPath Condition="'$(_RustDllPath)' == '' and Exists('$(_RustDllRelease)')">$(_RustDllRelease)</_RustDllPath>
+    <_RustDllPath Condition="'$(_RustDllPath)' == '' and Exists('$(_RustDllDebug)')">$(_RustDllDebug)</_RustDllPath>
   </PropertyGroup>
 
   <!-- Include the Rust-built otterzip_ffi.dll as a native asset so it
        propagates to consuming projects (OtterZip.App) automatically. -->
-  <ItemGroup Condition="Exists('$(_RustDllPath)')">
+  <ItemGroup Condition="'$(_RustDllPath)' != '' and Exists('$(_RustDllPath)')">
     <Content Include="$(_RustDllPath)" Link="otterzip_ffi.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- Loud warning when no DLL is available at all. Prevents silent
+       runtime crash with the 0x8007007E "module not found" error. -->
+  <Target Name="WarnMissingRustDll" BeforeTargets="Build"
+          Condition="'$(_RustDllPath)' == ''">
+    <Warning Text="otterzip_ffi.dll not found in target/$(_RustProfile)/, target/release/, or target/debug/. Run 'cargo build --release' from the workspace root before building OtterZip.App, or P/Invoke will fail at startup with HRESULT 0x8007007E." />
+  </Target>
 
 </Project>

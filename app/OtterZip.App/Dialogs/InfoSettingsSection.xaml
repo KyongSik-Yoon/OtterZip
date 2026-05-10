@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Settings → Info tab. Version + License/Third-Party links + unrar notice.
+  Settings → Info tab.
+
+  Layout (top-to-bottom):
+    1. Hero block       - otter mascot + app name + tagline (centered)
+    2. Metadata card    - version / build / copyright in a labeled grid
+    3. License buttons  - LICENSE.txt + THIRD-PARTY-NOTICES.md viewers
+    4. Unrar notice     - Alexander Roshal RAR-extract licensing footnote
+    5. Telemetry block  - opt-in crash report toggle (PR-7F)
+
+  All strings via x:Uid; all colors via {ThemeResource}.
 -->
 <UserControl
     x:Class="OtterZip.App.Dialogs.InfoSettingsSection"
@@ -10,49 +19,115 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Spacing="{StaticResource SpacingMValue}"
-                Padding="{StaticResource SpacingL}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="{StaticResource SpacingLValue}"
+                    Padding="{StaticResource SpacingL}">
 
-        <Grid ColumnSpacing="{StaticResource SpacingMValue}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0"
-                       x:Uid="Settings_VersionLabel"
-                       Style="{StaticResource BodyTextStyle}" />
-            <TextBlock Grid.Column="1"
-                       x:Name="VersionText"
-                       Style="{StaticResource BodyStrongTextStyle}"
-                       TextWrapping="Wrap" />
-        </Grid>
+            <!-- ====================================================== -->
+            <!--  1. Hero — otter + app name + tagline                  -->
+            <!-- ====================================================== -->
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="{StaticResource SpacingSValue}"
+                        Margin="0,8,0,0">
+                <Image Source="ms-appx:///Assets/Square150x150Logo.png"
+                       Width="96"
+                       Height="96"
+                       HorizontalAlignment="Center" />
+                <TextBlock x:Uid="App_WindowTitleLabel"
+                           Style="{StaticResource SubtitleTextStyle}"
+                           HorizontalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <TextBlock x:Uid="Settings_Info_Tagline"
+                           Style="{StaticResource BodyTextStyle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
 
-        <StackPanel Orientation="Horizontal"
-                    Spacing="{StaticResource SpacingSValue}">
-            <Button x:Uid="Settings_OpenLicense" Click="OnOpenLicense" />
-            <Button x:Uid="Settings_OpenThirdParty" Click="OnOpenThirdParty" />
-        </StackPanel>
+            <!-- ====================================================== -->
+            <!--  2. Metadata card — version / build / copyright        -->
+            <!-- ====================================================== -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16,12">
+                <Grid ColumnSpacing="{StaticResource SpacingMValue}"
+                      RowSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-        <TextBlock x:Uid="Settings_UnrarNotice"
-                   Style="{StaticResource CaptionTextStyle}"
-                   TextWrapping="Wrap"
-                   Margin="0,8,0,0"
-                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               x:Uid="Settings_VersionLabel"
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Row="0" Grid.Column="1"
+                               x:Name="VersionText"
+                               Style="{StaticResource BodyStrongTextStyle}"
+                               IsTextSelectionEnabled="True"
+                               TextWrapping="Wrap" />
 
-        <!-- Telemetry opt-in (PR-7F) — placed at the bottom of Info so the
-             user reads the unrar notice + privacy context before flipping. -->
-        <Border Margin="0,12,0,0" />
-        <StackPanel>
-            <CheckBox x:Name="TelemetryEnabledCheck"
-                      x:Uid="Settings_TelemetryEnabled"
-                      MinHeight="0"
-                      Checked="OnTelemetryToggle"
-                      Unchecked="OnTelemetryToggle" />
-            <TextBlock x:Uid="Settings_TelemetryEnabledSub"
+                    <TextBlock Grid.Row="1" Grid.Column="0"
+                               x:Uid="Settings_Info_BuildLabel"
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Row="1" Grid.Column="1"
+                               x:Name="BuildText"
+                               Style="{StaticResource BodyTextStyle}"
+                               IsTextSelectionEnabled="True"
+                               FontFamily="{ThemeResource MonoFontFamily}"
+                               TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+
+                    <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
+                               x:Uid="Settings_Info_Copyright"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Margin="0,4,0,0"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                </Grid>
+            </Border>
+
+            <!-- ====================================================== -->
+            <!--  3. License buttons                                    -->
+            <!-- ====================================================== -->
+            <StackPanel Orientation="Horizontal"
+                        Spacing="{StaticResource SpacingSValue}">
+                <Button x:Uid="Settings_OpenLicense" Click="OnOpenLicense" />
+                <Button x:Uid="Settings_OpenThirdParty" Click="OnOpenThirdParty" />
+            </StackPanel>
+
+            <!-- ====================================================== -->
+            <!--  4. Unrar notice                                       -->
+            <!-- ====================================================== -->
+            <TextBlock x:Uid="Settings_UnrarNotice"
                        Style="{StaticResource CaptionTextStyle}"
                        TextWrapping="Wrap"
-                       Margin="28,0,0,2"
                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+
+            <!-- ====================================================== -->
+            <!--  5. Telemetry opt-in (PR-7F)                           -->
+            <!-- ====================================================== -->
+            <StackPanel Margin="0,8,0,0">
+                <CheckBox x:Name="TelemetryEnabledCheck"
+                          x:Uid="Settings_TelemetryEnabled"
+                          MinHeight="0"
+                          Checked="OnTelemetryToggle"
+                          Unchecked="OnTelemetryToggle" />
+                <TextBlock x:Uid="Settings_TelemetryEnabledSub"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap"
+                           Margin="28,0,0,2"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </StackPanel>
+
         </StackPanel>
-    </StackPanel>
+    </ScrollViewer>
 </UserControl>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- Chinese Simplified (zh-CN) — must mirror every key in en-US/Resources.resw. -->
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -151,7 +151,9 @@
   <data name="Settings_VersionLabel.Text"><value>版本</value></data>
   <data name="Settings_OpenLicense.Content"><value>查看许可证</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>第三方声明</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>本产品使用 Alexander Roshal 的 unrar 源代码进行 RAR 压缩包解压。© Alexander Roshal。仅授权用于 RAR 解压 — 禁止创建 RAR 压缩包。</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>适用于 Windows 的快速归档工具</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>构建</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>本产品使用 Alexander Roshal 的 unrar 源代码进行 RAR 压缩包解压。© Alexander Roshal。仅授权用于 RAR 解压 — 禁止创建 RAR 压缩包。</value></data>
 
   <!-- Telemetry -->
   <data name="Settings_TelemetryEnabled.Content"><value>发送匿名崩溃报告</value></data>

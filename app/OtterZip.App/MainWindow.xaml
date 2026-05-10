@@ -54,10 +54,14 @@
                         VerticalAlignment="Center"
                         Spacing="8"
                         Margin="14,0,0,0">
-                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                          Glyph="&#xE7B8;"
-                          FontSize="14"
-                          Foreground="{ThemeResource OtterzipBrandBrush}" />
+                <!-- Otter mascot — replaces the Segoe Fluent archive glyph
+                     so the title bar carries the same brand mark as the
+                     taskbar / Alt+Tab / Start menu tile. ms-appx:/// works
+                     for both unpackaged and MSIX runs. -->
+                <Image Source="ms-appx:///Assets/Square150x150Logo.png"
+                       Width="20"
+                       Height="20"
+                       VerticalAlignment="Center" />
                 <TextBlock x:Uid="App_WindowTitleLabel"
                            Style="{StaticResource CaptionTextStyle}"
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"

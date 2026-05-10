@@ -93,12 +93,17 @@
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Spacing="6">
-                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                              Glyph="&#xE898;"
-                              FontSize="48"
-                              Foreground="{ThemeResource OtterzipBrandBrush}"
-                              Opacity="0.85"
-                              HorizontalAlignment="Center" />
+                    <!-- Shell mascot — replaces the Segoe Fluent up-arrow
+                         glyph (E898). Echoes the otter's belly shell so
+                         the brand mark carries through from the title bar
+                         icon down into the empty-state illustration.
+                         96px keeps it punchy without crowding the title /
+                         subtitle text underneath. -->
+                    <Image Source="ms-appx:///Assets/ShellMascot.png"
+                           Width="96"
+                           Height="96"
+                           Opacity="0.92"
+                           HorizontalAlignment="Center" />
                     <TextBlock x:Uid="ConfigPanel_DropHintTitle"
                                Style="{StaticResource BodyStrongTextStyle}"
                                HorizontalAlignment="Center"

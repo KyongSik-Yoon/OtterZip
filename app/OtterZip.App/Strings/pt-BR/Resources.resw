@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- Portuguese (Brazil, pt-BR) — must mirror every key in en-US/Resources.resw. -->
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -133,7 +133,9 @@
   <data name="Settings_VersionLabel.Text"><value>Versão</value></data>
   <data name="Settings_OpenLicense.Content"><value>Ver licença</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>Avisos de terceiros</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>Este produto utiliza o código fonte unrar de Alexander Roshal para extrair arquivos RAR. © Alexander Roshal. Licenciado apenas para extração RAR — a criação de arquivos RAR é proibida.</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>Ferramenta rápida de arquivamento para Windows</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>Build</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>Este produto utiliza o código fonte unrar de Alexander Roshal para extrair arquivos RAR. © Alexander Roshal. Licenciado apenas para extração RAR — a criação de arquivos RAR é proibida.</value></data>
 
   <data name="Settings_TelemetryEnabled.Content"><value>Enviar relatórios anônimos de falhas</value></data>
   <data name="Settings_TelemetryEnabledSub.Text"><value>Encaminha diagnósticos de falhas aos desenvolvedores. Informações pessoais, conteúdos de arquivos e senhas são removidos antes da transmissão. Desativado por padrão.</value></data>

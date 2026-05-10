@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- Japanese (ja-JP) — must mirror every key in en-US/Resources.resw. -->
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -133,7 +133,9 @@
   <data name="Settings_VersionLabel.Text"><value>バージョン</value></data>
   <data name="Settings_OpenLicense.Content"><value>ライセンスを表示</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>サードパーティの通知</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>本製品は RAR アーカイブの解凍に Alexander Roshal 氏の unrar ソースを使用しています。© Alexander Roshal。RAR の解凍のみライセンスされています — RAR アーカイブの作成は禁止されています。</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>Windows 向けの高速アーカイブツール</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>ビルド</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>本製品は RAR アーカイブの解凍に Alexander Roshal 氏の unrar ソースを使用しています。© Alexander Roshal。RAR の解凍のみライセンスされています — RAR アーカイブの作成は禁止されています。</value></data>
 
   <data name="Settings_TelemetryEnabled.Content"><value>匿名のクラッシュレポートを送信</value></data>
   <data name="Settings_TelemetryEnabledSub.Text"><value>クラッシュ診断を開発者に転送します。送信前に PII、ファイル内容、パスワードは除去されます。既定はオフ。</value></data>

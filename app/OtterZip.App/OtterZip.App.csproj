@@ -14,6 +14,14 @@
     <RootNamespace>OtterZip.App</RootNamespace>
     <AssemblyName>OtterZip</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      AppIcon.ico is the multi-resolution otter mascot (16/24/32/48/64/128/256).
+      <ApplicationIcon> embeds it into the EXE Win32 resources so Explorer,
+      taskbar (unpackaged), and Alt+Tab pick it up. The same .ico is also
+      copied as content (see ItemGroup below) so AppWindow.SetIcon() can
+      load it at runtime — this drives the visible WinUI title-bar icon.
+    -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 
@@ -89,6 +97,19 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OtterZip.Interop\OtterZip.Interop.csproj" />
+  </ItemGroup>
+
+  <!--
+    Copy AppIcon.ico next to the EXE (and into the MSIX content) so
+    AppWindow.SetIcon("Assets/AppIcon.ico") in MainWindow / SettingsWindow
+    finds it at runtime. <ApplicationIcon> alone embeds it into the EXE
+    resource table; this Content entry makes the same file available as
+    a loose asset for the runtime API.
+  -->
+  <ItemGroup>
+    <Content Include="Assets\AppIcon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

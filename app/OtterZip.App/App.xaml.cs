@@ -22,6 +22,20 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // Surface unhandled XAML exceptions to the debugger output and
+        // (when running attached) the Output window — without this the
+        // WinAppSDK runtime swallows the inner Exception and the
+        // breakpoint stops at `UnhandledExceptionEventArgs` with no
+        // message, which is exactly the failure mode that hid the
+        // SetIcon path-resolution bug. Marking Handled=true keeps the
+        // process alive for any non-fatal regressions; truly fatal
+        // failures (StackOverflow / AccessViolation) bypass this anyway.
+        UnhandledException += (_, e) =>
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "[OtterZip] UnhandledException: " + e.Message + "\n" + e.Exception);
+            e.Handled = true;
+        };
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

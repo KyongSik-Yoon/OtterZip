@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- English (en-US) — must mirror every key in ko-KR/Resources.resw. CI verifies. -->
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
@@ -151,7 +151,9 @@
   <data name="Settings_VersionLabel.Text"><value>Version</value></data>
   <data name="Settings_OpenLicense.Content"><value>View license</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>Third-party notices</value></data>
-  <data name="Settings_UnrarNotice.Text"><value>This product uses the unrar source by Alexander Roshal for RAR archive extraction. © Alexander Roshal. Licensed for RAR extraction only — RAR archive creation is prohibited.</value></data>
+  <data name="Settings_Info_Tagline.Text"><value>Fast archive tool for Windows</value></data>
+  <data name="Settings_Info_BuildLabel.Text"><value>Build</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>This product uses the unrar source by Alexander Roshal for RAR archive extraction. © Alexander Roshal. Licensed for RAR extraction only — RAR archive creation is prohibited.</value></data>
 
   <!-- Telemetry / crash reporting (PR-7F, opt-in) -->
   <data name="Settings_TelemetryEnabled.Content"><value>Send anonymous crash reports</value></data>
