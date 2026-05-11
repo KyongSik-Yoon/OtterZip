@@ -29,6 +29,21 @@ public sealed partial class ExtractPanel : UserControl
     public ExtractPanel()
     {
         InitializeComponent();
+        // Pull PlaceholderText from the shared resource pool. x:Uid in
+        // XAML can't bind this string because the resw entry declares
+        // ".Text" (it's also fetched directly via GetString elsewhere)
+        // and PasswordBox doesn't have a Text property — applying via
+        // x:Uid raises XamlParseException at load time.
+        try
+        {
+            var loader = new Microsoft.Windows.ApplicationModel.Resources.ResourceLoader();
+            PasswordField.PlaceholderText = loader.GetString("PasswordDialog_Placeholder/Text");
+        }
+        catch (Exception)
+        {
+            // Resource lookup can fail in design-time / unpackaged dev;
+            // the box still works, it just lacks placeholder text.
+        }
     }
 
     /// <summary>

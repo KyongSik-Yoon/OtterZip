@@ -91,9 +91,16 @@
                       FontSize="14"
                       VerticalAlignment="Center"
                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <!--
+              PlaceholderText is set from code-behind (Configure()) via
+              the localized "PasswordDialog_Placeholder/Text" string.
+              We can't use x:Uid here because that resource is declared
+              with the .Text suffix (it's also consumed as a plain
+              string elsewhere) and PasswordBox has no Text property —
+              applying it would raise XamlParseException at runtime.
+            -->
             <PasswordBox x:Name="PasswordField"
                          Grid.Column="1"
-                         x:Uid="PasswordDialog_Placeholder"
                          PasswordChanged="OnPasswordFieldChanged" />
         </Grid>
 
