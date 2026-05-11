@@ -43,6 +43,16 @@ namespace OtterZip::Shell
             *pCmdState = ECS_HIDDEN;
             return S_OK;
         }
+        // Nested-mode wiring: when the user picked the "OtterZip ▶
+        // {Compress, Extract}" layout we hide the top-level Compress
+        // verb so it doesn't double-render alongside the parent menu.
+        // The submenu's SubmenuCompressCommand carries the same Invoke
+        // path inside the parent.
+        if (IsShellMenuNested())
+        {
+            *pCmdState = ECS_HIDDEN;
+            return S_OK;
+        }
         DWORD count = 0;
         if (items && SUCCEEDED(items->GetCount(&count)) && count > 0)
         {

@@ -16,6 +16,7 @@
 
 #include "CompressCommand.h"
 #include "ExtractHereCommand.h"
+#include "OtterzipMenuCommand.h"
 
 #include <windows.h>
 #include <unknwn.h>
@@ -137,6 +138,19 @@ extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPV
         try
         {
             auto factory = winrt::make<ClassFactory<ExtractHereCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(OtterzipMenuCommand))
+    {
+        // Phase 9 nested-menu wiring: third class object surfaces the
+        // "OtterZip" parent verb that hosts a Compress/Extract submenu.
+        // Active when Settings_ShellMenuMode == "nested" (default).
+        try
+        {
+            auto factory = winrt::make<ClassFactory<OtterzipMenuCommand>>();
             return factory->QueryInterface(riid, ppv);
         }
         catch (winrt::hresult_error const& e) { return e.code(); }

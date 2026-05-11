@@ -52,6 +52,13 @@ namespace OtterZip::Shell
             *pCmdState = ECS_HIDDEN;
             return S_OK;
         }
+        // Nested-mode wiring (mirrors CompressCommand): hide top-level
+        // when the parent submenu is the active layout.
+        if (IsShellMenuNested())
+        {
+            *pCmdState = ECS_HIDDEN;
+            return S_OK;
+        }
         // Show only when at least one item is selected. Detection of
         // archive-vs-non-archive happens in the manifest's FileType
         // association, so when this verb fires the items are already

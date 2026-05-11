@@ -21,4 +21,10 @@ namespace OtterZip::Shell
 
     /// True when `Settings_ShellExtractHereAsDefault` is set (default ON).
     bool IsExtractHereDefault() noexcept;
+
+    /// True when `Settings_ShellMenuMode` == "nested" (the user wants
+    /// "OtterZip ▶ {Compress, Extract}" submenu layout). Default false
+    /// (== "flat", legacy behavior where Compress / Extract sit at the
+    /// top of the right-click menu side-by-side).
+    bool IsShellMenuNested() noexcept;
 }

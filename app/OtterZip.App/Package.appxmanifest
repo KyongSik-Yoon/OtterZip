@@ -390,6 +390,17 @@
               <com:Class Id="44444444-2222-3333-4444-555555555555"
                          Path="OtterZip.Shell.dll"
                          ThreadingModel="STA" />
+              <!--
+                Phase 9 nested-menu wiring: third class object surfaces
+                the "OtterZip" parent verb (OtterzipMenuCommand) that
+                hosts a Compress / Extract submenu when
+                Settings_ShellMenuMode == "nested" (default). Implemented
+                in OtterzipMenuCommand.cpp; submenu children live in
+                SubmenuCommands.cpp.
+              -->
+              <com:Class Id="33333333-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>
@@ -408,6 +419,15 @@
             <desktop4:ItemType Type="*">
               <desktop4:Verb Id="OtterzipCompress"
                              Clsid="44444444-2222-3333-4444-555555555555" />
+              <!--
+                Parent menu verb. Visible only when ShellMenuMode is
+                "nested"; in flat mode OtterzipMenuCommand.GetState
+                hides itself. Conversely Compress / Extract hide
+                themselves at top level when nested mode is on, so the
+                two layouts never double-render.
+              -->
+              <desktop4:Verb Id="OtterzipMenu"
+                             Clsid="33333333-2222-3333-4444-555555555555" />
             </desktop4:ItemType>
 
             <!-- 컨테이너 / 멀티엔트리 -->
