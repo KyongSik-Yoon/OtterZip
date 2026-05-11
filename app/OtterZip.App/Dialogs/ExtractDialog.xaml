@@ -15,15 +15,21 @@
     mc:Ignorable="d"
     DefaultButton="Primary">
 
+    <!--
+      MinWidth bumped 380 -> 460 + Browse button MinWidth pinned to 92px
+      so the Korean label "찾아보기" doesn't get clipped when the
+      destination path is long. Without these the Auto column shrunk
+      below the text bounds.
+    -->
     <StackPanel Spacing="{StaticResource SpacingSValue}"
-                MinWidth="380">
+                MinWidth="460">
 
         <TextBlock x:Uid="ExtractDialog_DestinationLabel"
                    Style="{StaticResource CaptionTextStyle}" />
 
         <Grid ColumnSpacing="{StaticResource SpacingXSValue}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="220" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
@@ -34,6 +40,7 @@
             <Button x:Name="BrowseButton"
                     Grid.Column="1"
                     x:Uid="ExtractDialog_BrowseButton"
+                    MinWidth="92"
                     Click="OnBrowseClick" />
         </Grid>
 

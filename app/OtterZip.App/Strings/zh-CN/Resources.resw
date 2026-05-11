@@ -231,4 +231,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>添加文件夹…</value></data>
   <data name="WindowMenu_Settings.Text"><value>设置…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>提取</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>解压到此处</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>取消</value></data>
+  <data name="Error_WrongPassword.Text"><value>密码错误，请重试。</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>提取前询问位置</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>默认关闭 — 拖放后立即解压到配置的位置。按住 Ctrl 或 Alt 拖放可临时询问。</value></data>
+
 </root>

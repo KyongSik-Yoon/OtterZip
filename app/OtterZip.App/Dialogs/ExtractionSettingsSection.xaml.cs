@@ -29,6 +29,9 @@ public sealed partial class ExtractionSettingsSection : UserControl
             string.Equals(loc, "custom", StringComparison.Ordinal)
                 ? Visibility.Visible : Visibility.Collapsed;
 
+        // Default OFF — Keka-style immediate extract. Hold Ctrl/Alt at
+        // drop time for one-shot panel access without flipping this.
+        AskBeforeExtractCheck.IsChecked         = SettingsService.Get<bool>("Settings_AskBeforeExtract", false);
         AlwaysExtractToSubfolderCheck.IsChecked = SettingsService.Get<bool>("Settings_AlwaysExtractToSubfolder", true);
         PreserveZoneIdCheck.IsChecked           = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
         PlaySoundOnExtractCheck.IsChecked       = SettingsService.Get<bool>("Settings_PlaySoundOnExtract", true);

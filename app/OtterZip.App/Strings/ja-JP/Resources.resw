@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>フォルダーを追加…</value></data>
   <data name="WindowMenu_Settings.Text"><value>設定…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>展開</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>ここに展開</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>キャンセル</value></data>
+  <data name="Error_WrongPassword.Text"><value>パスワードが正しくありません。もう一度入力してください。</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>展開前に保存先を確認</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>既定はオフ — ドロップ時に設定済みの場所へ即時展開します。Ctrl または Alt を押しながらドロップすると、その時だけ確認します。</value></data>
+
 </root>

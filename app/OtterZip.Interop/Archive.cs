@@ -85,6 +85,19 @@ public sealed class Archive : IDisposable
         return new Archive(handle, path, (ArchiveFormat)fmt);
     }
 
+    /// <summary>
+    /// Returns true when the archive needs a password to extract any
+    /// entry. Used by the host UI to decide whether to surface the
+    /// password field in the inline ExtractPanel up-front rather than
+    /// catching a WrongPassword exception mid-extract.
+    /// </summary>
+    public bool IsEncrypted()
+    {
+        EnsureOpen();
+        ThrowIfError(NativeMethods.ArchiveIsEncrypted(_handle, out byte outBool));
+        return outBool != 0;
+    }
+
     /// <summary>Detect a file's archive format without opening it.</summary>
     public static ArchiveFormat DetectFormat(string path)
     {

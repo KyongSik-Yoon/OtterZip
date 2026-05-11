@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Aggiungi cartella…</value></data>
   <data name="WindowMenu_Settings.Text"><value>Impostazioni…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Estrai</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Estrai qui</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Annulla</value></data>
+  <data name="Error_WrongPassword.Text"><value>Password errata. Riprova.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Chiedi destinazione prima di estrarre</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>Disattivato per impostazione predefinita — il rilascio estrae subito nella posizione configurata. Tieni premuto Ctrl o Alt durante il rilascio per chiedere solo questa volta.</value></data>
+
 </root>

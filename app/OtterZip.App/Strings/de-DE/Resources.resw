@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Ordner hinzufügen …</value></data>
   <data name="WindowMenu_Settings.Text"><value>Einstellungen …</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Extrahieren</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Hier extrahieren</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Abbrechen</value></data>
+  <data name="Error_WrongPassword.Text"><value>Falsches Passwort. Bitte erneut versuchen.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Vor dem Extrahieren nach Ziel fragen</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>Standardmäßig aus — Drops werden sofort am konfigurierten Ort extrahiert. Strg oder Alt beim Ablegen halten, um einmalig nachzufragen.</value></data>
+
 </root>

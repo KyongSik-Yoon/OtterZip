@@ -69,9 +69,15 @@
             </StackPanel>
         </Border>
 
-        <!-- Compression configuration body -->
-        <controls:ConfigPanel Grid.Row="1"
-                              x:Name="ConfigPanel" />
+        <!-- Body host. Two views stacked in the same row; MainWindow's
+             SwitchView toggles Visibility. Default = ConfigPanel
+             (compress settings); ExtractPanel slides in for the Keka-
+             style inline extract config flow. -->
+        <Grid Grid.Row="1" x:Name="BodyHost">
+            <controls:ConfigPanel x:Name="ConfigPanel" />
+            <controls:ExtractPanel x:Name="ExtractPanel"
+                                   Visibility="Collapsed" />
+        </Grid>
 
         <!-- Status bar (always visible) -->
         <Grid Grid.Row="2"

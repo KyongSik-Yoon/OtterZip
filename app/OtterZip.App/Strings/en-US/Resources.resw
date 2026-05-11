@@ -232,4 +232,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Add folder…</value></data>
   <data name="WindowMenu_Settings.Text"><value>Settings…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Extract</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Extract here</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Cancel</value></data>
+  <data name="Error_WrongPassword.Text"><value>Wrong password. Please try again.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Ask for destination before extracting</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>Off by default — drops extract to the configured location immediately. Hold Ctrl or Alt while dropping to ask just this once.</value></data>
+
 </root>

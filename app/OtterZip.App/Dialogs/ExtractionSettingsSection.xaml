@@ -51,6 +51,25 @@
 
             <Border Margin="0,8,0,0" />
 
+            <!-- Keka-style toggle: when off (default), drops extract
+                 immediately to the configured location. When on, opens
+                 the inline ExtractPanel asking for destination. The
+                 panel-based override via Ctrl/Alt during drop works
+                 either way. -->
+            <StackPanel>
+                <CheckBox x:Name="AskBeforeExtractCheck"
+                          x:Uid="Settings_AskBeforeExtract"
+                          MinHeight="0"
+                          Checked="OnToggle"
+                          Unchecked="OnToggle"
+                          Tag="Settings_AskBeforeExtract" />
+                <TextBlock x:Uid="Settings_AskBeforeExtractSub"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap"
+                           Margin="28,0,0,2"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </StackPanel>
+
             <CheckBox x:Name="AlwaysExtractToSubfolderCheck"
                       x:Uid="Settings_AlwaysExtractToSubfolder"
                       MinHeight="0"

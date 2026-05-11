@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Ajouter un dossier…</value></data>
   <data name="WindowMenu_Settings.Text"><value>Paramètres…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Extraire</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Extraire ici</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Annuler</value></data>
+  <data name="Error_WrongPassword.Text"><value>Mot de passe incorrect. Veuillez réessayer.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Demander la destination avant d'extraire</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>Désactivé par défaut — l'extraction se fait immédiatement vers l'emplacement configuré. Maintenir Ctrl ou Alt pendant le dépôt pour demander cette fois seulement.</value></data>
+
 </root>

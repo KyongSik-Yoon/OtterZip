@@ -35,6 +35,16 @@ public sealed partial class MainWindow : Window
     private readonly ResourceLoader _strings;
     private CancellationTokenSource? _activeCts;
 
+    // ============================================================
+    //  View stack — Keka-style inline panels instead of modal dialogs
+    // ============================================================
+    private enum AppView { Idle, Extract }
+    private AppView _currentView = AppView.Idle;
+    // Pending extract submission lives here until OnExtractSubmitted /
+    // OnExtractDismissed flips it. Lets us keep ExtractAsync
+    // synchronous-looking while the user interacts with the panel.
+    private TaskCompletionSource<UserControls.ExtractPanelSubmitArgs?>? _pendingExtractTcs;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -71,6 +81,13 @@ public sealed partial class MainWindow : Window
         RootGrid.DragOver += OnDragOver;
         RootGrid.DragLeave += OnDragLeave;
         RootGrid.Drop += OnDrop;
+
+        // Inline extract panel — completes _pendingExtractTcs when the
+        // user submits or cancels. Wiring lives next to the other root-
+        // level events so future view-stack additions follow the pattern.
+        ExtractPanel.Submitted += OnExtractSubmitted;
+        ExtractPanel.Dismissed += OnExtractDismissed;
+        ExtractPanel.PasswordEdited += (_, _) => ExtractPanel.ClearError();
 
         // Phase 6+ rev 4: hook AppWindow.Closing so an in-flight job can
         // prompt the user before the window vanishes. WinUI 3 Window.Closed
@@ -362,15 +379,67 @@ public sealed partial class MainWindow : Window
 
     private async void OnDrop(object sender, DragEventArgs e)
     {
+        // Two-phase drop handler. See HarvestDropAsync for the why.
+        var harvest = await HarvestDropAsync(e).ConfigureAwait(true);
+        if (harvest.Paths is null) return;
+
+        try
+        {
+            switch (harvest.Classification)
+            {
+                case DropClassification.ExtractSingle:
+                    // ForceDialog flips Keka-style silent extract to the
+                    // inline panel for this one drop only — set when the
+                    // user held Ctrl or Alt during release.
+                    await ExtractAsync(harvest.Paths[0], forceDialog: harvest.ForceDialog).ConfigureAwait(true);
+                    break;
+                case DropClassification.ExtractMultiple:
+                    await ExtractManyAsync(harvest.Paths).ConfigureAwait(true);
+                    break;
+                case DropClassification.CompressBatch:
+                    await CompressAsync(harvest.Paths).ConfigureAwait(true);
+                    break;
+                // Mixed / Empty already rejected by overlay; no-op here.
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private readonly record struct DropHarvest(
+        IReadOnlyList<string>? Paths,
+        DropClassification Classification,
+        bool ForceDialog);
+
+    /// <summary>
+    /// Phase 1 of the drop pipeline: gather paths inside the OLE deferral
+    /// and complete the deferral BEFORE returning. Caller (OnDrop) then
+    /// runs the long-lived dialog work outside the drop event, which lets
+    /// Windows release its drop animation immediately. Without this split
+    /// the blue "Copy/복사" cursor with arrow stays pinned on top of the
+    /// Extract dialog until the user clicks through.
+    /// </summary>
+    private async Task<DropHarvest> HarvestDropAsync(DragEventArgs e)
+    {
+        // Capture modifier state up-front: WinUI's DragDropModifiers
+        // reflects keys held at the moment of the drop (NOT current
+        // keyboard state). Ctrl OR Alt routes the drop through the
+        // inline panel even when Settings_AskBeforeExtract is off.
+        bool forceDialog = (e.Modifiers
+            & (Windows.ApplicationModel.DataTransfer.DragDrop.DragDropModifiers.Control
+               | Windows.ApplicationModel.DataTransfer.DragDrop.DragDropModifiers.Alt))
+            != Windows.ApplicationModel.DataTransfer.DragDrop.DragDropModifiers.None;
+
         var deferral = e.GetDeferral();
         try
         {
             HideOverlay();
             if (!e.DataView.Contains(StandardDataFormats.StorageItems))
             {
-                return;
+                return default;
             }
-
             var items = await e.DataView.GetStorageItemsAsync();
             var paths = items
                 .Where(static i => i is not null)
@@ -379,24 +448,12 @@ public sealed partial class MainWindow : Window
                 .ToList();
             var classification = ClassifyDrop(paths);
             _currentDrop = DropClassification.None;
-
-            switch (classification)
-            {
-                case DropClassification.ExtractSingle:
-                    await ExtractAsync(paths[0]).ConfigureAwait(true);
-                    break;
-                case DropClassification.ExtractMultiple:
-                    await ExtractManyAsync(paths).ConfigureAwait(true);
-                    break;
-                case DropClassification.CompressBatch:
-                    await CompressAsync(paths).ConfigureAwait(true);
-                    break;
-                // Mixed / Empty already rejected by overlay; no-op here.
-            }
+            return new DropHarvest(paths, classification, forceDialog);
         }
         catch (Exception ex)
         {
             ShowError(ex.Message);
+            return default;
         }
         finally
         {
@@ -647,49 +704,254 @@ public sealed partial class MainWindow : Window
     }
 
     // ============================================================
-    //  Extract (single)
+    //  Extract (single) — Keka-style inline panel flow
+    //
+    // Decision tree on each single-archive extract request:
+    //   1. Probe IsEncrypted (cheap, opens central dir only).
+    //   2. If !forceDialog && !Settings_AskBeforeExtract:
+    //        try silent extract with the stored default password (if any).
+    //        On success — done. On WrongPassword — fall through to panel.
+    //   3. Otherwise: open ExtractPanel inline, loop until success/cancel.
+    //
+    // forceDialog is set by OnDrop when the user held Ctrl or Alt during
+    // the drop — that's the one-shot "actually I want to pick the
+    // destination this time" override.
     // ============================================================
-    private async Task ExtractAsync(string archivePath)
+    private async Task ExtractAsync(string archivePath, bool forceDialog = false)
     {
-        var fileName = Path.GetFileName(archivePath);
-        var dialog = new ExtractDialog(archivePath) { XamlRoot = Content.XamlRoot };
-        var choice = await dialog.ShowAsync().ConfigureAwait(true);
-        if (choice == ExtractDialogResult.Cancel)
+        bool isEncrypted;
+        string suggestedDest;
+        try
         {
-            ResetStatus();
+            isEncrypted = ProbeIsEncrypted(archivePath);
+            suggestedDest = ResolveExtractDestination(archivePath);
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
             return;
         }
-        var destination = dialog.ChosenPath;
+
+        bool askSetting = SettingsService.Get<bool>("Settings_AskBeforeExtract", false);
+        if (!forceDialog && !askSetting
+            && await TrySilentExtractAsync(archivePath, suggestedDest, isEncrypted).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await RunExtractPanelLoopAsync(archivePath, suggestedDest, isEncrypted).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Attempt the silent (no-UI) extract path. Returns true when the
+    /// caller should NOT fall through to the panel — either we succeeded,
+    /// or we hit a fatal non-password error that the user already saw in
+    /// the status bar. Returns false ONLY when the panel should take
+    /// over (no stored password for an encrypted archive, or the stored
+    /// password turned out to be wrong).
+    /// </summary>
+    private async Task<bool> TrySilentExtractAsync(string archivePath, string destination, bool isEncrypted)
+    {
+        string? silentPw = null;
+        if (isEncrypted)
+        {
+            silentPw = await ResolveStoredDefaultPasswordAsync(
+                "Settings_DefaultPasswordOnExtract",
+                _strings.GetString("Auth_ReasonExtract/Text")).ConfigureAwait(true);
+            if (string.IsNullOrEmpty(silentPw))
+            {
+                return false; // need user input
+            }
+        }
+
+        try
+        {
+            await PerformExtractAsync(archivePath, destination, silentPw).ConfigureAwait(true);
+            return true;
+        }
+        catch (OtterzipException ex) when (ex.IsWrongPassword)
+        {
+            return false; // stored password didn't work — surface panel
+        }
+        catch (OperationCanceledException) { ResetStatus(); return true; }
+        catch (Exception ex) { ShowError(ex.Message); return true; }
+    }
+
+    /// <summary>
+    /// Shows the inline ExtractPanel and loops on it until the user
+    /// either submits a working extract or cancels. Wrong-password
+    /// retries stay inside the same panel — no second dialog ever opens.
+    /// </summary>
+    private async Task RunExtractPanelLoopAsync(string archivePath, string suggestedDest, bool isEncrypted)
+    {
+        SwitchView(AppView.Extract);
+        ExtractPanel.Configure(archivePath, suggestedDest, isEncrypted);
+
+        while (true)
+        {
+            var args = await PromptExtractPanelAsync().ConfigureAwait(true);
+            if (args is null)
+            {
+                SwitchView(AppView.Idle);
+                ResetStatus();
+                return;
+            }
+
+            string dest = args.ExtractHere
+                ? ComputeExtractHerePath(archivePath)
+                : args.Destination;
+
+            try
+            {
+                SwitchView(AppView.Idle);
+                await PerformExtractAsync(archivePath, dest, args.Password).ConfigureAwait(true);
+                return;
+            }
+            catch (OtterzipException ex) when (ex.IsWrongPassword)
+            {
+                SwitchView(AppView.Extract);
+                ExtractPanel.Configure(archivePath, dest, needsPassword: true);
+                ExtractPanel.ShowError(_strings.GetString("Error_WrongPassword/Text"));
+                // continue while-loop for retry
+            }
+            catch (OperationCanceledException) { SwitchView(AppView.Idle); ResetStatus(); return; }
+            catch (Exception ex) { SwitchView(AppView.Idle); ShowError(ex.Message); return; }
+        }
+    }
+
+    /// <summary>
+    /// Run one extract attempt — opens the archive, drives ExtractAllAsync
+    /// with progress + cancel token plumbed through. Caller decides what
+    /// to do with WrongPassword exceptions (silent path bails; panel loop
+    /// re-prompts in the same panel).
+    /// </summary>
+    private async Task PerformExtractAsync(string archivePath, string destination, string? password)
+    {
         _lastExtractDestination = destination;
         _lastExtractedArchive = archivePath;
 
         await CancelInFlightAsync().ConfigureAwait(true);
         var cts = new CancellationTokenSource();
         _activeCts = cts;
-        SetBusy(extracting: true, fileName);
+        SetBusy(extracting: true, Path.GetFileName(archivePath));
 
         var progress = new Progress<ProgressUpdate>(p =>
-        {
-            StatusProgress.Value = Math.Clamp(p.FractionComplete, 0.0, 1.0);
-        });
+            StatusProgress.Value = Math.Clamp(p.FractionComplete, 0.0, 1.0));
 
         try
         {
-            await ExtractWithPasswordRetryAsync(archivePath, destination, progress, cts.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
-        {
-            ResetStatus();
-        }
-        catch (Exception ex)
-        {
-            ShowError(ex.Message);
+            bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
+            using var archive = string.IsNullOrEmpty(password)
+                ? Archive.Open(archivePath)
+                : Archive.OpenWithPassword(archivePath, password);
+            var report = await archive
+                .ExtractAllAsync(destination, OverwritePolicy.Always, progress,
+                    preserveZoneIdentifier: preserveMotw, cancellationToken: cts.Token)
+                .ConfigureAwait(true);
+            ShowExtractDone(report);
         }
         finally
         {
             if (_activeCts == cts) _activeCts = null;
             cts.Dispose();
         }
+    }
+
+    // ============================================================
+    //  Extract helpers (probe / dest resolution / view stack)
+    // ============================================================
+
+    /// <summary>
+    /// Cheap up-front check — opens the archive to read its central
+    /// directory and asks the core "do you need a password?". Header-
+    /// encrypted formats (7z, RAR) where Open itself throws
+    /// WrongPassword report as encrypted too.
+    /// </summary>
+    private static bool ProbeIsEncrypted(string archivePath)
+    {
+        try
+        {
+            using var probe = Archive.Open(archivePath);
+            return probe.IsEncrypted();
+        }
+        catch (OtterzipException ex) when (ex.IsWrongPassword)
+        {
+            return true;
+        }
+        catch (Exception)
+        {
+            return false; // let downstream surface the real error
+        }
+    }
+
+    /// <summary>
+    /// Mirrors the destination logic ExtractManyAsync uses, kept in one
+    /// helper so the silent path and the panel pre-fill always agree on
+    /// where extracts land by default.
+    /// </summary>
+    private static string ResolveExtractDestination(string archivePath)
+    {
+        string extractLoc = SettingsService.Get<string>("Settings_ExtractLocation", "same");
+        string customDir = SettingsService.Get<string>("Settings_ExtractLocationPath", "");
+        bool useSubfolder = SettingsService.Get<bool>("Settings_AlwaysExtractToSubfolder", true);
+        bool useCustom = string.Equals(extractLoc, "custom", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(customDir)
+            && Directory.Exists(customDir);
+
+        string baseDir = useCustom
+            ? customDir
+            : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
+        string stem = Path.GetFileNameWithoutExtension(archivePath);
+        return useSubfolder ? Path.Combine(baseDir, stem) : baseDir;
+    }
+
+    /// <summary>
+    /// "여기에 풀기" semantics — always sibling subfolder, ignore the
+    /// Settings_ExtractLocation custom-folder rule (the user explicitly
+    /// chose to extract right next to the archive).
+    /// </summary>
+    private static string ComputeExtractHerePath(string archivePath)
+    {
+        string parent = Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory();
+        string stem = Path.GetFileNameWithoutExtension(archivePath);
+        return Path.Combine(parent, stem);
+    }
+
+    /// <summary>
+    /// Toggle the body view + resize the window to fit. ConfigPanel is
+    /// 460 tall; ExtractPanel needs ~540 to comfortably surface the
+    /// password row without clipping action buttons.
+    /// </summary>
+    private void SwitchView(AppView view)
+    {
+        _currentView = view;
+        bool extract = view == AppView.Extract;
+        ConfigPanel.Visibility = extract ? Visibility.Collapsed : Visibility.Visible;
+        ExtractPanel.Visibility = extract ? Visibility.Visible : Visibility.Collapsed;
+        TrySizeWindow(width: 420, height: extract ? 540 : 460);
+    }
+
+    /// <summary>
+    /// Awaits the next user action on the inline ExtractPanel. Returns
+    /// the submitted args, or null when the user cancelled. Caller is
+    /// responsible for SwitchView before/after.
+    /// </summary>
+    private Task<UserControls.ExtractPanelSubmitArgs?> PromptExtractPanelAsync()
+    {
+        _pendingExtractTcs = new TaskCompletionSource<UserControls.ExtractPanelSubmitArgs?>();
+        return _pendingExtractTcs.Task;
+    }
+
+    private void OnExtractSubmitted(object? sender, UserControls.ExtractPanelSubmitArgs e)
+    {
+        _pendingExtractTcs?.TrySetResult(e);
+        _pendingExtractTcs = null;
+    }
+
+    private void OnExtractDismissed(object? sender, EventArgs e)
+    {
+        _pendingExtractTcs?.TrySetResult(null);
+        _pendingExtractTcs = null;
     }
 
     private async Task ExtractManyAsync(IReadOnlyList<string> archives)
@@ -755,44 +1017,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task ExtractWithPasswordRetryAsync(
-        string archivePath,
-        string destination,
-        IProgress<ProgressUpdate> progress,
-        CancellationToken ct)
-    {
-        // PR-7C: stored default credential lives in PasswordVault now;
-        // gated by Hello when Settings_AuthBeforeUseDefaultPassword is on.
-        string? password = await ResolveStoredDefaultPasswordAsync(
-            "Settings_DefaultPasswordOnExtract",
-            _strings.GetString("Auth_ReasonExtract/Text")).ConfigureAwait(true);
-
-        for (int attempt = 0; attempt < 2; attempt++)
-        {
-            try
-            {
-                bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
-                using var archive = password is null
-                    ? Archive.Open(archivePath)
-                    : Archive.OpenWithPassword(archivePath, password);
-                var report = await archive
-                    .ExtractAllAsync(destination, OverwritePolicy.Always, progress,
-                        preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
-                    .ConfigureAwait(true);
-                ShowExtractDone(report);
-                return;
-            }
-            catch (OtterzipException ex) when (ex.IsWrongPassword && attempt == 0)
-            {
-                password = await PromptPasswordAsync(Path.GetFileName(archivePath)).ConfigureAwait(true);
-                if (string.IsNullOrEmpty(password))
-                {
-                    ResetStatus();
-                    return;
-                }
-            }
-        }
-    }
+    // ExtractWithPasswordRetryAsync was retired with the inline-panel
+    // refactor — PerformExtractAsync + RunExtractPanelLoopAsync subsume
+    // its responsibilities (run extract / catch WrongPassword / re-prompt
+    // in the same panel rather than a second modal).
+    //
+    // PromptPasswordAsync stays — Compress flow still uses it for the
+    // Settings_AlwaysPromptPassword case. A follow-up sprint can move
+    // that to an inline panel too.
 
     private async Task<string?> PromptPasswordAsync(string archiveName)
     {

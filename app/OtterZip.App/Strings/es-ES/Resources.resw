@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Agregar carpeta…</value></data>
   <data name="WindowMenu_Settings.Text"><value>Configuración…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Extraer</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Extraer aquí</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Cancelar</value></data>
+  <data name="Error_WrongPassword.Text"><value>Contraseña incorrecta. Inténtalo de nuevo.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Preguntar destino antes de extraer</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>Desactivado por defecto — los archivos se extraen al lugar configurado al soltarlos. Mantén Ctrl o Alt al soltar para preguntar solo esta vez.</value></data>
+
 </root>

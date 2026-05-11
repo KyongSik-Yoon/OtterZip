@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Adicionar pasta…</value></data>
   <data name="WindowMenu_Settings.Text"><value>Configurações…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Extrair</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Extrair aqui</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Cancelar</value></data>
+  <data name="Error_WrongPassword.Text"><value>Senha incorreta. Tente novamente.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Perguntar destino antes de extrair</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>Desativado por padrão — arrastar e soltar extrai imediatamente para o local configurado. Segure Ctrl ou Alt ao soltar para perguntar apenas desta vez.</value></data>
+
 </root>

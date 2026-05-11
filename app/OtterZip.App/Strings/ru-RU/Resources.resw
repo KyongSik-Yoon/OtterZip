@@ -203,4 +203,11 @@
   <data name="WindowMenu_AddFolder.Text"><value>Добавить папку…</value></data>
   <data name="WindowMenu_Settings.Text"><value>Параметры…</value></data>
 
+  <data name="ExtractDialog_PrimaryButton.Content"><value>Извлечь</value></data>
+  <data name="ExtractDialog_SecondaryButton.Content"><value>Извлечь сюда</value></data>
+  <data name="ExtractDialog_CancelButton.Content"><value>Отмена</value></data>
+  <data name="Error_WrongPassword.Text"><value>Неверный пароль. Попробуйте снова.</value></data>
+  <data name="Settings_AskBeforeExtract.Content"><value>Запрашивать путь перед извлечением</value></data>
+  <data name="Settings_AskBeforeExtractSub.Text"><value>По умолчанию выключено — перетаскивание извлекает в настроенное место сразу. Удерживайте Ctrl или Alt при отпускании, чтобы спросить однократно.</value></data>
+
 </root>
