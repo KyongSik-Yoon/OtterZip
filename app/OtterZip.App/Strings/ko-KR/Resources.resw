@@ -72,9 +72,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>대상 폴더</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>찾아보기…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>추출</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>여기에 풀기</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>취소</value></data>
 
   <!-- ================================================================ -->
   <!--  Settings Dialog (Phase 6+, 12 items in 4 sections)               -->

@@ -30,9 +30,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Dossier de destination</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Parcourir…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>Extraire</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>Extraire ici</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>Annuler</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Paramètres</value></data>
   <data name="Settings_TitleLabel.Text"><value>Paramètres</value></data>

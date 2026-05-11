@@ -30,9 +30,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Carpeta de destino</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Examinar…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>Extraer</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>Extraer aquí</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>Cancelar</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Configuración</value></data>
   <data name="Settings_TitleLabel.Text"><value>Configuración</value></data>

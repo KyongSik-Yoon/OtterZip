@@ -30,9 +30,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>展開先フォルダー</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>参照…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>解凍</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>ここに解凍</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>キャンセル</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>設定</value></data>
   <data name="Settings_TitleLabel.Text"><value>設定</value></data>

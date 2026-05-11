@@ -33,9 +33,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Destination folder</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Browse…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>Extract</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>Extract here</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>Cancel</value></data>
 
   <!-- Settings Dialog (Phase 6+, 12 items in 4 sections) -->
   <data name="Settings_DialogTitle.Title"><value>Settings</value></data>

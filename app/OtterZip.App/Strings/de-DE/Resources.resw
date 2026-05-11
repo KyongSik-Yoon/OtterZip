@@ -30,9 +30,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Zielordner</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Durchsuchen …</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>Entpacken</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>Hier entpacken</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>Abbrechen</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Einstellungen</value></data>
   <data name="Settings_TitleLabel.Text"><value>Einstellungen</value></data>

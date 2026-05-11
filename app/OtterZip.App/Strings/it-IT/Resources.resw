@@ -30,9 +30,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Cartella di destinazione</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Sfoglia…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>Estrai</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>Estrai qui</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>Annulla</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Impostazioni</value></data>
   <data name="Settings_TitleLabel.Text"><value>Impostazioni</value></data>

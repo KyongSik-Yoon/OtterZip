@@ -30,9 +30,6 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Папка назначения</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Обзор…</value></data>
-  <data name="ExtractDialog_PrimaryButton.Text"><value>Извлечь</value></data>
-  <data name="ExtractDialog_SecondaryButton.Text"><value>Извлечь сюда</value></data>
-  <data name="ExtractDialog_CancelButton.Text"><value>Отмена</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Параметры</value></data>
   <data name="Settings_TitleLabel.Text"><value>Параметры</value></data>
