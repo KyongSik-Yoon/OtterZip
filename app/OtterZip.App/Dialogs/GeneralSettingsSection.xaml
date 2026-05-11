@@ -40,9 +40,28 @@
                       x:Name="LanguageCombo"
                       HorizontalAlignment="Stretch"
                       SelectionChanged="OnLanguageChanged">
+                <!--
+                  Language picker - 10 locales matching the .resw set we
+                  ship under Strings/. Tag is the short language code we
+                  persist in Settings_Language; the .cs handler maps it
+                  to the full IETF tag (e.g. "ko" -> "ko-KR") before
+                  handing to ApplicationLanguages.PrimaryLanguageOverride
+                  so Windows resolves the right locale resources.
+                  Native names (한국어 / 日本語 / etc) are identical
+                  across all locales so users can find their language in
+                  any UI language.
+                -->
                 <ComboBoxItem x:Uid="Settings_LanguageSystem" Tag="" />
                 <ComboBoxItem x:Uid="Settings_LanguageKo"     Tag="ko" />
                 <ComboBoxItem x:Uid="Settings_LanguageEn"     Tag="en" />
+                <ComboBoxItem x:Uid="Settings_LanguageZh"     Tag="zh" />
+                <ComboBoxItem x:Uid="Settings_LanguageJa"     Tag="ja" />
+                <ComboBoxItem x:Uid="Settings_LanguageDe"     Tag="de" />
+                <ComboBoxItem x:Uid="Settings_LanguageFr"     Tag="fr" />
+                <ComboBoxItem x:Uid="Settings_LanguageEs"     Tag="es" />
+                <ComboBoxItem x:Uid="Settings_LanguagePt"     Tag="pt" />
+                <ComboBoxItem x:Uid="Settings_LanguageRu"     Tag="ru" />
+                <ComboBoxItem x:Uid="Settings_LanguageIt"     Tag="it" />
             </ComboBox>
 
             <!-- Theme -->

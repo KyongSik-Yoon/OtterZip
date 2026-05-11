@@ -64,19 +64,7 @@ public partial class App : Application
         // the API is package-identity gated. Our csproj currently runs
         // unpackaged (WindowsPackageType=None) so swallow and fall back
         // to the system locale.
-        try
-        {
-            ApplicationLanguages.PrimaryLanguageOverride =
-                SettingsService.Get<string>("Settings_Language", "");
-        }
-        catch (InvalidOperationException)
-        {
-            // Unpackaged dev / sideloaded run — language follows OS.
-        }
-        catch (System.Runtime.InteropServices.COMException)
-        {
-            // Same surface as above on some Windows builds.
-        }
+        ApplyLanguageOverride();
 
         // Sprint 5: shell extension routes context-menu verbs through
         // `OtterZip.exe --invoke <verb> --files "..."`. We parse the
@@ -91,6 +79,42 @@ public partial class App : Application
             ((MainWindow)_mainWindow).PreloadInvoke(invokeRequest);
         }
         _mainWindow.Activate();
+    }
+
+    /// <summary>
+    /// Apply the persisted language preference to
+    /// <c>ApplicationLanguages.PrimaryLanguageOverride</c> so MRT loads
+    /// the matching .resw folder. We persist a short tag ("ko" / "zh" /
+    /// "pt") in Settings_Language; this method maps to the full IETF
+    /// tag ("ko-KR" / "zh-CN" / "pt-BR") that the runtime expects.
+    /// Mirrors GeneralSettingsSection.ShortTagToIetf — keep them in sync.
+    ///
+    /// Best-effort: PrimaryLanguageOverride is package-identity gated
+    /// and throws InvalidOperationException / COMException in unpackaged
+    /// dev runs. Falling back to the system locale is the safe degrade.
+    /// </summary>
+    private static void ApplyLanguageOverride()
+    {
+        try
+        {
+            string shortTag = SettingsService.Get<string>("Settings_Language", "");
+            ApplicationLanguages.PrimaryLanguageOverride = shortTag switch
+            {
+                "ko" => "ko-KR",
+                "en" => "en-US",
+                "zh" => "zh-CN",
+                "ja" => "ja-JP",
+                "de" => "de-DE",
+                "fr" => "fr-FR",
+                "es" => "es-ES",
+                "pt" => "pt-BR",
+                "ru" => "ru-RU",
+                "it" => "it-IT",
+                _    => "",   // empty -> system default
+            };
+        }
+        catch (InvalidOperationException) { /* unpackaged dev */ }
+        catch (System.Runtime.InteropServices.COMException) { /* same */ }
     }
 
     /// <summary>

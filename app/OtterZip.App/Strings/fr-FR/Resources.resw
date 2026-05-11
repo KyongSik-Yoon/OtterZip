@@ -96,6 +96,14 @@
   <data name="Settings_LanguageSystem.Content"><value>Suivre le système</value></data>
   <data name="Settings_LanguageKo.Content"><value>한국어</value></data>
   <data name="Settings_LanguageEn.Content"><value>English</value></data>
+  <data name="Settings_LanguageZh.Content"><value>简体中文</value></data>
+  <data name="Settings_LanguageJa.Content"><value>日本語</value></data>
+  <data name="Settings_LanguageDe.Content"><value>Deutsch</value></data>
+  <data name="Settings_LanguageFr.Content"><value>Français</value></data>
+  <data name="Settings_LanguageEs.Content"><value>Español</value></data>
+  <data name="Settings_LanguagePt.Content"><value>Português (Brasil)</value></data>
+  <data name="Settings_LanguageRu.Content"><value>Русский</value></data>
+  <data name="Settings_LanguageIt.Content"><value>Italiano</value></data>
   <data name="Settings_ThemeSectionLabel.Text"><value>Thème</value></data>
   <data name="Theme_Light.Content"><value>Clair</value></data>
   <data name="Theme_Dark.Content"><value>Sombre</value></data>
