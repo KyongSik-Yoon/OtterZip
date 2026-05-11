@@ -77,6 +77,81 @@
         See docs/03-api/shell-extension.md section 2.
       -->
       <Extensions>
+        <!--
+          File Type Association — registers OtterZip as a candidate
+          handler for archive extensions, AND tells Explorer which icon
+          to show on those files when OtterZip becomes the user's
+          default. The Logo attribute points at a stem name; Windows
+          resolves it against Assets/FileIcons/ArchiveIcon.targetsize-N.png
+          for each requested size (16/20/24/30/32/36/40/48/60/64/72/80/96/256).
+
+          All archive formats grouped into one FTA ("otterzip-archives")
+          because users typically want OtterZip as the default for ALL
+          archives or NONE — splitting per-format would force them to
+          set defaults 30+ times in Settings -> Default apps.
+
+          Note this is independent of the desktop4:FileExplorerContextMenus
+          block below: that controls right-click verbs, this controls
+          file icons + "Open with" / default-app behavior.
+        -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="otterzip-archives">
+            <uap:DisplayName>OtterZip Archive</uap:DisplayName>
+            <uap:Logo>Assets\FileIcons\ArchiveIcon.png</uap:Logo>
+            <uap:InfoTip>OtterZip Archive</uap:InfoTip>
+            <uap:SupportedFileTypes>
+              <!-- Containers / multi-entry -->
+              <uap:FileType>.zip</uap:FileType>
+              <uap:FileType>.zipx</uap:FileType>
+              <uap:FileType>.7z</uap:FileType>
+              <uap:FileType>.rar</uap:FileType>
+              <uap:FileType>.tar</uap:FileType>
+              <!-- TAR aliases -->
+              <uap:FileType>.tgz</uap:FileType>
+              <uap:FileType>.tbz</uap:FileType>
+              <uap:FileType>.tbz2</uap:FileType>
+              <uap:FileType>.tlz</uap:FileType>
+              <uap:FileType>.txz</uap:FileType>
+              <uap:FileType>.tzst</uap:FileType>
+              <!-- Single-stream -->
+              <uap:FileType>.gz</uap:FileType>
+              <uap:FileType>.bz2</uap:FileType>
+              <uap:FileType>.xz</uap:FileType>
+              <uap:FileType>.lzma</uap:FileType>
+              <uap:FileType>.zst</uap:FileType>
+              <uap:FileType>.lz4</uap:FileType>
+              <!-- ZIP variants -->
+              <uap:FileType>.jar</uap:FileType>
+              <uap:FileType>.war</uap:FileType>
+              <uap:FileType>.ear</uap:FileType>
+              <uap:FileType>.ipa</uap:FileType>
+              <uap:FileType>.apk</uap:FileType>
+              <uap:FileType>.aab</uap:FileType>
+              <uap:FileType>.xpi</uap:FileType>
+              <uap:FileType>.crx</uap:FileType>
+              <!--
+                .appx / .msix intentionally OMITTED from the FTA: those
+                are package-installer types, and overriding the OS
+                default handler would break double-click-to-install
+                Windows package flow. Right-click "extract with OtterZip"
+                still works via the desktop4 context menu below.
+              -->
+              <!-- Disk images (extract-only) -->
+              <uap:FileType>.iso</uap:FileType>
+              <uap:FileType>.img</uap:FileType>
+              <!-- Windows installer (extract-only) -->
+              <uap:FileType>.cab</uap:FileType>
+              <!--
+                .msi intentionally OMITTED from FTA for the same reason
+                as .appx/.msix - we don't want to hijack double-click
+                from Windows Installer. Context menu only.
+              -->
+              <!-- UNIX package (extract-only) -->
+              <uap:FileType>.deb</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="OtterZip Shell Extension">
