@@ -1,18 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Inline extract-config panel. Replaces the modal ExtractDialog with
-  Keka-style in-window flow: when the user holds Ctrl/Alt during a drop
-  (or has Settings_AskBeforeExtract on, or the archive needs a password),
-  this panel slides into the main body area instead of popping a modal.
+  Inline extract-config panel.
 
-  Layout sections (top to bottom, all but error always visible):
-    1. Header        - archive filename + close (×) button
-    2. Destination   - path TextBox + Browse button
-    3. Password      - PasswordBox (hidden when archive isn't encrypted)
-    4. Error         - red caption (hidden until wrong-password / IO fail)
-    5. Action row    - [Extract] [Extract here] [Cancel]
+  Layout strategy: outer 2-row Grid — content (top, fills) + action row
+  (bottom, pinned). Inside the content row a StackPanel groups title +
+  destination + password + error so they stack naturally at the top
+  without requiring a separate "*"-sized spacer row that swallows visual
+  weight even when collapsed.
 
-  Strings via x:Uid; colors via {ThemeResource}.
+  All user-visible strings via x:Uid; all colors via {ThemeResource}.
 -->
 <UserControl
     x:Class="OtterZip.App.UserControls.ExtractPanel"
@@ -22,100 +18,101 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource SpacingL}"
-          RowSpacing="{StaticResource SpacingSValue}">
+    <Grid Padding="{StaticResource SpacingL}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Header (filename + close) -->
-        <Grid Grid.Row="0" ColumnSpacing="{StaticResource SpacingSValue}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock x:Name="ArchiveNameText"
-                       Grid.Column="0"
-                       Style="{StaticResource SubtitleTextStyle}"
-                       TextTrimming="CharacterEllipsis"
-                       VerticalAlignment="Center" />
-            <Button x:Name="CloseButton"
-                    Grid.Column="1"
-                    Style="{StaticResource IconButtonStyle}"
-                    AutomationProperties.Name="Close"
-                    Click="OnCloseClick">
-                <FontIcon Glyph="&#xE711;" FontSize="14" />
-            </Button>
-        </Grid>
+        <!-- ============================================================
+             Content area — stacks naturally at the top.
+             ============================================================ -->
+        <StackPanel Grid.Row="0"
+                    Spacing="{StaticResource SpacingSValue}"
+                    VerticalAlignment="Top">
 
-        <!-- Row 1: Destination label -->
-        <TextBlock Grid.Row="1"
-                   x:Uid="ExtractDialog_DestinationLabel"
-                   Style="{StaticResource CaptionTextStyle}"
-                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <!-- Title row: archive filename + close (×). The filename is
+                 the only thing that varies per archive so it gets the
+                 SubtitleTextStyle weight; the close button is a quiet
+                 icon-only secondary action. -->
+            <Grid ColumnSpacing="{StaticResource SpacingSValue}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="ArchiveNameText"
+                           Grid.Column="0"
+                           Style="{StaticResource SubtitleTextStyle}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+                <Button x:Name="CloseButton"
+                        Grid.Column="1"
+                        Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Close"
+                        Click="OnCloseClick">
+                    <FontIcon Glyph="&#xE711;" FontSize="14" />
+                </Button>
+            </Grid>
 
-        <!-- Row 2: Destination input + Browse -->
-        <Grid Grid.Row="2" ColumnSpacing="{StaticResource SpacingXSValue}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="180" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="DestinationField"
-                     Grid.Column="0"
-                     x:Uid="ExtractDialog_DestinationPlaceholder" />
-            <Button x:Name="BrowseButton"
-                    Grid.Column="1"
-                    x:Uid="ExtractDialog_BrowseButton"
-                    MinWidth="92"
-                    Click="OnBrowseClick" />
-        </Grid>
+            <!-- Destination label sits a bit closer to its input below
+                 (Margin trims the parent StackPanel spacing for this
+                 pairing only). -->
+            <TextBlock x:Uid="ExtractDialog_DestinationLabel"
+                       Style="{StaticResource CaptionTextStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Margin="0,8,0,-4" />
+            <Grid ColumnSpacing="{StaticResource SpacingXSValue}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="180" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="DestinationField"
+                         Grid.Column="0"
+                         x:Uid="ExtractDialog_DestinationPlaceholder" />
+                <Button x:Name="BrowseButton"
+                        Grid.Column="1"
+                        x:Uid="ExtractDialog_BrowseButton"
+                        MinWidth="92"
+                        Click="OnBrowseClick" />
+            </Grid>
 
-        <!-- Row 3: Password field (hidden unless archive is encrypted).
-             Lock glyph + PasswordBox in a single row so it visually reads
-             as a single "this archive needs a password" affordance. -->
-        <Grid x:Name="PasswordRow"
-              Grid.Row="3"
+            <!-- Password row (hidden unless encrypted). Lock glyph +
+                 PasswordBox in a single row reads as one affordance.
+                 PlaceholderText is set from code-behind because the
+                 resw entry uses .Text suffix and PasswordBox lacks
+                 that property. -->
+            <Grid x:Name="PasswordRow"
+                  ColumnSpacing="{StaticResource SpacingSValue}"
+                  Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <FontIcon Grid.Column="0"
+                          Glyph="&#xE72E;"
+                          FontSize="14"
+                          VerticalAlignment="Center"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <PasswordBox x:Name="PasswordField"
+                             Grid.Column="1"
+                             PasswordChanged="OnPasswordFieldChanged" />
+            </Grid>
+
+            <!-- Error caption (wrong password retry, etc). Collapsed
+                 takes zero vertical space so the layout stays tight. -->
+            <TextBlock x:Name="ErrorText"
+                       Style="{StaticResource CaptionTextStyle}"
+                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed" />
+        </StackPanel>
+
+        <!-- ============================================================
+             Action row — pinned to the bottom of the panel.
+             ============================================================ -->
+        <Grid Grid.Row="1"
               ColumnSpacing="{StaticResource SpacingSValue}"
-              Visibility="Collapsed">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <FontIcon Grid.Column="0"
-                      Glyph="&#xE72E;"
-                      FontSize="14"
-                      VerticalAlignment="Center"
-                      Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            <!--
-              PlaceholderText is set from code-behind (Configure()) via
-              the localized "PasswordDialog_Placeholder/Text" string.
-              We can't use x:Uid here because that resource is declared
-              with the .Text suffix (it's also consumed as a plain
-              string elsewhere) and PasswordBox has no Text property —
-              applying it would raise XamlParseException at runtime.
-            -->
-            <PasswordBox x:Name="PasswordField"
-                         Grid.Column="1"
-                         PasswordChanged="OnPasswordFieldChanged" />
-        </Grid>
-
-        <!-- Row 4: spacer / error message area -->
-        <TextBlock x:Name="ErrorText"
-                   Grid.Row="4"
-                   Style="{StaticResource CaptionTextStyle}"
-                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                   TextWrapping="Wrap"
-                   Visibility="Collapsed"
-                   VerticalAlignment="Top"
-                   Margin="0,4,0,0" />
-
-        <!-- Row 5: Action buttons -->
-        <Grid Grid.Row="5" ColumnSpacing="{StaticResource SpacingSValue}">
+              Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

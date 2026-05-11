@@ -824,11 +824,21 @@ public sealed partial class MainWindow : Window
     /// with progress + cancel token plumbed through. Caller decides what
     /// to do with WrongPassword exceptions (silent path bails; panel loop
     /// re-prompts in the same panel).
+    ///
+    /// Rolls back partial output on WrongPassword: the Rust core opens
+    /// the archive's central directory before verifying credentials, so
+    /// the first entry's output file gets created and starts streaming
+    /// before decryption rejects the password. Result without rollback
+    /// is a fresh destination folder containing a 0-byte stub file. We
+    /// remove the destination ONLY when this run created it; existing
+    /// directories stay untouched (might hold unrelated user data).
     /// </summary>
     private async Task PerformExtractAsync(string archivePath, string destination, string? password)
     {
         _lastExtractDestination = destination;
         _lastExtractedArchive = archivePath;
+
+        bool destExistedBefore = Directory.Exists(destination);
 
         await CancelInFlightAsync().ConfigureAwait(true);
         var cts = new CancellationTokenSource();
@@ -850,11 +860,38 @@ public sealed partial class MainWindow : Window
                 .ConfigureAwait(true);
             ShowExtractDone(report);
         }
+        catch (OtterzipException ex) when (ex.IsWrongPassword)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            throw;
+        }
         finally
         {
             if (_activeCts == cts) _activeCts = null;
             cts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Best-effort cleanup of a destination folder that this extract run
+    /// created but failed to populate. Skips the cleanup if the folder
+    /// pre-existed (it might contain unrelated user data we shouldn't
+    /// touch) or if the deletion itself fails (file lock, permission).
+    /// </summary>
+    private static void RollbackPartialExtract(string destination, bool destExistedBefore)
+    {
+        if (destExistedBefore || !Directory.Exists(destination)) return;
+        try
+        {
+            Directory.Delete(destination, recursive: true);
+        }
+        catch (IOException) { /* best effort */ }
+        catch (UnauthorizedAccessException) { /* best effort */ }
     }
 
     // ============================================================
