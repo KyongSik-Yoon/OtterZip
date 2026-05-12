@@ -901,7 +901,16 @@ public sealed partial class MainWindow : Window
     {
         bool showDestination = forceDialog;
         SwitchView(AppView.Extract, extractHeight: PickExtractHeight(showDestination));
-        ExtractPanel.Configure(archivePath, suggestedDest, isEncrypted, showDestination);
+        // Pre-fill the password field with the stored default IF the
+        // silent-extract path didn't already try it (i.e.
+        // Settings_DefaultPasswordOnExtract is off). When the toggle is
+        // on, any stored value was already attempted upstream — pre-
+        // filling it again would just suggest a known-wrong value.
+        // The Hello gate, if enabled, applies to actual auto-use; we
+        // don't bypass it by pre-filling so we skip the convenience in
+        // that case too.
+        string? prefill = ResolveExtractPanelPrefill(isEncrypted);
+        ExtractPanel.Configure(archivePath, suggestedDest, isEncrypted, showDestination, prefill);
 
         while (true)
         {
@@ -930,7 +939,9 @@ public sealed partial class MainWindow : Window
                 // keep it expanded; otherwise stay compact.
                 showDestination = showDestination || ExtractPanel.IsDestinationVisible;
                 SwitchView(AppView.Extract, extractHeight: PickExtractHeight(showDestination));
-                ExtractPanel.Configure(archivePath, dest, needsPassword: true, showDestination: showDestination);
+                // Wrong-password retry: clear the field so the user
+                // doesn't see the same wrong value they just submitted.
+                ExtractPanel.Configure(archivePath, dest, needsPassword: true, showDestination: showDestination, prefillPassword: null);
                 ExtractPanel.ShowError(_strings.GetString("Error_WrongPassword/Text"));
                 // continue while-loop for retry
             }
@@ -1486,6 +1497,31 @@ public sealed partial class MainWindow : Window
     /// null when the toggle is off, no credential exists, or the user
     /// fails the Hello check.
     /// </summary>
+    /// <summary>
+    /// Pre-fill source for the inline ExtractPanel password field.
+    /// Returns the stored default password ONLY when the silent-extract
+    /// path didn't already try it — otherwise the panel would suggest a
+    /// known-wrong value. Honours the Hello-gate by leaving the field
+    /// empty when the user opted to require auth before each use.
+    /// </summary>
+    private static string? ResolveExtractPanelPrefill(bool isEncrypted)
+    {
+        if (!isEncrypted) return null;
+        // If auto-try is on the silent path already consumed (and
+        // rejected) the stored default — pre-filling is pointless.
+        if (SettingsService.Get<bool>("Settings_DefaultPasswordOnExtract", false))
+        {
+            return null;
+        }
+        // Hello gate: protect cleartext display by skipping pre-fill.
+        if (SettingsService.Get<bool>("Settings_AuthBeforeUseDefaultPassword", false))
+        {
+            return null;
+        }
+        string stored = CredentialStore.Get();
+        return string.IsNullOrEmpty(stored) ? null : stored;
+    }
+
     private static async Task<string?> ResolveStoredDefaultPasswordAsync(string toggleKey, string authReason)
     {
         if (!SettingsService.Get<bool>(toggleKey, false))

@@ -69,20 +69,27 @@ public sealed partial class ExtractPanel : UserControl
     /// shrinks the panel to a compact "just enter your password"
     /// surface, with an Advanced link to bring the row back.
     /// </summary>
-    public void Configure(string archivePath, string suggestedDestination, bool needsPassword, bool showDestination)
+    public void Configure(string archivePath, string suggestedDestination, bool needsPassword, bool showDestination, string? prefillPassword = null)
     {
         ArchiveNameText.Text = Path.GetFileName(archivePath);
         DestinationField.Text = suggestedDestination;
-        PasswordField.Password = "";
+        PasswordField.Password = prefillPassword ?? string.Empty;
         PasswordRow.Visibility = needsPassword ? Visibility.Visible : Visibility.Collapsed;
         SetDestinationVisible(showDestination);
         ClearError();
         // Focus the password field if encrypted (user likely just wants
         // to type the password and hit Enter); otherwise focus the
         // destination input so they can tweak it without mouse-hunting.
+        // When the box is pre-filled we still focus it but select all so
+        // the user can either hit Enter (accept default) or start typing
+        // to replace it.
         if (needsPassword)
         {
             _ = PasswordField.Focus(FocusState.Programmatic);
+            if (!string.IsNullOrEmpty(prefillPassword))
+            {
+                PasswordField.SelectAll();
+            }
         }
         else if (showDestination)
         {
