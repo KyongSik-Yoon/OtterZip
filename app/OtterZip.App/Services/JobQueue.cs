@@ -175,10 +175,17 @@ public sealed class JobQueue : IDisposable
         string percentFormat = Localize("Job_StatusRunningPercent");
         return new Progress<double>(p => _ui.TryEnqueue(() =>
         {
+            // Monotonic guard: Progress<T> posts via the thread pool and
+            // a late-arriving callback can land AFTER the work delegate's
+            // final doneText set, otherwise the card would show "0%" or
+            // a stale percentage next to its ✓ icon. Ignoring any tick
+            // that would move the bar backwards keeps that race out.
+            double clamped = Math.Clamp(p, 0.0, 1.0);
+            if (clamped < item.Progress) return;
             item.IsIndeterminate = false;
-            item.Progress = Math.Clamp(p, 0.0, 1.0);
+            item.Progress = clamped;
             item.StatusText = string.Format(CultureInfo.CurrentCulture,
-                percentFormat, Math.Round(p * 100));
+                percentFormat, Math.Round(clamped * 100));
         }));
     }
 

@@ -1021,6 +1021,7 @@ public sealed partial class MainWindow : Window
             await DispatchUiAndWaitAsync(() =>
             {
                 item.ResultPath = destination;
+                item.Progress = 1.0;     // tripwire for JobQueue's monotonic guard
                 item.StatusText = doneText;
             }).ConfigureAwait(false);
             done.TrySetResult(report);
@@ -1106,7 +1107,10 @@ public sealed partial class MainWindow : Window
             ? customDir
             : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
         string stem = Path.GetFileNameWithoutExtension(archivePath);
-        return useSubfolder ? Path.Combine(baseDir, stem) : baseDir;
+        string dest = useSubfolder ? Path.Combine(baseDir, stem) : baseDir;
+        // Only auto-rename the subfolder case; "extract directly into
+        // baseDir" doesn't make sense to suffix.
+        return useSubfolder ? EnsureUniqueExtractDirectory(dest) : dest;
     }
 
     /// <summary>
@@ -1118,7 +1122,30 @@ public sealed partial class MainWindow : Window
     {
         string parent = Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory();
         string stem = Path.GetFileNameWithoutExtension(archivePath);
-        return Path.Combine(parent, stem);
+        return EnsureUniqueExtractDirectory(Path.Combine(parent, stem));
+    }
+
+    /// <summary>
+    /// Mirror of <see cref="EnsureUniqueDestination"/> for extract
+    /// targets — when "Downloads/foo" already exists, return
+    /// "Downloads/foo (1)" / "(2)" / … so we never silently overwrite a
+    /// folder full of someone's prior extract. Only applied to the auto-
+    /// computed destination paths; user-typed targets are honoured as-is.
+    /// </summary>
+    private static string EnsureUniqueExtractDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return path;
+        string parent = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+        string name = Path.GetFileName(path.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        for (int i = 1; i < 10000; i++)
+        {
+            string candidate = Path.Combine(parent, string.Format(
+                CultureInfo.InvariantCulture, "{0} ({1})", name, i));
+            if (!Directory.Exists(candidate)) return candidate;
+        }
+        return Path.Combine(parent, string.Format(CultureInfo.InvariantCulture,
+            "{0} ({1:yyyyMMddHHmmss})", name, DateTime.Now));
     }
 
     /// <summary>
@@ -1183,7 +1210,9 @@ public sealed partial class MainWindow : Window
                 ? customDir
                 : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
             string stem = Path.GetFileNameWithoutExtension(archivePath);
-            string dest = useSubfolder ? Path.Combine(baseDir, stem) : baseDir;
+            string dest = useSubfolder
+                ? EnsureUniqueExtractDirectory(Path.Combine(baseDir, stem))
+                : baseDir;
             EnqueueBulkExtractJob(archivePath, dest, preserveMotw);
         }
         return Task.CompletedTask;
@@ -1218,6 +1247,7 @@ public sealed partial class MainWindow : Window
                 await DispatchUiAndWaitAsync(() =>
                 {
                     item.ResultPath = destination;
+                    item.Progress = 1.0;
                     item.StatusText = doneText;
                 }).ConfigureAwait(false);
             }
@@ -1357,6 +1387,7 @@ public sealed partial class MainWindow : Window
             await DispatchUiAndWaitAsync(() =>
             {
                 item.ResultPath = plan.Destination;
+                item.Progress = 1.0;
                 item.StatusText = FormatByteSize(report.BytesWritten);
             }).ConfigureAwait(false);
         }
