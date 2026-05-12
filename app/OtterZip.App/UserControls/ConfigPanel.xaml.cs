@@ -35,6 +35,45 @@ public sealed partial class ConfigPanel : UserControl
         // glance and start a job before defaults apply.
         ApplyDefaultsFromSettings();
         ApplyFormatConstraints();
+        ApplyCompressPasswordPrefill();
+        // Live-update: when the user flips the relevant toggles in the
+        // Settings window, sync the flyout's password field on the spot
+        // so they don't have to restart to see the change.
+        Services.SettingsService.Changed += OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged(object? sender, Services.SettingsChangedEventArgs e)
+    {
+        if (string.Equals(e.Key, "Settings_DefaultPasswordOnCompress", StringComparison.Ordinal)
+            || string.Equals(e.Key, "Settings_AuthBeforeUseDefaultPassword", StringComparison.Ordinal))
+        {
+            ApplyCompressPasswordPrefill();
+        }
+    }
+
+    /// <summary>
+    /// Mirror the Compress-Options password field with the stored
+    /// default — but only when the user opted into "신규 압축에 자동
+    /// 적용" (Settings_DefaultPasswordOnCompress). Skipped when the
+    /// Hello-gate is on so a pre-filled value can't be revealed
+    /// (PasswordBox has a reveal toggle in this flyout) without the
+    /// auth the user asked for. Toggle-OFF clears the field so a stale
+    /// pre-fill from a previous "ON" state doesn't leak as ConfigPanel.
+    /// Password on the next compress.
+    /// </summary>
+    private void ApplyCompressPasswordPrefill()
+    {
+        bool autoApply = Services.SettingsService.Get<bool>("Settings_DefaultPasswordOnCompress", false);
+        bool helloGate = Services.SettingsService.Get<bool>("Settings_AuthBeforeUseDefaultPassword", false);
+        if (autoApply && !helloGate)
+        {
+            string stored = Services.CredentialStore.Get();
+            PasswordInput.Password = stored;
+        }
+        else
+        {
+            PasswordInput.Password = string.Empty;
+        }
     }
 
     private void OnDropHintTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
