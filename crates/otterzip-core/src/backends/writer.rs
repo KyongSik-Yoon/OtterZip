@@ -519,25 +519,42 @@ pub(crate) fn add_dir_recursive_through(
         start,
     };
 
+    // Resolve to a single concrete `&mut dyn ProgressSink` for the rest
+    // of the pipeline — passing `Option<&mut dyn>` through a recursive
+    // / iterative walker hits the borrow checker's invariance rules
+    // every time. A no-op `NullSink` covers the "no progress" case.
+    let mut null = NullSink;
+    let sink: &mut dyn crate::progress::ProgressSink = match progress.as_deref_mut() {
+        Some(s) => s,
+        None => &mut null,
+    };
+
     // Initial "Scanning" tick lets the UI move off 0% instantly so the
-    // user doesn't think the click was lost. Skip when no sink.
-    if let Some(sink) = progress.as_deref_mut() {
-        let snapshot = state.snapshot(crate::progress::ProgressPhase::Scanning, None);
-        if !sink.update(&snapshot) {
-            return Err(OtterzipError::Canceled);
-        }
+    // user doesn't think the click was lost.
+    let snapshot = state.snapshot(crate::progress::ProgressPhase::Scanning, None);
+    if !sink.update(&snapshot) {
+        return Err(OtterzipError::Canceled);
     }
 
     walk(
         writer,
         src,
-        src,
         entry_prefix,
         follow_symlinks,
         exclude_system_metadata,
         &mut state,
-        &mut progress,
+        sink,
     )
+}
+
+/// No-op sink used when the caller didn't supply one. Lets the rest of
+/// the writer pipeline assume a non-null sink and skip the everywhere
+/// `Option`-shaped borrows.
+struct NullSink;
+impl crate::progress::ProgressSink for NullSink {
+    fn update(&mut self, _: &crate::progress::Progress) -> bool {
+        true
+    }
 }
 
 struct WalkState {
@@ -618,76 +635,158 @@ fn pre_scan_visit(
     Ok(())
 }
 
+/// Iterative DFS over the source tree. Rewritten from recursive form so
+/// the borrow checker only sees one reborrow of `progress` per loop
+/// iteration — recursive calls were getting tangled because
+/// `Option<&mut dyn Trait>` is invariant in the trait object's lifetime.
 fn walk(
     writer: &mut dyn ArchiveWriter,
     root: &Path,
-    current: &Path,
     entry_prefix: &str,
     follow_symlinks: bool,
     exclude_system_metadata: bool,
     state: &mut WalkState,
-    progress: &mut Option<&mut dyn crate::progress::ProgressSink>,
+    progress: &mut dyn crate::progress::ProgressSink,
 ) -> Result<()> {
-    // Skip OS-noise files/folders before any I/O. We exempt the root itself
-    // so `add_dir_recursive("$RECYCLE.BIN", ...)` stays a deliberate
-    // user choice rather than being silently no-op'd.
-    if exclude_system_metadata
-        && current != root
-        && crate::options::is_system_metadata(current)
-    {
-        return Ok(());
-    }
-
-    let meta = if follow_symlinks {
-        std::fs::metadata(current)?
-    } else {
-        std::fs::symlink_metadata(current)?
-    };
-
-    if meta.is_dir() {
-        // Add a directory entry first (so empty dirs survive the round-trip).
-        if current != root {
-            let entry_name = compose_entry_name(root, current, entry_prefix);
-            writer.add_entry(&format!("{entry_name}/"), &mut std::io::empty(), Some(0), true)?;
+    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if exclude_system_metadata
+            && current != root
+            && crate::options::is_system_metadata(&current)
+        {
+            continue;
         }
-        for child in std::fs::read_dir(current)? {
-            let child = child?;
-            walk(
-                writer,
-                root,
-                &child.path(),
-                entry_prefix,
-                follow_symlinks,
-                exclude_system_metadata,
-                state,
-                progress,
-            )?;
+
+        let meta = if follow_symlinks {
+            std::fs::metadata(&current)?
+        } else {
+            std::fs::symlink_metadata(&current)?
+        };
+
+        if meta.is_dir() {
+            if current != root {
+                let entry_name = compose_entry_name(root, &current, entry_prefix);
+                writer.add_entry(
+                    &format!("{entry_name}/"),
+                    &mut std::io::empty(),
+                    Some(0),
+                    true,
+                )?;
+            }
+            // Push children in reverse so pop order matches alphabetical
+            // (same as the previous recursive read_dir order).
+            let mut children: Vec<PathBuf> = Vec::new();
+            for child in std::fs::read_dir(&current)? {
+                children.push(child?.path());
+            }
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
+            continue;
         }
-        return Ok(());
-    }
 
-    if meta.file_type().is_symlink() && !follow_symlinks {
-        return Ok(());
-    }
+        if meta.file_type().is_symlink() && !follow_symlinks {
+            continue;
+        }
 
-    let entry_name = compose_entry_name(root, current, entry_prefix);
-    let file = File::open(current)?;
-    let mut reader = BufReader::new(file);
-    writer.add_entry(&entry_name, &mut reader, Some(meta.len()), false)?;
-
-    state.entries_processed = state.entries_processed.saturating_add(1);
-    state.bytes_processed = state.bytes_processed.saturating_add(meta.len());
-
-    if let Some(sink) = progress.as_deref_mut() {
-        let snapshot = state.snapshot(
+        let entry_name = compose_entry_name(root, &current, entry_prefix);
+        let snapshot_template = state.snapshot(
             crate::progress::ProgressPhase::Writing,
             Some(&entry_name),
         );
-        if !sink.update(&snapshot) {
-            return Err(OtterzipError::Canceled);
-        }
+        process_file_entry(
+            writer,
+            &current,
+            &entry_name,
+            meta.len(),
+            state,
+            snapshot_template,
+            &mut *progress,
+        )?;
     }
     Ok(())
+}
+
+fn process_file_entry(
+    writer: &mut dyn ArchiveWriter,
+    file_path: &Path,
+    entry_name: &str,
+    file_size: u64,
+    state: &mut WalkState,
+    snapshot_template: crate::progress::Progress,
+    progress: &mut dyn crate::progress::ProgressSink,
+) -> Result<()> {
+    let write_result;
+    {
+        let mut counting = ProgressReader {
+            inner: BufReader::new(File::open(file_path)?),
+            bytes_in_entry: 0,
+            last_report: 0,
+            snapshot: snapshot_template,
+            sink: progress,
+        };
+        write_result = writer.add_entry(entry_name, &mut counting, Some(file_size), false);
+    }
+
+    match write_result {
+        Err(OtterzipError::Io(io_err)) if is_cancel_marker(&io_err) => {
+            return Err(OtterzipError::Canceled);
+        }
+        Err(e) => return Err(e),
+        Ok(()) => {}
+    }
+
+    state.entries_processed = state.entries_processed.saturating_add(1);
+    state.bytes_processed = state.bytes_processed.saturating_add(file_size);
+    Ok(())
+}
+
+/// IO-layer wrapper that ticks the supplied `ProgressSink` while bytes
+/// stream into the archive writer. Without this, the sink only fires
+/// once per entry — a single multi-GB file would otherwise pin the
+/// progress bar between two file boundaries.
+struct ProgressReader<'a, R: std::io::Read> {
+    inner: R,
+    bytes_in_entry: u64,
+    last_report: u64,
+    /// Cumulative-state template captured at entry start. The reader
+    /// only mutates `bytes_processed` on top of this; everything else
+    /// (totals, entries_processed, elapsed origin) stays as the caller
+    /// recorded it.
+    snapshot: crate::progress::Progress,
+    sink: &'a mut dyn crate::progress::ProgressSink,
+}
+
+impl<R: std::io::Read> std::io::Read for ProgressReader<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.bytes_in_entry = self.bytes_in_entry.saturating_add(n as u64);
+
+        // Throttle to ~1 MiB ticks so the sink doesn't get hammered on
+        // small reads from BufReader. Always tick on EOF (n == 0) so
+        // the final state is reported even when total entry size is
+        // below the throttle threshold.
+        const TICK_BYTES: u64 = 1_048_576;
+        let should_tick = n == 0
+            || self.bytes_in_entry.saturating_sub(self.last_report) >= TICK_BYTES;
+        if should_tick {
+            self.last_report = self.bytes_in_entry;
+            let mut snap = self.snapshot.clone();
+            snap.bytes_processed = snap.bytes_processed.saturating_add(self.bytes_in_entry);
+            if !self.sink.update(&snap) {
+                return Err(std::io::Error::other(CANCEL_MARKER));
+            }
+        }
+        Ok(n)
+    }
+}
+
+/// Sentinel string we attach to the io::Error so the outer walk can
+/// recognise "the user asked to cancel" vs "the disk is broken".
+const CANCEL_MARKER: &str = "otterzip-canceled";
+
+fn is_cancel_marker(io_err: &std::io::Error) -> bool {
+    io_err.to_string().contains(CANCEL_MARKER)
 }
 
 fn compose_entry_name(root: &Path, current: &Path, entry_prefix: &str) -> String {
