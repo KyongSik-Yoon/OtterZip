@@ -1407,13 +1407,16 @@ public sealed partial class MainWindow : Window
         // Phase 6+ rev 3: Settings_UseParentFolderName decides the stem for
         // multi-file compress. Default ON — matches Keka's "use parent folder
         // name when compressing multiple files". OFF falls back to first
-        // source name.
+        // source name. For folder sources we use the full folder name —
+        // GetFileNameWithoutExtension would treat a dotted folder like
+        // "Maru.App_1.0.1.0_x64_Test" as having a ".0_x64_Test" extension
+        // and strip it, leaving a wrong stem.
         bool useParent = SettingsService.Get<bool>("Settings_UseParentFolderName", true);
         string stem = sources.Count == 1
-            ? Path.GetFileNameWithoutExtension(firstSource)
+            ? SourceStem(firstSource)
             : useParent
                 ? Path.GetFileName(parentDir)
-                : Path.GetFileNameWithoutExtension(firstSource);
+                : SourceStem(firstSource);
         if (string.IsNullOrWhiteSpace(stem))
         {
             stem = "archive";
@@ -1563,6 +1566,23 @@ public sealed partial class MainWindow : Window
     }
 
     private sealed record CompressPlan(string Destination, ArchiveFormat Format, CompressionMethod Method, byte Level);
+
+    /// <summary>
+    /// Pick the archive name stem from a single source path. Directories
+    /// keep their full name (dots are part of the folder name, not an
+    /// extension); files strip the extension as usual.
+    /// </summary>
+    private static string SourceStem(string source)
+    {
+        if (Directory.Exists(source))
+        {
+            string trimmed = source.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            return Path.GetFileName(trimmed);
+        }
+        return Path.GetFileNameWithoutExtension(source);
+    }
 
     /// <summary>
     /// PR-7B: substitute filename template tokens. Sanitises the result
