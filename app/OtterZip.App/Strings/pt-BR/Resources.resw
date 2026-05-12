@@ -32,6 +32,10 @@
   <data name="ExtractDialog_BrowseButton.Content"><value>Procurar…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>Senha</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>Outra pasta…</value></data>
+  <data name="Job_StatusStarting.Text"><value>Iniciando…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>Cancelado</value></data>
+  <data name="Job_OpenFolder.Content"><value>Abrir pasta</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Configurações</value></data>
   <data name="Settings_TitleLabel.Text"><value>Configurações</value></data>

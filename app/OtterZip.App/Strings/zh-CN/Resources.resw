@@ -35,6 +35,10 @@
   <data name="ExtractDialog_BrowseButton.Content"><value>浏览…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>密码</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>选择文件夹…</value></data>
+  <data name="Job_StatusStarting.Text"><value>启动中…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>已取消</value></data>
+  <data name="Job_OpenFolder.Content"><value>打开文件夹</value></data>
 
   <!-- Settings Dialog -->
   <data name="Settings_DialogTitle.Title"><value>设置</value></data>

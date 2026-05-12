@@ -32,6 +32,10 @@
   <data name="ExtractDialog_BrowseButton.Content"><value>参照…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>パスワード</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>別のフォルダー…</value></data>
+  <data name="Job_StatusStarting.Text"><value>開始中…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>キャンセル</value></data>
+  <data name="Job_OpenFolder.Content"><value>フォルダーを開く</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>設定</value></data>
   <data name="Settings_TitleLabel.Text"><value>設定</value></data>

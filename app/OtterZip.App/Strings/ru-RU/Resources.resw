@@ -32,6 +32,10 @@
   <data name="ExtractDialog_BrowseButton.Content"><value>Обзор…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>Пароль</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>Другая папка…</value></data>
+  <data name="Job_StatusStarting.Text"><value>Запуск…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>Отменено</value></data>
+  <data name="Job_OpenFolder.Content"><value>Открыть папку</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Параметры</value></data>
   <data name="Settings_TitleLabel.Text"><value>Параметры</value></data>

@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Windows.ApplicationModel.Resources;
 using OtterZip.App.Dialogs;
+using OtterZip.App.Models;
 using OtterZip.App.Services;
 using OtterZip.Interop;
 using Windows.ApplicationModel.DataTransfer;
@@ -30,10 +31,14 @@ namespace OtterZip.App;
 ///   - Anything else      → compress with current ConfigPanel options (S3)
 ///   - Mixed (archives + plain files) → reject
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "WinUI 3 Window doesn't implement IDisposable. _jobQueue lives for the window lifetime; the SemaphoreSlim it owns is released when the process tears down.")]
 public sealed partial class MainWindow : Window
 {
     private readonly ResourceLoader _strings;
     private CancellationTokenSource? _activeCts;
+    private readonly JobQueue _jobQueue;
 
     // ============================================================
     //  View stack — Keka-style inline panels instead of modal dialogs
@@ -50,6 +55,13 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _strings = new ResourceLoader();
         Title = _strings.GetString("App_WindowTitle");
+
+        // Phase 1: JobQueue is the new home for compress/extract work.
+        // ConcurrentLimit=1 keeps current single-job semantics; Phase 3
+        // will wire Settings_ConcurrentJobs (2-4) on top of this.
+        _jobQueue = new JobQueue(DispatcherQueue, concurrentLimit: 1);
+        _jobQueue.JobSettled += OnJobSettled;
+        FloatLayerHost.Attach(_jobQueue);
 
         if (Content is FrameworkElement root)
         {
@@ -82,15 +94,24 @@ public sealed partial class MainWindow : Window
         RootGrid.DragLeave += OnDragLeave;
         RootGrid.Drop += OnDrop;
 
-        // Inline extract panel — completes _pendingExtractTcs when the
-        // user submits or cancels. Wiring lives next to the other root-
-        // level events so future view-stack additions follow the pattern.
+        WireExtractPanel();
+
+        // Phase 6+ rev 4: hook AppWindow.Closing so an in-flight job can
+        // prompt the user before the window vanishes. WinUI 3 Window.Closed
+        // is non-cancellable; AppWindow.Closing carries `args.Cancel`.
+        WireAppWindow();
+    }
+
+    /// <summary>
+    /// Inline extract panel event wiring. Completes <c>_pendingExtractTcs</c>
+    /// when the user submits or cancels; LayoutChanged re-fits the window
+    /// after the "다른 폴더로…" toggle expands the destination row.
+    /// </summary>
+    private void WireExtractPanel()
+    {
         ExtractPanel.Submitted += OnExtractSubmitted;
         ExtractPanel.Dismissed += OnExtractDismissed;
         ExtractPanel.PasswordEdited += (_, _) => ExtractPanel.ClearError();
-        // Re-fit the window when the Advanced toggle expands the
-        // destination row — keeps the panel from clipping or floating
-        // in dead space.
         ExtractPanel.LayoutChanged += (_, _) =>
         {
             if (_currentView == AppView.Extract)
@@ -98,11 +119,6 @@ public sealed partial class MainWindow : Window
                 TrySizeWindow(width: 420, height: PickExtractWindowHeight());
             }
         };
-
-        // Phase 6+ rev 4: hook AppWindow.Closing so an in-flight job can
-        // prompt the user before the window vanishes. WinUI 3 Window.Closed
-        // is non-cancellable; AppWindow.Closing carries `args.Cancel`.
-        WireAppWindow();
     }
 
     /// <summary>
@@ -175,6 +191,62 @@ public sealed partial class MainWindow : Window
 
     private bool _confirmedExit;
 
+    /// <summary>
+    /// True when the JobQueue has at least one running or queued card —
+    /// used by OnAppWindowClosing to decide whether to prompt.
+    /// </summary>
+    private bool HasActiveQueueJobs()
+    {
+        foreach (var job in _jobQueue.Jobs)
+        {
+            if (job.State == JobState.Running || job.State == JobState.Queued)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void CancelAllQueueJobs()
+    {
+        foreach (var job in _jobQueue.Jobs)
+        {
+            if (job.State == JobState.Running || job.State == JobState.Queued)
+            {
+                job.RequestCancel();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hook for JobQueue's JobSettled event — fires on the dispatcher
+    /// thread after any terminal transition. Wired in the constructor.
+    /// For now we just bubble Done jobs out as a toast when the user
+    /// has Settings_ShowToast enabled; auto-fade and history reaping
+    /// land in Phase 5.
+    /// </summary>
+    private void OnJobSettled(object? sender, JobItem item)
+    {
+        if (item.State != JobState.Done || string.IsNullOrEmpty(item.ResultPath))
+        {
+            return;
+        }
+        try
+        {
+            string fmt = item.Kind == JobKind.Compress
+                ? _strings.GetString("Main_StatusBarCompressDoneFormat/Text")
+                : _strings.GetString("Main_StatusBarDoneFormat/Text");
+            string body = string.Format(CultureInfo.CurrentCulture, fmt,
+                Path.GetFileName(item.ResultPath),
+                item.StatusText ?? string.Empty);
+            ToastService.ShowCompletion(item.DisplayName, body);
+        }
+        catch
+        {
+            // Toasts are decoration — never let them break the run.
+        }
+    }
+
     private async void OnAppWindowClosing(
         Microsoft.UI.Windowing.AppWindow sender,
         Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
@@ -182,7 +254,7 @@ public sealed partial class MainWindow : Window
         // Already confirmed once — let the second event through.
         if (_confirmedExit) { TryCloseSubWindows(); return; }
         // No active job — nothing to confirm.
-        if (_activeCts is null) { TryCloseSubWindows(); return; }
+        if (_activeCts is null && !HasActiveQueueJobs()) { TryCloseSubWindows(); return; }
         // User opted out — let it close.
         if (!SettingsService.Get<bool>("Settings_ConfirmExitWhileBusy", true))
         {
@@ -197,9 +269,12 @@ public sealed partial class MainWindow : Window
         if (quit)
         {
             // Cancel the in-flight job first, then allow the next close
-            // attempt to pass through unobstructed.
+            // attempt to pass through unobstructed. Both the legacy
+            // _activeCts path (extract) and any JobQueue card need to
+            // stop so the OS hand-off below doesn't strand work mid-flight.
             try { _activeCts?.Cancel(); }
             catch (ObjectDisposedException) { }
+            CancelAllQueueJobs();
             _confirmedExit = true;
             TryCloseSubWindows();
             try { this.Close(); }
@@ -1121,19 +1196,20 @@ public sealed partial class MainWindow : Window
     }
 
     // ============================================================
-    //  Compress
+    //  Compress — Phase 1: routed through JobQueue
+    //
+    // Each request resolves its password / plan up front, then drops one
+    // or more JobItem entries on the queue. The queue owns concurrency,
+    // cancellation, and progress; this method returns as soon as the
+    // submissions are recorded so the caller (drag/drop handler) is
+    // never blocked by long-running work.
+    //
+    // When "따로따로 압축하기" (Settings_CompressSeparately) is on with
+    // N>1 sources, each source becomes its own card in the queue. This
+    // also gives the user per-archive cancel / open-folder UX.
     // ============================================================
     private async Task CompressAsync(IReadOnlyList<string> sources)
     {
-        await CancelInFlightAsync().ConfigureAwait(true);
-
-        // Phase 6+ rev 4: resolve compress password before kicking off
-        // the long-running task. Order of precedence:
-        //   1. ConfigPanel.Password (user typed it on the main window)
-        //   2. Settings_DefaultPassword if Settings_DefaultPasswordOnCompress is on
-        //   3. Settings_AlwaysPromptPassword: prompt the user every time
-        //   4. None — archive is created without encryption
-        // Returns null if the user cancelled an explicit prompt.
         string? compressPassword = await ResolveCompressPasswordAsync().ConfigureAwait(true);
         if (compressPassword is null && SettingsService.Get<bool>("Settings_AlwaysPromptPassword", false))
         {
@@ -1141,65 +1217,43 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var cts = new CancellationTokenSource();
-        _activeCts = cts;
-
-        try
+        bool separately = SettingsService.Get<bool>("Settings_CompressSeparately", false);
+        if (separately && sources.Count > 1)
         {
-            // Read from SettingsService so the panel checkbox and Settings
-            // dialog stay in lock-step (rev 5 sync — both write to the same
-            // Settings_CompressSeparately key).
-            bool separately = SettingsService.Get<bool>("Settings_CompressSeparately", false);
-            if (separately && sources.Count > 1)
+            foreach (var src in sources)
             {
-                await CompressEachSeparatelyAsync(sources, compressPassword, cts.Token).ConfigureAwait(true);
-            }
-            else
-            {
-                var plan = PlanCompress(sources);
-                SetBusyCompressing(Path.GetFileName(plan.Destination));
-                var report = await RunCompressAsync(plan, sources, compressPassword, cts.Token).ConfigureAwait(true);
-                await MaybeVerifyAsync(plan.Destination, cts.Token).ConfigureAwait(true);
-                MaybeRecycleSources(sources);
-                ShowCompressDone(plan.Destination, report.BytesWritten);
+                EnqueueCompressJob(new[] { src }, compressPassword);
             }
         }
-        catch (OperationCanceledException)
+        else
         {
-            ResetStatus();
-        }
-        catch (Exception ex)
-        {
-            ShowError(ex.Message);
-        }
-        finally
-        {
-            if (_activeCts == cts) _activeCts = null;
-            cts.Dispose();
+            EnqueueCompressJob(sources, compressPassword);
         }
     }
 
-    private async Task CompressEachSeparatelyAsync(
-        IReadOnlyList<string> sources, string? password, CancellationToken ct)
+    /// <summary>
+    /// Build the compress plan + create a JobItem + submit it to the
+    /// queue. The work delegate captures everything the actual
+    /// compress run needs; the queue handles state transitions and
+    /// surfaces them to the floating card.
+    /// </summary>
+    private void EnqueueCompressJob(IReadOnlyList<string> sources, string? password)
     {
-        // "압축 따로따로 하기" — each source becomes its own archive sibling.
-        ulong totalBytes = 0;
-        string? lastDest = null;
-        foreach (var src in sources)
+        var plan = PlanCompress(sources);
+        var item = new JobItem(JobKind.Compress, Path.GetFileName(plan.Destination));
+
+        _jobQueue.Submit(item, async (ct, _progress) =>
         {
-            ct.ThrowIfCancellationRequested();
-            var plan = PlanCompress(new[] { src });
-            SetBusyCompressing(Path.GetFileName(plan.Destination));
-            var report = await RunCompressAsync(plan, new[] { src }, password, ct).ConfigureAwait(true);
-            await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(true);
-            MaybeRecycleSources(new[] { src });
-            totalBytes += report.BytesWritten;
-            lastDest = plan.Destination;
-        }
-        if (lastDest is not null)
-        {
-            ShowCompressDone(lastDest, totalBytes);
-        }
+            // _progress is reserved for future per-job % wiring once
+            // ArchiveBuilder.CreateFromDirectoryAsync grows a real
+            // IProgress<double> hook (Phase 2). For now the card sits
+            // indeterminate while running.
+            var report = await RunCompressAsync(plan, sources, password, ct).ConfigureAwait(false);
+            await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
+            MaybeRecycleSources(sources);
+            item.ResultPath = plan.Destination;
+            item.StatusText = FormatByteSize(report.BytesWritten);
+        });
     }
 
     /// <summary>

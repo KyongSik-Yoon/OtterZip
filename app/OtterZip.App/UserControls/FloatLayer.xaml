@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FloatLayer — visual host for the JobQueue's floating job cards.
+
+  Positioned by MainWindow at the bottom of the canvas, this control
+  just renders one JobCard per JobItem in the queue's observable
+  collection. Cards stack vertically and grow upward as new jobs arrive.
+
+  No user-facing strings in the layout itself; everything pulls through
+  JobCard from the bound JobItem. Brushes route via {ThemeResource} where
+  applicable (the layer container is fully transparent so the canvas
+  shines through).
+-->
+<UserControl
+    x:Class="OtterZip.App.UserControls.FloatLayer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    IsHitTestVisible="True">
+
+    <ItemsControl x:Name="CardsHost"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Bottom">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Vertical"
+                            Spacing="6"
+                            VerticalAlignment="Bottom" />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+    </ItemsControl>
+</UserControl>

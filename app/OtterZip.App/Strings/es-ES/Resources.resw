@@ -32,6 +32,10 @@
   <data name="ExtractDialog_BrowseButton.Content"><value>Examinar…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>Contraseña</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>Otra carpeta…</value></data>
+  <data name="Job_StatusStarting.Text"><value>Iniciando…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>Cancelado</value></data>
+  <data name="Job_OpenFolder.Content"><value>Abrir carpeta</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Configuración</value></data>
   <data name="Settings_TitleLabel.Text"><value>Configuración</value></data>

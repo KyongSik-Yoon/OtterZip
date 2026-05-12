@@ -75,6 +75,12 @@
   <data name="ExtractDialog_PasswordLabel.Text"><value>비밀번호</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>다른 폴더로…</value></data>
 
+  <!-- Job cards (Phase 1 — JobQueue floating cards) -->
+  <data name="Job_StatusStarting.Text"><value>시작 중…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>취소됨</value></data>
+  <data name="Job_OpenFolder.Content"><value>폴더 열기</value></data>
+
   <!-- ================================================================ -->
   <!--  Settings Dialog (Phase 6+, 12 items in 4 sections)               -->
   <!-- ================================================================ -->

@@ -32,6 +32,10 @@
   <data name="ExtractDialog_BrowseButton.Content"><value>Parcourir…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>Mot de passe</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>Autre dossier…</value></data>
+  <data name="Job_StatusStarting.Text"><value>Démarrage…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>Annulé</value></data>
+  <data name="Job_OpenFolder.Content"><value>Ouvrir le dossier</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Paramètres</value></data>
   <data name="Settings_TitleLabel.Text"><value>Paramètres</value></data>

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  JobCard — single-job floating chip rendered inside FloatLayer.
+
+  Layout is fully Auto-sized so cards shrink to their content. The card
+  has three rows:
+    1. icon · name · status · cancel-x
+    2. progress bar (hidden when terminal & no progress to show)
+    3. follow-up actions strip (only shown when Done & ResultPath set)
+
+  All visible text comes from .resw via code-behind (no x:Uid in the
+  Job_* keys because PropertyChanged-driven updates need direct
+  GetString calls). Brushes route through {ThemeResource}.
+-->
+<UserControl
+    x:Class="OtterZip.App.UserControls.JobCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Border x:Name="CardRoot"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Padding="10,8">
+        <StackPanel Spacing="6">
+
+            <!-- Row 1: icon + name + status + cancel -->
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        x:Name="IconHost"
+                        Width="26" Height="26"
+                        CornerRadius="6"
+                        Background="{ThemeResource OtterzipBrandSoftBrush}"
+                        VerticalAlignment="Center">
+                    <FontIcon x:Name="IconGlyph"
+                              FontFamily="{StaticResource SymbolThemeFontFamily}"
+                              Glyph="&#xE7B8;"
+                              FontSize="13"
+                              Foreground="{ThemeResource OtterzipBrandBrush}" />
+                </Border>
+
+                <TextBlock Grid.Column="1"
+                           x:Name="NameText"
+                           Style="{StaticResource BodyTextStyle}"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+
+                <TextBlock Grid.Column="2"
+                           x:Name="StatusTextEl"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,2,0" />
+
+                <Button Grid.Column="3"
+                        x:Name="CancelButton"
+                        Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Cancel job"
+                        Click="OnCancelClick"
+                        MinWidth="24" MinHeight="24"
+                        Padding="2">
+                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                              Glyph="&#xE711;"
+                              FontSize="11" />
+                </Button>
+            </Grid>
+
+            <!-- Row 2: progress -->
+            <ProgressBar x:Name="ProgressEl"
+                         Minimum="0" Maximum="1.0"
+                         Height="3"
+                         CornerRadius="2"
+                         IsIndeterminate="True" />
+
+            <!-- Row 3: follow-up actions (Done state only) -->
+            <StackPanel x:Name="ActionsRow"
+                        Orientation="Horizontal"
+                        Spacing="12"
+                        Visibility="Collapsed">
+                <HyperlinkButton x:Name="OpenFolderButton"
+                                 x:Uid="Job_OpenFolder"
+                                 Padding="0,2"
+                                 FontSize="11"
+                                 Click="OnOpenFolderClick" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -36,6 +36,12 @@
   <data name="ExtractDialog_PasswordLabel.Text"><value>Password</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>Choose folder…</value></data>
 
+  <!-- Job cards (Phase 1 — JobQueue floating cards) -->
+  <data name="Job_StatusStarting.Text"><value>Starting…</value></data>
+  <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
+  <data name="Job_StatusCancelled.Text"><value>Cancelled</value></data>
+  <data name="Job_OpenFolder.Content"><value>Open folder</value></data>
+
   <!-- Settings Dialog (Phase 6+, 12 items in 4 sections) -->
   <data name="Settings_DialogTitle.Title"><value>Settings</value></data>
   <data name="Settings_TitleLabel.Text"><value>Settings</value></data>
