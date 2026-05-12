@@ -79,6 +79,8 @@
   <data name="Job_StatusStarting.Text"><value>시작 중…</value></data>
   <data name="Job_StatusCompressing.Text"><value>압축 중…</value></data>
   <data name="Job_StatusCancelling.Text"><value>취소 중…</value></data>
+  <data name="Split_StatusJoining.Text"><value>분할 볼륨 결합 중… ({0}/{1})</value></data>
+  <data name="Split_NotSupportedFormat.Text"><value>분할 아카이브는 v1.1에서 지원 예정 ({0}개 볼륨 감지됨)</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>취소됨</value></data>
   <data name="Job_OpenFolder.Content"><value>폴더 열기</value></data>

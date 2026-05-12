@@ -35,6 +35,8 @@
   <data name="Job_StatusStarting.Text"><value>Запуск…</value></data>
   <data name="Job_StatusCompressing.Text"><value>Сжатие…</value></data>
   <data name="Job_StatusCancelling.Text"><value>Отмена…</value></data>
+  <data name="Split_StatusJoining.Text"><value>Объединение разделённых томов… ({0}/{1})</value></data>
+  <data name="Split_NotSupportedFormat.Text"><value>Многотомные архивы пока не поддерживаются (запланировано на v1.1). Обнаружено томов: {0}.</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>Отменено</value></data>
   <data name="Job_OpenFolder.Content"><value>Открыть папку</value></data>

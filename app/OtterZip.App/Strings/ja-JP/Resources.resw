@@ -35,6 +35,8 @@
   <data name="Job_StatusStarting.Text"><value>開始中…</value></data>
   <data name="Job_StatusCompressing.Text"><value>圧縮中…</value></data>
   <data name="Job_StatusCancelling.Text"><value>キャンセル中…</value></data>
+  <data name="Split_StatusJoining.Text"><value>分割ボリュームを結合中… ({0}/{1})</value></data>
+  <data name="Split_NotSupportedFormat.Text"><value>分割アーカイブはv1.1で対応予定です ({0}個のボリュームを検出)</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>キャンセル</value></data>
   <data name="Job_OpenFolder.Content"><value>フォルダーを開く</value></data>

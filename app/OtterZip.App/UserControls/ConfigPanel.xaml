@@ -93,8 +93,17 @@
                         <StackPanel Width="320"
                                     Spacing="14">
 
-                            <!-- Split size -->
-                            <StackPanel Spacing="4">
+                            <!--
+                              Split-output is hidden until the Rust writer
+                              backends honour CreateOptions.volume_size_bytes
+                              (currently the FFI propagates the field but no
+                              backend reads it — ArchiveBuilder.cs hardcodes
+                              VolumeSizeBytes = 0). Keeping the markup +
+                              code-behind wiring intact so re-enabling is a
+                              single Visibility tweak once the backend lands.
+                            -->
+                            <StackPanel Spacing="4"
+                                        Visibility="Collapsed">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
                                               Glyph="&#xE8C6;"

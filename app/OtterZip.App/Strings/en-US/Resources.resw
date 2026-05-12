@@ -40,6 +40,8 @@
   <data name="Job_StatusStarting.Text"><value>Starting…</value></data>
   <data name="Job_StatusCompressing.Text"><value>Compressing…</value></data>
   <data name="Job_StatusCancelling.Text"><value>Cancelling…</value></data>
+  <data name="Split_StatusJoining.Text"><value>Joining split volumes… ({0}/{1})</value></data>
+  <data name="Split_NotSupportedFormat.Text"><value>Multi-volume archives are not yet supported (planned for v1.1). Detected {0} parts.</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>Cancelled</value></data>
   <data name="Job_OpenFolder.Content"><value>Open folder</value></data>

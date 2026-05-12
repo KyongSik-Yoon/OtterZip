@@ -35,6 +35,8 @@
   <data name="Job_StatusStarting.Text"><value>Démarrage…</value></data>
   <data name="Job_StatusCompressing.Text"><value>Compression…</value></data>
   <data name="Job_StatusCancelling.Text"><value>Annulation…</value></data>
+  <data name="Split_StatusJoining.Text"><value>Fusion des volumes fractionnés… ({0}/{1})</value></data>
+  <data name="Split_NotSupportedFormat.Text"><value>Les archives multi-volumes ne sont pas encore prises en charge (prévu pour v1.1). {0} parties détectées.</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>Annulé</value></data>
   <data name="Job_OpenFolder.Content"><value>Ouvrir le dossier</value></data>

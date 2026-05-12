@@ -888,6 +888,17 @@ public sealed partial class MainWindow : Window
     // ============================================================
     private async Task ExtractAsync(string archivePath, bool forceDialog = false)
     {
+        // Probe for split-archive layout before touching any archive
+        // reader — the Rust core's `open()` on a partial volume returns
+        // a "Could not find EOCD" / mid-stream error that confuses
+        // users. We classify and either route the multi-part set
+        // through a dedicated handler or surface a friendly "v1.1
+        // 예정" card for spanning forms we don't read yet.
+        if (TryHandleSplitArchive(archivePath))
+        {
+            return;
+        }
+
         bool isEncrypted;
         string suggestedDest;
         try
@@ -909,6 +920,36 @@ public sealed partial class MainWindow : Window
         }
 
         await RunExtractPanelLoopAsync(archivePath, suggestedDest, isEncrypted, forceDialog).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Branch the extract flow based on multi-volume layout. Returns
+    /// <c>true</c> when the caller should NOT continue with the normal
+    /// single-volume open path.
+    ///
+    ///   * <see cref="SplitKind.Spanned"/> — surface a localized
+    ///     "not supported" JobCard and return.
+    ///   * <see cref="SplitKind.RawByteSplit"/> — enqueue a dedicated
+    ///     concat-then-extract job that handles cleanup of the temp
+    ///     file. The user sees a single card with combined progress.
+    /// </summary>
+    private bool TryHandleSplitArchive(string archivePath)
+    {
+        var split = SplitArchiveDetector.Probe(archivePath);
+        switch (split.Kind)
+        {
+            case SplitKind.Spanned:
+                string msg = string.Format(CultureInfo.CurrentCulture,
+                    _strings.GetString("Split_NotSupportedFormat/Text"),
+                    split.Volumes.Count);
+                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), msg);
+                return true;
+            case SplitKind.RawByteSplit:
+                EnqueueRawByteSplitExtractJob(split);
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>
@@ -1288,6 +1329,13 @@ public sealed partial class MainWindow : Window
 
         foreach (var archivePath in archives)
         {
+            // Split-archive detection runs per-path so a mixed drop of
+            // single-volume + spanned + raw-split archives each lands
+            // on the right route.
+            if (TryHandleSplitArchive(archivePath))
+            {
+                continue;
+            }
             string baseDir = useCustom
                 ? customDir
                 : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
@@ -1347,6 +1395,160 @@ public sealed partial class MainWindow : Window
                 throw;
             }
         });
+    }
+
+    // ============================================================
+    //  Raw byte-split (.zip.001..NNN / .7z.001..NNN) extract
+    //
+    // Tools like WinRAR's "split to volumes" without container
+    // spanning emit a contiguous numbered sequence whose bytes
+    // recombine into the original single-volume archive. v1.0 of
+    // OtterZip cannot read these volumes natively (the Rust `zip`
+    // crate operates on a single file handle), so we recombine
+    // into a temp file up-front and then route the result through
+    // the regular extract flow. The temp file is removed on every
+    // exit path — success, cancel, or error.
+    //
+    // Encryption is not surfaced through an interactive password
+    // panel on this route; if the archive turns out to be
+    // encrypted, the silent-extract path tries Settings_
+    // DefaultPasswordOnExtract (when ON), otherwise the job lands
+    // on the Error card with a wrong-password message. Interactive
+    // password prompts for raw byte-split sets are deferred to v1.1
+    // — by then the native multi-volume reader should subsume this
+    // helper entirely.
+    // ============================================================
+    private void EnqueueRawByteSplitExtractJob(SplitArchiveDetector.DetectionResult split)
+    {
+        var item = new JobItem(JobKind.Extract, Path.GetFileName(split.EntryPath))
+        {
+            // Reveal-on-completion shows the file the user actually
+            // dropped, not the temp recombined archive.
+            SourcePath = split.EntryPath,
+        };
+
+        string tempPath = Path.Combine(
+            Path.GetTempPath(),
+            "otterzip-join-" + Guid.NewGuid().ToString("N") + Path.GetExtension(split.Stem));
+        string destination = ResolveExtractDestination(split.EntryPath);
+        bool destExistedBefore = Directory.Exists(destination);
+        bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
+
+        _jobQueue.Submit(item, (ct, progress) =>
+            RunRawByteSplitExtractWorkAsync(
+                item, split, tempPath, destination, destExistedBefore, preserveMotw, ct, progress));
+    }
+
+    /// <summary>
+    /// Work delegate for the raw byte-split job. Two phases share one
+    /// progress bar: concat-to-temp (40%) then real extract (60%). The
+    /// temp archive is always removed in <c>finally</c> so a cancel or
+    /// crash never leaves a multi-GB stub in %TEMP%.
+    /// </summary>
+    private async Task RunRawByteSplitExtractWorkAsync(
+        JobItem item, SplitArchiveDetector.DetectionResult split,
+        string tempPath, string destination, bool destExistedBefore, bool preserveMotw,
+        CancellationToken ct, IProgress<double> progress)
+    {
+        string joiningFormat = _strings.GetString("Split_StatusJoining/Text");
+        try
+        {
+            await ConcatVolumesAsync(
+                split.Volumes, tempPath, item, joiningFormat,
+                fraction => progress.Report(fraction * 0.4), ct).ConfigureAwait(false);
+
+            using var archive = Archive.Open(tempPath);
+            var progressBridge = new Progress<ProgressUpdate>(p =>
+                progress.Report(0.4 + Math.Clamp(p.FractionComplete, 0.0, 1.0) * 0.6));
+            var report = await archive
+                .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                    preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
+                .ConfigureAwait(false);
+
+            string doneText = string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("Main_StatusBarDoneFormat/Text"),
+                report.EntriesExtracted,
+                FormatByteSize(report.BytesWritten));
+            await DispatchUiAndWaitAsync(() =>
+            {
+                item.ResultPath = destination;
+                item.Progress = 1.0;
+                item.StatusText = doneText;
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            throw;
+        }
+        catch (OtterzipException ex) when (ex.IsWrongPassword)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            throw;
+        }
+        finally
+        {
+            TryDeleteTempJoinedArchive(tempPath);
+        }
+    }
+
+    /// <summary>
+    /// Streams every volume in <paramref name="volumes"/> into a single
+    /// temp file at <paramref name="destPath"/>. The status caption is
+    /// updated as each volume rolls over; the progress fraction is
+    /// reported continuously so the JobCard's bar moves smoothly across
+    /// volume boundaries.
+    /// </summary>
+    private async Task ConcatVolumesAsync(
+        IReadOnlyList<string> volumes, string destPath, JobItem item,
+        string joiningFormat, Action<double> reportFraction, CancellationToken ct)
+    {
+        long total = 0;
+        for (int i = 0; i < volumes.Count; i++)
+        {
+            total += new FileInfo(volumes[i]).Length;
+        }
+        if (total <= 0) total = 1; // avoid /0 on empty edge case
+
+        long bytesDone = 0;
+        const int bufferSize = 1 << 20; // 1 MiB — matches the Rust progress tick.
+        byte[] buffer = new byte[bufferSize];
+
+        using (var outStream = new FileStream(destPath, FileMode.CreateNew, FileAccess.Write,
+            FileShare.None, bufferSize, FileOptions.SequentialScan))
+        {
+            for (int i = 0; i < volumes.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                string caption = string.Format(CultureInfo.CurrentCulture,
+                    joiningFormat, i + 1, volumes.Count);
+                DispatcherQueue.TryEnqueue(() => item.StatusText = caption);
+
+                using var inStream = new FileStream(volumes[i], FileMode.Open, FileAccess.Read,
+                    FileShare.Read, bufferSize, FileOptions.SequentialScan);
+                int read;
+                while ((read = await inStream.ReadAsync(buffer.AsMemory(0, bufferSize), ct).ConfigureAwait(false)) > 0)
+                {
+                    await outStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                    bytesDone += read;
+                    reportFraction((double)bytesDone / total);
+                }
+            }
+            await outStream.FlushAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    private static void TryDeleteTempJoinedArchive(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException) { /* file lock — leave for the OS temp cleanup */ }
+        catch (UnauthorizedAccessException) { /* ditto */ }
     }
 
     // ExtractWithPasswordRetryAsync was retired with the inline-panel
