@@ -92,7 +92,7 @@ public sealed partial class GeneralSettingsSection : UserControl
 
         // Concurrent jobs — JobQueue reads this at MainWindow ctor.
         int concurrency = Math.Clamp(
-            SettingsService.Get<int>("Settings_ConcurrentJobs", 1), 1, 4);
+            SettingsService.Get<int>("Settings_ConcurrentJobs", 2), 1, 4);
         ConcurrentJobsCombo.SelectedIndex = concurrency - 1;
     }
 
