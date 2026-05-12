@@ -55,10 +55,14 @@ public sealed partial class MainWindow : Window
         _strings = new ResourceLoader();
         Title = _strings.GetString("App_WindowTitle");
 
-        // Phase 1: JobQueue is the new home for compress/extract work.
-        // ConcurrentLimit=1 keeps current single-job semantics; Phase 3
-        // will wire Settings_ConcurrentJobs (2-4) on top of this.
-        _jobQueue = new JobQueue(DispatcherQueue, concurrentLimit: 1);
+        // JobQueue is the home for compress/extract work. The concurrent
+        // limit follows Settings_ConcurrentJobs (1-4); 1 = strict serial,
+        // higher values let the user run multiple jobs at once at the
+        // cost of more disk/CPU contention. Setting changes take effect
+        // on next launch — the SemaphoreSlim count is fixed at ctor.
+        int concurrency = Math.Clamp(
+            SettingsService.Get<int>("Settings_ConcurrentJobs", 1), 1, 4);
+        _jobQueue = new JobQueue(DispatcherQueue, concurrency);
         _jobQueue.JobSettled += OnJobSettled;
         FloatLayerHost.Attach(_jobQueue);
 
