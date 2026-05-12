@@ -18,7 +18,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel Padding="{StaticResource SpacingL}"
+    <StackPanel Padding="{StaticResource SpacingM}"
                 Spacing="{StaticResource SpacingSValue}"
                 VerticalAlignment="Center">
 

@@ -108,13 +108,14 @@
                 <Border x:Name="ExtractCard"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Width="360"
+                        Width="380"
+                        MaxWidth="380"
                         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
                         CornerRadius="14"
                         Translation="0,0,32"
-                        Margin="16">
+                        Margin="12">
                     <Border.Shadow>
                         <ThemeShadow />
                     </Border.Shadow>
