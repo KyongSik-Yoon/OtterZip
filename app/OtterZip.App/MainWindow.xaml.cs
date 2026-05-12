@@ -842,15 +842,16 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Window height for the ExtractPanel in its current footprint.
-    /// Compact mode (password-only) shrinks well below the idle config
-    /// panel; full mode needs the destination row plus the action bar
-    /// to clear the status strip below.
+    /// The outer StackPanel centers its content vertically, so the
+    /// destination row can be revealed within the same window
+    /// footprint as the compact (password-only) mode — no resize
+    /// needed when "다른 폴더로…" expands.
     /// </summary>
     private int PickExtractWindowHeight()
         => PickExtractHeight(ExtractPanel.IsDestinationVisible);
 
     private static int PickExtractHeight(bool showDestination)
-        => showDestination ? 420 : 360;
+        => 360;
 
     /// <summary>
     /// Run one extract attempt — opens the archive, drives ExtractAllAsync
@@ -989,12 +990,11 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Toggle the body view + resize the window to fit. ConfigPanel is
-    /// 460 tall; ExtractPanel sizes between 360 (compact, password-only)
-    /// and 420 (full, with destination row) depending on what the user
-    /// is being asked to confirm. Callers pass the desired ExtractPanel
-    /// height; idle always returns to 460.
+    /// 460 tall; ExtractPanel stays at a single 360 height for both
+    /// compact and full modes — the destination row reveals into the
+    /// existing slack instead of triggering a resize.
     /// </summary>
-    private void SwitchView(AppView view, int extractHeight = 420)
+    private void SwitchView(AppView view, int extractHeight = 360)
     {
         _currentView = view;
         bool extract = view == AppView.Extract;
