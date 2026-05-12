@@ -114,4 +114,15 @@ public sealed partial class FloatLayer : UserControl
             _cards.Remove(item);
         }
     }
+
+    /// <summary>
+    /// Keep the inner Grid's MinHeight in sync with the ScrollViewer's
+    /// ViewportHeight so the bottom-anchored ItemsControl sticks to the
+    /// viewport bottom when the stack is short. Without this binding the
+    /// ItemsControl collapses to its own desired height and floats up.
+    /// </summary>
+    private void OnScrollerSizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+    {
+        ScrollContent.MinHeight = Scroller.ViewportHeight;
+    }
 }

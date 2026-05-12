@@ -21,21 +21,31 @@
     IsHitTestVisible="True">
 
     <!-- ScrollViewer fills the available height (MainWindow caps the
-         layer top margin so the chip strip is never covered). Cards
-         scroll inside this area when the stack exceeds the viewport. -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
+         layer top margin so the chip strip is never covered). Inside,
+         a Grid wrapper whose MinHeight mirrors the ScrollViewer's
+         ViewportHeight (kept in sync from code-behind) lets the bottom-
+         anchored ItemsControl sit at the bottom of the viewport when
+         only a few cards exist — new cards push earlier cards upward.
+         When the stack grows past the viewport, the wrapper expands and
+         scrolling kicks in automatically. -->
+    <ScrollViewer x:Name="Scroller"
+                  VerticalScrollBarVisibility="Auto"
                   HorizontalScrollMode="Disabled"
                   VerticalScrollMode="Enabled"
                   HorizontalAlignment="Stretch"
-                  VerticalAlignment="Stretch">
-        <ItemsControl x:Name="CardsHost"
-                      HorizontalAlignment="Stretch">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Vertical"
-                                Spacing="6" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-        </ItemsControl>
+                  VerticalAlignment="Stretch"
+                  SizeChanged="OnScrollerSizeChanged">
+        <Grid x:Name="ScrollContent">
+            <ItemsControl x:Name="CardsHost"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Bottom">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical"
+                                    Spacing="6" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </Grid>
     </ScrollViewer>
 </UserControl>

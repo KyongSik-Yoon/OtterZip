@@ -1284,13 +1284,9 @@ public sealed partial class MainWindow : Window
         var plan = PlanCompress(sources);
         var item = new JobItem(JobKind.Compress, Path.GetFileName(plan.Destination));
 
-        _jobQueue.Submit(item, async (ct, _progress) =>
+        _jobQueue.Submit(item, async (ct, progress) =>
         {
-            // _progress is reserved for future per-job % wiring once
-            // ArchiveBuilder.CreateFromDirectoryAsync grows a real
-            // IProgress<double> hook. For now the card sits indeterminate
-            // while running.
-            var report = await RunCompressAsync(plan, sources, password, ct).ConfigureAwait(false);
+            var report = await RunCompressAsync(plan, sources, password, progress, ct).ConfigureAwait(false);
             await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
             MaybeRecycleSources(sources);
 
@@ -1608,6 +1604,7 @@ public sealed partial class MainWindow : Window
         CompressPlan plan,
         IReadOnlyList<string> sources,
         string? password,
+        IProgress<double>? progress,
         CancellationToken ct)
     {
         // Settings toggles read once at the start of a compress job, so
@@ -1616,13 +1613,30 @@ public sealed partial class MainWindow : Window
 
         if (sources.Count == 1 && Directory.Exists(sources[0]))
         {
+            // ArchiveBuildProgress only ships discrete phase events
+            // (Scanning / Writing / Finalizing), not a continuous byte
+            // fraction. Map each phase to a rough percentage so the bar
+            // visibly advances; the per-byte plumbing through the native
+            // builder is a separate follow-up.
+            IProgress<ArchiveBuildProgress>? bridge = progress is null
+                ? null
+                : new Progress<ArchiveBuildProgress>(p => progress.Report(p.Phase switch
+                {
+                    ArchiveBuildPhase.Scanning   => 0.05,
+                    ArchiveBuildPhase.Writing    => 0.50,
+                    ArchiveBuildPhase.Finalizing => 0.95,
+                    _ => 0.0,
+                }));
             return ArchiveBuilder.CreateFromDirectoryAsync(
                 plan.Destination, sources[0], plan.Format, plan.Method,
-                plan.Level, progress: null,
+                plan.Level, progress: bridge,
                 excludeSystemMetadata: excludeMeta,
                 password: password,
                 cancellationToken: ct);
         }
+        // CompressMixedSources doesn't currently expose a progress hook
+        // through the per-entry ArchiveBuilder API — the card stays
+        // indeterminate for the mixed-file path until that's plumbed.
         return Task.Run(() => CompressMixedSources(plan, sources, excludeMeta, password, ct), ct);
     }
 
