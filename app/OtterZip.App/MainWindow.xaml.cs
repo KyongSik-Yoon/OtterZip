@@ -961,51 +961,64 @@ public sealed partial class MainWindow : Window
         var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath));
         var done = new TaskCompletionSource<ExtractReport>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _jobQueue.Submit(item, async (ct, progress) =>
-        {
-            try
-            {
-                using var archive = string.IsNullOrEmpty(password)
-                    ? Archive.Open(archivePath)
-                    : Archive.OpenWithPassword(archivePath, password);
-
-                // Adapter: ProgressUpdate (rich, archive-side type) → simple
-                // 0..1 fraction the JobQueue card consumes.
-                var progressBridge = new Progress<ProgressUpdate>(p =>
-                    progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
-
-                var report = await archive
-                    .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
-                        preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
-                    .ConfigureAwait(false);
-
-                item.ResultPath = destination;
-                item.StatusText = string.Format(CultureInfo.CurrentCulture,
-                    _strings.GetString("Main_StatusBarDoneFormat/Text"),
-                    report.EntriesExtracted,
-                    FormatByteSize(report.BytesWritten));
-                done.TrySetResult(report);
-            }
-            catch (OtterzipException ex) when (ex.IsWrongPassword)
-            {
-                RollbackPartialExtract(destination, destExistedBefore);
-                done.TrySetException(ex);
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                RollbackPartialExtract(destination, destExistedBefore);
-                done.TrySetCanceled(ct);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                done.TrySetException(ex);
-                throw;
-            }
-        });
+        _jobQueue.Submit(item, (ct, progress) =>
+            RunInlineExtractWorkAsync(item, archivePath, destination, password,
+                preserveMotw, destExistedBefore, done, ct, progress));
 
         await done.Task.ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Inline-extract work delegate body. Pulled out of PerformExtractAsync
+    /// so the public method stays under the analyzer's 60-line cap; the
+    /// flow is unchanged.
+    /// </summary>
+    private async Task RunInlineExtractWorkAsync(
+        JobItem item, string archivePath, string destination, string? password,
+        bool preserveMotw, bool destExistedBefore,
+        TaskCompletionSource<ExtractReport> done,
+        CancellationToken ct, IProgress<double> progress)
+    {
+        try
+        {
+            using var archive = string.IsNullOrEmpty(password)
+                ? Archive.Open(archivePath)
+                : Archive.OpenWithPassword(archivePath, password);
+            var progressBridge = new Progress<ProgressUpdate>(p =>
+                progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
+            var report = await archive
+                .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                    preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
+                .ConfigureAwait(false);
+
+            string doneText = string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("Main_StatusBarDoneFormat/Text"),
+                report.EntriesExtracted,
+                FormatByteSize(report.BytesWritten));
+            await DispatchUiAndWaitAsync(() =>
+            {
+                item.ResultPath = destination;
+                item.StatusText = doneText;
+            }).ConfigureAwait(false);
+            done.TrySetResult(report);
+        }
+        catch (OtterzipException ex) when (ex.IsWrongPassword)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            done.TrySetException(ex);
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            done.TrySetCanceled(ct);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            done.TrySetException(ex);
+            throw;
+        }
     }
 
     /// <summary>
@@ -1170,11 +1183,15 @@ public sealed partial class MainWindow : Window
                     .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
                         preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                     .ConfigureAwait(false);
-                item.ResultPath = destination;
-                item.StatusText = string.Format(CultureInfo.CurrentCulture,
+                string doneText = string.Format(CultureInfo.CurrentCulture,
                     _strings.GetString("Main_StatusBarDoneFormat/Text"),
                     report.EntriesExtracted,
                     FormatByteSize(report.BytesWritten));
+                await DispatchUiAndWaitAsync(() =>
+                {
+                    item.ResultPath = destination;
+                    item.StatusText = doneText;
+                }).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -1271,14 +1288,47 @@ public sealed partial class MainWindow : Window
         {
             // _progress is reserved for future per-job % wiring once
             // ArchiveBuilder.CreateFromDirectoryAsync grows a real
-            // IProgress<double> hook (Phase 2). For now the card sits
-            // indeterminate while running.
+            // IProgress<double> hook. For now the card sits indeterminate
+            // while running.
             var report = await RunCompressAsync(plan, sources, password, ct).ConfigureAwait(false);
             await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
             MaybeRecycleSources(sources);
-            item.ResultPath = plan.Destination;
-            item.StatusText = FormatByteSize(report.BytesWritten);
+
+            // Marshal the final visible state onto the UI thread AND wait
+            // for it to flush before letting the queue mark the job Done.
+            // Without this synchronous bridge a fast job can race the
+            // queue's MarkDone enqueue — the State→Done callback runs
+            // before the StatusText handler dispatches, and JobCard
+            // freezes on "시작 중…" even after the archive is finished.
+            await DispatchUiAndWaitAsync(() =>
+            {
+                item.ResultPath = plan.Destination;
+                item.StatusText = FormatByteSize(report.BytesWritten);
+            }).ConfigureAwait(false);
         });
+    }
+
+    /// <summary>
+    /// Marshal <paramref name="action"/> onto the window's DispatcherQueue
+    /// and await its completion. Used by JobQueue work delegates to apply
+    /// final-state updates before the queue transitions the job to Done.
+    /// </summary>
+    private Task DispatchUiAndWaitAsync(Action action)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool ok = DispatcherQueue.TryEnqueue(() =>
+        {
+            try { action(); }
+            finally { tcs.TrySetResult(); }
+        });
+        if (!ok)
+        {
+            // Dispatcher refused (shutting down?) — fall back to inline so
+            // the work delegate doesn't hang the queue's RunAsync.
+            try { action(); }
+            finally { tcs.TrySetResult(); }
+        }
+        return tcs.Task;
     }
 
     /// <summary>
