@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ConfigPanel — Concept C canvas layout (Phase 4 + Phase 5 polish).
+  ConfigPanel — Concept C canvas (full-bleed drop zone + corner chips).
 
-  Row 0: corner chip strip
-    · 📄 Format combo (left)
-    · 압축 옵션 ▾ — DropDownButton with Flyout hosting Split / Password /
-      AES-256 / 4 advanced checkboxes (previously the Advanced expander)
-    · ⚙ Settings gear (right)
-  Row 1: drop-hint canvas filling the body — shell mascot + copy.
+  Layout: a single Border (the drop canvas) fills the body. Three chips
+  sit ON TOP of the canvas via overlay panels — they no longer occupy
+  their own row above the drop hint, matching the v2 mockup more
+  closely.
 
-  The bottom Advanced expander is retired. All compress-time options
-  live inside the Flyout so the main surface stays a near-pure drop
-  zone, matching the Concept C mockup.
+    ┌────────────────────────────────────────────┐
+    │ [📄 ZIP ▾]  [압축 옵션 ▾]            [⚙]   │  ← chip overlay
+    │                                            │
+    │              🐚                            │
+    │   파일을 끌어다 놓으세요                   │
+    │   또는 클릭해서 직접 선택                  │
+    │                                            │
+    └────────────────────────────────────────────┘
 
   Hard rules:
     - All user-visible text via x:Uid → .resw keys
@@ -26,168 +29,184 @@
     mc:Ignorable="d"
     x:Uid="ConfigPanel_Region">
 
-    <Grid Padding="12,8,12,8" RowSpacing="8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <!-- Full-bleed canvas. Single Grid layer hosts the drop hint
+         (centered) and the chip overlays (top-left, top-right). -->
+    <Border x:Name="DropHintCard"
+            Margin="12"
+            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="14"
+            Tapped="OnDropHintTapped"
+            PointerEntered="OnCardPointerEntered"
+            PointerExited="OnCardPointerExited">
+        <Grid>
 
-        <!-- ================================================================ -->
-        <!--  Row 0 · Corner chip strip                                       -->
-        <!-- ================================================================ -->
-        <Grid Grid.Row="0" ColumnSpacing="6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+            <!-- Centered drop hint -->
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="10"
+                        Padding="20,56,20,20">
+                <Image Source="ms-appx:///Assets/ShellMascot.png"
+                       Width="104" Height="104"
+                       Opacity="0.95"
+                       HorizontalAlignment="Center" />
+                <TextBlock x:Uid="ConfigPanel_DropHintTitle"
+                           Style="{StaticResource SubtitleTextStyle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+                <TextBlock x:Uid="ConfigPanel_DropHintSubtitle"
+                           Style="{StaticResource BodyTextStyle}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+            </StackPanel>
 
-            <FontIcon Grid.Column="0"
-                      FontFamily="{StaticResource SymbolThemeFontFamily}"
-                      Glyph="&#xE7C3;"
-                      FontSize="13"
-                      VerticalAlignment="Center"
-                      Margin="2,0,2,0"
-                      Foreground="{ThemeResource OtterzipBrandBrush}" />
+            <!-- Top-left chip group: Format + Compress options.
+                 Tapped Canvas handlers don't bubble Tapped on the
+                 DropHintCard, so clicks here won't open the file
+                 picker by mistake. -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Margin="12"
+                        Spacing="6">
+                <ComboBox x:Name="FormatCombo"
+                          SelectedIndex="0"
+                          MinWidth="116"
+                          SelectionChanged="OnFormatChanged">
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatZip" Tag="ZIP" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ" Tag="7z" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTar" Tag="tar" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz" Tag="tar.gz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2" Tag="tar.bz2" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz" Tag="tar.xz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatXz" Tag="xz" />
+                    <ComboBoxItem x:Uid="ConfigPanel_FormatZipx" Tag="zipx" />
+                </ComboBox>
 
-            <ComboBox Grid.Column="1"
-                      x:Name="FormatCombo"
-                      SelectedIndex="0"
-                      MinWidth="120"
-                      SelectionChanged="OnFormatChanged">
-                <ComboBoxItem x:Uid="ConfigPanel_FormatZip" Tag="ZIP" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ" Tag="7z" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatTar" Tag="tar" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz" Tag="tar.gz" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2" Tag="tar.bz2" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz" Tag="tar.xz" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatXz" Tag="xz" />
-                <ComboBoxItem x:Uid="ConfigPanel_FormatZipx" Tag="zipx" />
-            </ComboBox>
+                <DropDownButton x:Name="CompressOptionsButton"
+                                x:Uid="ConfigPanel_CompressOptionsButton"
+                                MinHeight="32">
+                    <DropDownButton.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft"
+                                ShouldConstrainToRootBounds="False">
+                            <StackPanel Width="320"
+                                        Spacing="14">
 
-            <DropDownButton Grid.Column="2"
-                            x:Name="CompressOptionsButton"
-                            x:Uid="ConfigPanel_CompressOptionsButton"
-                            MinHeight="32">
-                <DropDownButton.Flyout>
-                    <Flyout Placement="BottomEdgeAlignedLeft"
-                            ShouldConstrainToRootBounds="False">
-                        <StackPanel Width="320"
-                                    Spacing="14">
-
-                            <!-- Split size -->
-                            <StackPanel Spacing="4">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                                              Glyph="&#xE8C6;"
-                                              FontSize="12"
-                                              VerticalAlignment="Center"
-                                              Foreground="{ThemeResource OtterzipBrandBrush}" />
-                                    <TextBlock x:Uid="ConfigPanel_SplitLabel"
-                                               Style="{StaticResource CaptionTextStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               VerticalAlignment="Center" />
-                                </StackPanel>
-                                <ComboBox x:Name="SplitCombo"
-                                          HorizontalAlignment="Stretch"
-                                          SelectedIndex="0"
-                                          SelectionChanged="OnSplitChanged">
-                                    <ComboBoxItem x:Uid="ConfigPanel_SplitNone" Tag="0" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_Split10Mb" Tag="10485760" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_Split100Mb" Tag="104857600" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_Split700Mb" Tag="734003200" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_Split1Gb" Tag="1073741824" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_Split47Gb" Tag="5046586573" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_SplitCustom" Tag="-1" />
-                                </ComboBox>
-                            </StackPanel>
-
-                            <!-- Password + AES-256 -->
-                            <StackPanel Spacing="4">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                                              Glyph="&#xE192;"
-                                              FontSize="12"
-                                              VerticalAlignment="Center"
-                                              Foreground="{ThemeResource OtterzipBrandBrush}" />
-                                    <TextBlock x:Uid="ConfigPanel_PasswordLabel"
-                                               Style="{StaticResource CaptionTextStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               VerticalAlignment="Center" />
-                                </StackPanel>
-                                <Grid ColumnSpacing="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <PasswordBox Grid.Column="0"
-                                                 x:Name="PasswordInput"
-                                                 x:Uid="ConfigPanel_PasswordPlaceholder"
-                                                 PasswordChanged="OnPasswordChanged" />
-                                    <ToggleButton Grid.Column="1"
-                                                  x:Name="RevealButton"
-                                                  x:Uid="ConfigPanel_PasswordRevealButton"
-                                                  Style="{StaticResource IconToggleButtonStyle}"
-                                                  MinWidth="32" MinHeight="32"
-                                                  Padding="4"
-                                                  Checked="OnRevealToggled"
-                                                  Unchecked="OnRevealToggled">
+                                <!-- Split size -->
+                                <StackPanel Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                                                  Glyph="&#xE7B3;"
-                                                  FontSize="{StaticResource IconSizeS}" />
-                                    </ToggleButton>
-                                </Grid>
-                                <CheckBox x:Name="UseAes256Check"
-                                          x:Uid="ConfigPanel_UseAes256"
-                                          IsChecked="True"
-                                          IsEnabled="False"
-                                          MinHeight="0" />
-                            </StackPanel>
+                                                  Glyph="&#xE8C6;"
+                                                  FontSize="12"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource OtterzipBrandBrush}" />
+                                        <TextBlock x:Uid="ConfigPanel_SplitLabel"
+                                                   Style="{StaticResource CaptionTextStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <ComboBox x:Name="SplitCombo"
+                                              HorizontalAlignment="Stretch"
+                                              SelectedIndex="0"
+                                              SelectionChanged="OnSplitChanged">
+                                        <ComboBoxItem x:Uid="ConfigPanel_SplitNone" Tag="0" />
+                                        <ComboBoxItem x:Uid="ConfigPanel_Split10Mb" Tag="10485760" />
+                                        <ComboBoxItem x:Uid="ConfigPanel_Split100Mb" Tag="104857600" />
+                                        <ComboBoxItem x:Uid="ConfigPanel_Split700Mb" Tag="734003200" />
+                                        <ComboBoxItem x:Uid="ConfigPanel_Split1Gb" Tag="1073741824" />
+                                        <ComboBoxItem x:Uid="ConfigPanel_Split47Gb" Tag="5046586573" />
+                                        <ComboBoxItem x:Uid="ConfigPanel_SplitCustom" Tag="-1" />
+                                    </ComboBox>
+                                </StackPanel>
 
-                            <!-- Bottom checkboxes — Tag carries the SettingsService key
-                                 so each change persists to the same store the Settings
-                                 dialog reads from. -->
-                            <StackPanel Spacing="2">
-                                <StackPanel>
-                                    <CheckBox x:Name="ExcludeMetaCheck"
-                                              x:Uid="ConfigPanel_ExcludeSystemMeta"
+                                <!-- Password + AES-256 -->
+                                <StackPanel Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                  Glyph="&#xE192;"
+                                                  FontSize="12"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{ThemeResource OtterzipBrandBrush}" />
+                                        <TextBlock x:Uid="ConfigPanel_PasswordLabel"
+                                                   Style="{StaticResource CaptionTextStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Grid ColumnSpacing="6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <PasswordBox Grid.Column="0"
+                                                     x:Name="PasswordInput"
+                                                     x:Uid="ConfigPanel_PasswordPlaceholder"
+                                                     PasswordChanged="OnPasswordChanged" />
+                                        <ToggleButton Grid.Column="1"
+                                                      x:Name="RevealButton"
+                                                      x:Uid="ConfigPanel_PasswordRevealButton"
+                                                      Style="{StaticResource IconToggleButtonStyle}"
+                                                      MinWidth="32" MinHeight="32"
+                                                      Padding="4"
+                                                      Checked="OnRevealToggled"
+                                                      Unchecked="OnRevealToggled">
+                                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                                      Glyph="&#xE7B3;"
+                                                      FontSize="{StaticResource IconSizeS}" />
+                                        </ToggleButton>
+                                    </Grid>
+                                    <CheckBox x:Name="UseAes256Check"
+                                              x:Uid="ConfigPanel_UseAes256"
+                                              IsChecked="True"
+                                              IsEnabled="False"
+                                              MinHeight="0" />
+                                </StackPanel>
+
+                                <!-- Bottom checkboxes -->
+                                <StackPanel Spacing="2">
+                                    <StackPanel>
+                                        <CheckBox x:Name="ExcludeMetaCheck"
+                                                  x:Uid="ConfigPanel_ExcludeSystemMeta"
+                                                  MinHeight="0"
+                                                  Tag="Settings_ExcludeSystemMetadata"
+                                                  Checked="OnAdvancedToggle"
+                                                  Unchecked="OnAdvancedToggle" />
+                                        <TextBlock x:Uid="ConfigPanel_ExcludeSystemMetaSub"
+                                                   Style="{StaticResource CaptionTextStyle}"
+                                                   Margin="28,0,0,2"
+                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="VerifyCheck"
+                                              x:Uid="ConfigPanel_VerifyAfterCompress"
                                               MinHeight="0"
-                                              Tag="Settings_ExcludeSystemMetadata"
+                                              Tag="Settings_VerifyAfterCompress"
                                               Checked="OnAdvancedToggle"
                                               Unchecked="OnAdvancedToggle" />
-                                    <TextBlock x:Uid="ConfigPanel_ExcludeSystemMetaSub"
-                                               Style="{StaticResource CaptionTextStyle}"
-                                               Margin="28,0,0,2"
-                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <CheckBox x:Name="DeleteSourceCheck"
+                                              x:Uid="ConfigPanel_DeleteSourceAfter"
+                                              MinHeight="0"
+                                              Tag="Settings_DeleteSourceAfterCompress"
+                                              Checked="OnAdvancedToggle"
+                                              Unchecked="OnAdvancedToggle" />
+                                    <CheckBox x:Name="SeparatelyCheck"
+                                              x:Uid="ConfigPanel_CompressSeparately"
+                                              MinHeight="0"
+                                              Tag="Settings_CompressSeparately"
+                                              Checked="OnAdvancedToggle"
+                                              Unchecked="OnAdvancedToggle" />
                                 </StackPanel>
-                                <CheckBox x:Name="VerifyCheck"
-                                          x:Uid="ConfigPanel_VerifyAfterCompress"
-                                          MinHeight="0"
-                                          Tag="Settings_VerifyAfterCompress"
-                                          Checked="OnAdvancedToggle"
-                                          Unchecked="OnAdvancedToggle" />
-                                <CheckBox x:Name="DeleteSourceCheck"
-                                          x:Uid="ConfigPanel_DeleteSourceAfter"
-                                          MinHeight="0"
-                                          Tag="Settings_DeleteSourceAfterCompress"
-                                          Checked="OnAdvancedToggle"
-                                          Unchecked="OnAdvancedToggle" />
-                                <CheckBox x:Name="SeparatelyCheck"
-                                          x:Uid="ConfigPanel_CompressSeparately"
-                                          MinHeight="0"
-                                          Tag="Settings_CompressSeparately"
-                                          Checked="OnAdvancedToggle"
-                                          Unchecked="OnAdvancedToggle" />
                             </StackPanel>
-                        </StackPanel>
-                    </Flyout>
-                </DropDownButton.Flyout>
-            </DropDownButton>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+            </StackPanel>
 
-            <Button Grid.Column="4"
-                    x:Name="SettingsChip"
+            <!-- Top-right chip: Settings gear -->
+            <Button x:Name="SettingsChip"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="12"
                     Style="{StaticResource IconButtonStyle}"
                     x:Uid="Main_SettingsButton"
                     Click="OnSettingsChipClick"
@@ -197,39 +216,8 @@
                           Glyph="&#xE713;"
                           FontSize="{StaticResource IconSizeS}" />
             </Button>
-        </Grid>
 
-        <!-- ================================================================ -->
-        <!--  Row 1 · Drop hint canvas                                        -->
-        <!-- ================================================================ -->
-        <Border x:Name="DropHintCard"
-                Grid.Row="1"
-                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="12"
-                Padding="20"
-                Tapped="OnDropHintTapped"
-                PointerEntered="OnCardPointerEntered"
-                PointerExited="OnCardPointerExited">
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="8">
-                <Image Source="ms-appx:///Assets/ShellMascot.png"
-                       Width="96" Height="96"
-                       Opacity="0.92"
-                       HorizontalAlignment="Center" />
-                <TextBlock x:Uid="ConfigPanel_DropHintTitle"
-                           Style="{StaticResource BodyStrongTextStyle}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center" />
-                <TextBlock x:Uid="ConfigPanel_DropHintSubtitle"
-                           Style="{StaticResource CaptionTextStyle}"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                           HorizontalAlignment="Center"
-                           TextAlignment="Center" />
-            </StackPanel>
-        </Border>
-    </Grid>
+        </Grid>
+    </Border>
 
 </UserControl>

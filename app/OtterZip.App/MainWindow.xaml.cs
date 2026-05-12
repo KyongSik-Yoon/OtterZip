@@ -1377,17 +1377,21 @@ public sealed partial class MainWindow : Window
     /// entry is corrupted — the caller's outer try/catch surfaces the
     /// failure as a normal error toast.
     /// </summary>
-    private async Task MaybeVerifyAsync(string archivePath, CancellationToken ct)
+    private static async Task MaybeVerifyAsync(string archivePath, CancellationToken ct)
     {
         if (!SettingsService.Get<bool>("Settings_VerifyAfterCompress", false))
         {
             return;
         }
-        StatusText.Text = string.Format(CultureInfo.CurrentCulture,
-            _strings.GetString("Main_StatusBarVerifyingFormat/Text"),
-            Path.GetFileName(archivePath));
+        // NOTE: this runs inside JobQueue.Submit's work delegate, which
+        // executes on a thread-pool task. Touching StatusText (or any
+        // XAML element) from here would raise RPC_E_WRONG_THREAD and the
+        // queue would mark the job as Error even though the archive was
+        // written successfully. The verifying-state caption is shown on
+        // the JobCard via StatusText updates from the queue itself; this
+        // helper just gates on the setting and runs the actual CRC scan.
         using var archive = Archive.Open(archivePath);
-        var report = await archive.TestAsync(ct).ConfigureAwait(true);
+        var report = await archive.TestAsync(ct).ConfigureAwait(false);
         if (!report.IsHealthy)
         {
             throw new InvalidDataException(
