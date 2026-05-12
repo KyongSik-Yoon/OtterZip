@@ -24,13 +24,13 @@
             Background="{ThemeResource DropOverlayCardBackgroundBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
-            CornerRadius="10"
-            Padding="10,8"
-            Translation="0,0,12">
+            CornerRadius="12"
+            Padding="12,10"
+            Translation="0,0,4">
         <Border.Shadow>
             <ThemeShadow />
         </Border.Shadow>
-        <StackPanel Spacing="6">
+        <StackPanel Spacing="4">
 
             <!-- Row 1: icon + name + status + cancel -->
             <Grid ColumnSpacing="10">
@@ -92,10 +92,11 @@
             <StackPanel x:Name="ActionsRow"
                         Orientation="Horizontal"
                         Spacing="12"
+                        Margin="36,0,0,0"
                         Visibility="Collapsed">
                 <HyperlinkButton x:Name="OpenFolderButton"
                                  x:Uid="Job_OpenFolder"
-                                 Padding="0,2"
+                                 Padding="0,0"
                                  FontSize="11"
                                  Click="OnOpenFolderClick" />
             </StackPanel>

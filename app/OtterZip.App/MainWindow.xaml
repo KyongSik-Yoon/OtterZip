@@ -82,18 +82,21 @@
              floating cards there. -->
         <Grid Grid.Row="1" x:Name="BodyHost">
             <controls:ConfigPanel x:Name="ConfigPanel" />
-            <controls:ExtractPanel x:Name="ExtractPanel"
-                                   Visibility="Collapsed" />
-            <!-- FloatLayer overlays the canvas. Top margin = chip-strip
-                 area (~56px chip + 12px outer margin) so the gear,
-                 Format combo and "압축 옵션" stay clickable even when
-                 the card stack is tall enough to want the whole body.
-                 The layer scrolls internally once it exceeds its bounds. -->
+            <!-- FloatLayer sits BETWEEN ConfigPanel and ExtractPanel so
+                 the cards overlay the drop canvas (intended) but the
+                 inline extract password input renders above the cards
+                 (otherwise tall stacks would hide the password box).
+                 Top margin = chip-strip area (~56px chip + 12px outer
+                 margin) so the gear, Format combo and "압축 옵션" stay
+                 clickable. The layer scrolls internally once it
+                 exceeds its bounds. -->
             <controls:FloatLayer x:Name="FloatLayerHost"
                                  HorizontalAlignment="Stretch"
                                  VerticalAlignment="Stretch"
                                  Margin="12,68,12,8"
                                  IsHitTestVisible="True" />
+            <controls:ExtractPanel x:Name="ExtractPanel"
+                                   Visibility="Collapsed" />
         </Grid>
 
         <!-- Status bar retained but row-collapsed (see Row 2 definition).

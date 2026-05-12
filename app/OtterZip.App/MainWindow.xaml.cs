@@ -1133,6 +1133,11 @@ public sealed partial class MainWindow : Window
         bool extract = view == AppView.Extract;
         ConfigPanel.Visibility = extract ? Visibility.Collapsed : Visibility.Visible;
         ExtractPanel.Visibility = extract ? Visibility.Visible : Visibility.Collapsed;
+        // Hide the floating cards while ExtractPanel is taking input —
+        // a tall stack would otherwise hide the password box and action
+        // buttons. Jobs keep running in the background; the cards
+        // reappear as soon as the user submits or dismisses.
+        FloatLayerHost.Visibility = extract ? Visibility.Collapsed : Visibility.Visible;
         TrySizeWindow(width: 420, height: extract ? extractHeight : 460);
     }
 
