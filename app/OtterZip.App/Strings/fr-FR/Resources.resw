@@ -53,6 +53,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>Toujours extraire</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>Confirmer avant de quitter pendant une tâche en cours</value></data>
   <data name="Settings_ShowToast.Content"><value>Afficher les notifications</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>Tâches simultanées</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>Nombre de tâches de compression/extraction pouvant s'exécuter en même temps. Prise en compte au prochain lancement.</value></data>
 
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>nouvelle archive</value></data>
 

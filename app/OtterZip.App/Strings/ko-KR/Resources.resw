@@ -102,6 +102,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>항상 추출</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>진행 중 종료 시 확인 묻기</value></data>
   <data name="Settings_ShowToast.Content"><value>알림(Toast) 사용</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>동시 작업 수</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>동시에 진행할 수 있는 압축/추출 작업 개수. 변경은 다음 실행부터 적용됩니다.</value></data>
 
   <!-- Compress password prompt (PR-3) -->
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>새 아카이브</value></data>

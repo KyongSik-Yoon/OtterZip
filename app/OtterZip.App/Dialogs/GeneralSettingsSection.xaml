@@ -29,6 +29,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Language -->
@@ -111,12 +112,37 @@
                       Unchecked="OnToggle"
                       Tag="Settings_ShowToast" />
 
+            <!-- Concurrent jobs (Phase 3 setting surfaced here). The
+                 JobQueue reads this at MainWindow ctor; changes take
+                 effect on the next launch. -->
+            <TextBlock Grid.Row="5" Grid.Column="0"
+                       x:Uid="Settings_ConcurrentJobsLabel"
+                       VerticalAlignment="Center"
+                       Margin="0,8,0,0"
+                       Style="{StaticResource BodyTextStyle}" />
+            <StackPanel Grid.Row="5" Grid.Column="1"
+                        Margin="0,8,0,0"
+                        Spacing="2">
+                <ComboBox x:Name="ConcurrentJobsCombo"
+                          HorizontalAlignment="Stretch"
+                          SelectionChanged="OnConcurrentJobsChanged">
+                    <ComboBoxItem Content="1" Tag="1" />
+                    <ComboBoxItem Content="2" Tag="2" />
+                    <ComboBoxItem Content="3" Tag="3" />
+                    <ComboBoxItem Content="4" Tag="4" />
+                </ComboBox>
+                <TextBlock x:Uid="Settings_ConcurrentJobsSub"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
             <!-- "Quit when all windows closed" 옵션은 트레이 시스템이
                  있어야 의미가 있음. OtterZip은 셸 확장 + 일회성 윈도우
                  패턴이라 트레이 거주 자체를 안 함 — 옵션 제거. -->
 
             <!-- Set as default — Windows ms-settings deep link. -->
-            <Button Grid.Row="5" Grid.ColumnSpan="2"
+            <Button Grid.Row="6" Grid.ColumnSpan="2"
                     x:Uid="Settings_OpenDefaultApps"
                     Margin="0,16,0,0"
                     HorizontalAlignment="Left"

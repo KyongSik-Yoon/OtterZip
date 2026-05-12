@@ -59,6 +59,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>始终解压</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>有任务进行中时退出前确认</value></data>
   <data name="Settings_ShowToast.Content"><value>显示通知</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>并发任务数</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>可同时运行的压缩/解压任务数。重启后生效。</value></data>
 
   <!-- Compress password prompt -->
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>新压缩包</value></data>

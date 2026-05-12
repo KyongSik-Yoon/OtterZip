@@ -53,6 +53,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>Immer entpacken</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>Beim Beenden während laufender Aufgabe bestätigen</value></data>
   <data name="Settings_ShowToast.Content"><value>Benachrichtigungen anzeigen</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>Gleichzeitige Aufträge</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>Wie viele Komprimier-/Extrahier-Aufträge gleichzeitig laufen dürfen. Wird beim nächsten Start angewendet.</value></data>
 
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>neues Archiv</value></data>
 

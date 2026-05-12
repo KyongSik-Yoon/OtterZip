@@ -61,6 +61,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>Always extract</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>Confirm before quitting while a job is running</value></data>
   <data name="Settings_ShowToast.Content"><value>Show toast notifications</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>Concurrent jobs</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>How many compress/extract jobs may run at the same time. Takes effect on next launch.</value></data>
 
   <!-- Compress password prompt (PR-3) -->
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>new archive</value></data>

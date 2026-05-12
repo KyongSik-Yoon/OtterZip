@@ -89,6 +89,11 @@ public sealed partial class GeneralSettingsSection : UserControl
         // sensible OFF semantics — see catalog §3.4 OUT).
         ConfirmExitCheck.IsChecked = SettingsService.Get<bool>("Settings_ConfirmExitWhileBusy", true);
         ShowToastCheck.IsChecked   = SettingsService.Get<bool>("Settings_ShowToast", true);
+
+        // Concurrent jobs — JobQueue reads this at MainWindow ctor.
+        int concurrency = Math.Clamp(
+            SettingsService.Get<int>("Settings_ConcurrentJobs", 1), 1, 4);
+        ConcurrentJobsCombo.SelectedIndex = concurrency - 1;
     }
 
     private void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -130,6 +135,16 @@ public sealed partial class GeneralSettingsSection : UserControl
         if (DefaultActionCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
         {
             SettingsService.Set("Settings_DefaultAction", tag);
+        }
+    }
+
+    private void OnConcurrentJobsChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ConcurrentJobsCombo.SelectedItem is ComboBoxItem item
+            && item.Tag is string tag
+            && int.TryParse(tag, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v))
+        {
+            SettingsService.Set("Settings_ConcurrentJobs", Math.Clamp(v, 1, 4));
         }
     }
 

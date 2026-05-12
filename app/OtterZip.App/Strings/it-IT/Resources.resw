@@ -53,6 +53,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>Estrai sempre</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>Conferma prima di uscire durante un'attività in corso</value></data>
   <data name="Settings_ShowToast.Content"><value>Mostra notifiche</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>Lavori simultanei</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>Quanti lavori di compressione/estrazione possono essere eseguiti contemporaneamente. Si applica al prossimo avvio.</value></data>
 
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>nuovo archivio</value></data>
 

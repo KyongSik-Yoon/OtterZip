@@ -53,6 +53,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>常に解凍</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>処理中の終了時に確認する</value></data>
   <data name="Settings_ShowToast.Content"><value>通知を表示する</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>同時実行数</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>同時に実行できる圧縮/解凍ジョブの数。次回起動時から適用されます。</value></data>
 
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>新しいアーカイブ</value></data>
 

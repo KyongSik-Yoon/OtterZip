@@ -53,6 +53,8 @@
   <data name="Settings_DefaultActionExtract.Content"><value>Всегда извлекать</value></data>
   <data name="Settings_ConfirmExitWhileBusy.Content"><value>Подтверждать выход при выполнении задачи</value></data>
   <data name="Settings_ShowToast.Content"><value>Показывать уведомления</value></data>
+  <data name="Settings_ConcurrentJobsLabel.Text"><value>Одновременные задачи</value></data>
+  <data name="Settings_ConcurrentJobsSub.Text"><value>Сколько задач сжатия/извлечения может выполняться одновременно. Применяется после перезапуска.</value></data>
 
   <data name="PasswordDialog_PlaceholderArchiveLabel.Text"><value>новый архив</value></data>
 
