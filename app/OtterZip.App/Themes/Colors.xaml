@@ -35,6 +35,12 @@
             <Color x:Key="DropOverlayRejectBackgroundColor">#F2FDECEC</Color>
             <Color x:Key="DropOverlayCardBackgroundColor">#FFFFFFFF</Color>
 
+            <!-- JobCard background: card-elevated surface with a touch of
+                 transparency so the canvas / mascot hints behind keep
+                 a little visual presence. Light theme: F0 alpha on near-
+                 white; dark theme: F2 alpha on the elevated surface. -->
+            <Color x:Key="JobCardBackgroundColor">#F0FAFAFA</Color>
+
             <!-- Dropzone -->
             <Color x:Key="DropzoneIdleBorderColor">#33000000</Color>
             <Color x:Key="DropzoneHoverFillColor">#1400B7C3</Color>
@@ -57,6 +63,7 @@
             <SolidColorBrush x:Key="DropOverlayBackgroundBrush" Color="{ThemeResource DropOverlayBackgroundColor}" />
             <SolidColorBrush x:Key="DropOverlayRejectBackgroundBrush" Color="{ThemeResource DropOverlayRejectBackgroundColor}" />
             <SolidColorBrush x:Key="DropOverlayCardBackgroundBrush" Color="{ThemeResource DropOverlayCardBackgroundColor}" />
+            <SolidColorBrush x:Key="JobCardBackgroundBrush" Color="{ThemeResource JobCardBackgroundColor}" />
             <SolidColorBrush x:Key="ArchiveFormatZipBrush" Color="{ThemeResource ArchiveFormatZipColor}" />
             <SolidColorBrush x:Key="ArchiveFormatSevenZBrush" Color="{ThemeResource ArchiveFormatSevenZColor}" />
             <SolidColorBrush x:Key="ArchiveFormatTarBrush" Color="{ThemeResource ArchiveFormatTarColor}" />
@@ -80,6 +87,11 @@
             <Color x:Key="DropOverlayRejectBackgroundColor">#F22A1B1B</Color>
             <Color x:Key="DropOverlayCardBackgroundColor">#FF2D3437</Color>
 
+            <!-- JobCard dark variant — same as the drop-overlay card but
+                 with ~5% transparency so the canvas mascot stays faintly
+                 perceptible behind a stack. -->
+            <Color x:Key="JobCardBackgroundColor">#F22D3437</Color>
+
             <Color x:Key="DropzoneIdleBorderColor">#33FFFFFF</Color>
             <Color x:Key="DropzoneHoverFillColor">#14FFFFFF</Color>
 
@@ -98,6 +110,7 @@
             <SolidColorBrush x:Key="DropOverlayBackgroundBrush" Color="{ThemeResource DropOverlayBackgroundColor}" />
             <SolidColorBrush x:Key="DropOverlayRejectBackgroundBrush" Color="{ThemeResource DropOverlayRejectBackgroundColor}" />
             <SolidColorBrush x:Key="DropOverlayCardBackgroundBrush" Color="{ThemeResource DropOverlayCardBackgroundColor}" />
+            <SolidColorBrush x:Key="JobCardBackgroundBrush" Color="{ThemeResource JobCardBackgroundColor}" />
             <SolidColorBrush x:Key="ArchiveFormatZipBrush" Color="{ThemeResource ArchiveFormatZipColor}" />
             <SolidColorBrush x:Key="ArchiveFormatSevenZBrush" Color="{ThemeResource ArchiveFormatSevenZColor}" />
             <SolidColorBrush x:Key="ArchiveFormatTarBrush" Color="{ThemeResource ArchiveFormatTarColor}" />

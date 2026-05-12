@@ -177,9 +177,11 @@ public sealed class JobQueue : IDisposable
         {
             // Monotonic guard: Progress<T> posts via the thread pool and
             // a late-arriving callback can land AFTER the work delegate's
-            // final doneText set, otherwise the card would show "0%" or
-            // a stale percentage next to its ✓ icon. Ignoring any tick
-            // that would move the bar backwards keeps that race out.
+            // final doneText set. The strict-less guard handled "0%"
+            // stragglers, but an equal 1.0 still slipped past and turned
+            // a "5.79 KB" done caption back into "100%". Once we reach
+            // 1.0 the run is by definition over — drop everything.
+            if (item.Progress >= 1.0) return;
             double clamped = Math.Clamp(p, 0.0, 1.0);
             if (clamped < item.Progress) return;
             item.IsIndeterminate = false;
