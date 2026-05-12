@@ -8,44 +8,33 @@ using Microsoft.UI.Xaml.Media;
 namespace OtterZip.App.UserControls;
 
 /// <summary>
-/// ConfigPanel — Keka-pattern main window body.
+/// ConfigPanel — Concept C canvas + Compress-Options flyout.
 ///
-/// Vertical card stack: Format / Method / Split / Password+AES / four bottom checkboxes.
-/// Public dependency properties expose the user's choices to the host window.
-///
-/// See docs/02-design/design-system.md §3 and docs/02-design/mockup-spec.md S1.
+/// Top strip hosts Format + Compress-Options ▾ + Settings ⚙ as chips.
+/// The drop hint fills the rest. All compress-time tweaks (split,
+/// password+AES, four meta checkboxes) live inside the
+/// CompressOptionsButton's flyout — no expander on the main canvas.
 /// </summary>
 public sealed partial class ConfigPanel : UserControl
 {
-    // Segoe Fluent Icons glyph code points.
-    private const string GlyphLockClosed = "";
-    private const string GlyphLockOpen = "";
-
-    // _strings was used by the retired Method header label (rev 5).
-    // Kept here intentionally? No — analyzer CA1823 flags it. Removed.
-
     /// <summary>Raised when the user clicks the empty drop-hint card.
     /// MainWindow handles the file-picker fallback so the panel stays
     /// decoupled from picker APIs.</summary>
     public event EventHandler? DropHintTapped;
 
     /// <summary>Raised when the user clicks the gear chip in the
-    /// corner-strip. MainWindow opens the Settings surface. Lets the
-    /// panel stay agnostic about whether Settings is a separate window
-    /// (Phase 4) or an inline view (Phase 5).</summary>
+    /// corner-strip. MainWindow opens the Settings surface.</summary>
     public event EventHandler? SettingsRequested;
 
     public ConfigPanel()
     {
         InitializeComponent();
-        // Phase 6+ rev 4: hydrate the panel from saved Settings defaults
-        // before the first paint, so the user sees their preference rather
-        // than the XAML hard-coded fallback. Loaded fires too late — the
-        // user could glance and start a job before defaults applied.
+        // Hydrate the panel from saved Settings defaults before first
+        // paint so the user sees their preference rather than the XAML
+        // hard-coded fallback. Loaded fires too late — the user could
+        // glance and start a job before defaults apply.
         ApplyDefaultsFromSettings();
         ApplyFormatConstraints();
-        AdvancedExpander.IsExpanded =
-            Services.SettingsService.Get<bool>("Settings_AdvancedExpanded", false);
     }
 
     private void OnDropHintTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
@@ -58,18 +47,11 @@ public sealed partial class ConfigPanel : UserControl
         SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnAdvancedExpanderToggled(object sender, object e)
-    {
-        // Persist the expanded state so the user doesn't have to re-open
-        // the panel every session.
-        Services.SettingsService.Set("Settings_AdvancedExpanded", AdvancedExpander.IsExpanded);
-    }
-
     /// <summary>
-    /// Single handler for every checkbox inside the Advanced expander.
-    /// The checkbox's Tag is its <see cref="Services.SettingsService"/> key —
-    /// keeps the panel and Settings dialog in lock-step, since both write
-    /// to the same store.
+    /// Single handler for every checkbox inside the Compress-Options
+    /// flyout. The checkbox's Tag is its
+    /// <see cref="Services.SettingsService"/> key — keeps the panel and
+    /// Settings dialog in lock-step, since both write to the same store.
     /// </summary>
     private void OnAdvancedToggle(object sender, RoutedEventArgs e)
     {
@@ -94,24 +76,17 @@ public sealed partial class ConfigPanel : UserControl
             }
         }
 
-        // Advanced expander checkboxes — keep in lock-step with
+        // Compress-Options flyout checkboxes — keep in lock-step with
         // Settings → Compression so both surfaces show the same state.
-        // Defaults match settings-catalog §3.1 rev 3 (excludeMeta = true,
-        // verify = false, deleteSource = false, separately = false).
         ExcludeMetaCheck.IsChecked   = Services.SettingsService.Get<bool>("Settings_ExcludeSystemMetadata", true);
         VerifyCheck.IsChecked        = Services.SettingsService.Get<bool>("Settings_VerifyAfterCompress", false);
         DeleteSourceCheck.IsChecked  = Services.SettingsService.Get<bool>("Settings_DeleteSourceAfterCompress", false);
         SeparatelyCheck.IsChecked    = Services.SettingsService.Get<bool>("Settings_CompressSeparately", false);
-
-        // Method default — Card 1 was retired in rev 5; the value lives
-        // in Settings → Compression and is read by MainWindow.PlanCompress
-        // directly. Nothing to apply here.
     }
 
     // ============================================================
     //  Format
     // ============================================================
-    /// <summary>Selected archive format identifier ("ZIP" / "7z" / "tar" / "tar.gz" / "tar.xz").</summary>
     public static readonly DependencyProperty SelectedFormatProperty =
         DependencyProperty.Register(
             nameof(SelectedFormat),
@@ -134,14 +109,9 @@ public sealed partial class ConfigPanel : UserControl
         ApplyFormatConstraints();
     }
 
-    // Compression Method removed from the main panel in rev 5 —
-    // see Settings → Compression → Default method (Settings_DefaultMethodIndex).
-    // MainWindow.PlanCompress reads the value directly from SettingsService.
-
     // ============================================================
     //  Split size
     // ============================================================
-    /// <summary>Split size in bytes. 0 = no split, -1 = custom (host should prompt).</summary>
     public static readonly DependencyProperty SplitSizeBytesProperty =
         DependencyProperty.Register(
             nameof(SplitSizeBytes),
@@ -198,23 +168,6 @@ public sealed partial class ConfigPanel : UserControl
     {
         Password = PasswordInput.Password ?? string.Empty;
         bool hasValue = !string.IsNullOrEmpty(Password);
-
-        // Lock-icon state mirrors the password presence so users get a
-        // glance-confirmation that the archive will be encrypted.
-        if (hasValue)
-        {
-            LockIcon.Glyph = GlyphLockClosed;
-            LockIndicator.Foreground = (Brush)Application.Current.Resources["OtterzipBrandBrush"];
-        }
-        else
-        {
-            LockIcon.Glyph = GlyphLockOpen;
-            LockIndicator.Foreground = (Brush)Application.Current.Resources["TextFillColorTertiaryBrush"];
-        }
-
-        // AES-256 only makes sense when there's a password, and only for
-        // formats that support encryption. Container-level disable from
-        // ApplyFormatConstraints wins over this fine-grained toggle.
         if (FormatSupportsPassword(SelectedFormat))
         {
             UseAes256Check.IsEnabled = hasValue;
@@ -228,16 +181,13 @@ public sealed partial class ConfigPanel : UserControl
 
     private void OnRevealToggled(object sender, RoutedEventArgs e)
     {
-        // PasswordRevealMode requires a focus cycle on some Windows builds
-        // for the eye glyph to actually swap; setting it directly is
-        // sufficient for the underlying display.
         PasswordInput.PasswordRevealMode = RevealButton.IsChecked.GetValueOrDefault()
             ? PasswordRevealMode.Visible
             : PasswordRevealMode.Hidden;
     }
 
     // ============================================================
-    //  Bottom checkboxes
+    //  Bottom checkboxes (DependencyProperties)
     // ============================================================
     public static readonly DependencyProperty ExcludeSystemMetaProperty =
         DependencyProperty.Register(
@@ -314,7 +264,6 @@ public sealed partial class ConfigPanel : UserControl
         SplitCombo.IsEnabled = supportsSplit;
         if (!supportsSplit && SplitCombo.SelectedIndex != 0)
         {
-            // Reset to "None" so a hidden non-zero doesn't leak into compress.
             SplitCombo.SelectedIndex = 0;
         }
     }
@@ -326,11 +275,7 @@ public sealed partial class ConfigPanel : UserControl
         format is "ZIP" or "7z";
 
     // ============================================================
-    //  Card hover micro-animation (Phase 6+ rev 5)
-    //
-    //  Subtle accent-tinted border on pointer hover. Fluent's built-in
-    //  card has no hover state by design; we add one here so the user
-    //  gets a tactile confirmation that each card is its own surface.
+    //  Card hover micro-animation
     // ============================================================
     private void OnCardPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {

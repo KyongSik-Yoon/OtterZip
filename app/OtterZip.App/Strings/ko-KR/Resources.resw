@@ -255,6 +255,7 @@
   <!-- Card 3: Password + AES -->
   <data name="ConfigPanel_PasswordLabel.Text"><value>암호:</value></data>
   <data name="ConfigPanel_AdvancedExpander.Header"><value>고급 설정</value></data>
+  <data name="ConfigPanel_CompressOptionsButton.Content"><value>압축 옵션</value></data>
   <data name="ConfigPanel_DropHintTitle.Text"><value>파일을 끌어다 놓으세요</value></data>
   <data name="ConfigPanel_DropHintSubtitle.Text"><value>또는 클릭해서 직접 선택</value></data>
   <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>비밀번호</value></data>

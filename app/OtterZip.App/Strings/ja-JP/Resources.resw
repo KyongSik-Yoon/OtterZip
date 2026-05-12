@@ -184,6 +184,7 @@
 
   <data name="ConfigPanel_PasswordLabel.Text"><value>パスワード:</value></data>
   <data name="ConfigPanel_AdvancedExpander.Header"><value>詳細設定</value></data>
+  <data name="ConfigPanel_CompressOptionsButton.Content"><value>圧縮オプション</value></data>
   <data name="ConfigPanel_DropHintTitle.Text"><value>ファイルをここにドロップ</value></data>
   <data name="ConfigPanel_DropHintSubtitle.Text"><value>またはクリックして選択</value></data>
   <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>パスワード</value></data>

@@ -21,11 +21,15 @@
     mc:Ignorable="d">
 
     <Border x:Name="CardRoot"
-            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            Background="{ThemeResource DropOverlayCardBackgroundBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             CornerRadius="10"
-            Padding="10,8">
+            Padding="10,8"
+            Translation="0,0,12">
+        <Border.Shadow>
+            <ThemeShadow />
+        </Border.Shadow>
         <StackPanel Spacing="6">
 
             <!-- Row 1: icon + name + status + cancel -->

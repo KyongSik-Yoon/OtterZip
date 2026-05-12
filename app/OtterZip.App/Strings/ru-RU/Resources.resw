@@ -184,6 +184,7 @@
 
   <data name="ConfigPanel_PasswordLabel.Text"><value>Пароль:</value></data>
   <data name="ConfigPanel_AdvancedExpander.Header"><value>Дополнительно</value></data>
+  <data name="ConfigPanel_CompressOptionsButton.Content"><value>Параметры сжатия</value></data>
   <data name="ConfigPanel_DropHintTitle.Text"><value>Перетащите файлы сюда</value></data>
   <data name="ConfigPanel_DropHintSubtitle.Text"><value>Или щёлкните, чтобы выбрать вручную</value></data>
   <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>Пароль</value></data>

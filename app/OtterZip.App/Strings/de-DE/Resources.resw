@@ -184,6 +184,7 @@
 
   <data name="ConfigPanel_PasswordLabel.Text"><value>Kennwort:</value></data>
   <data name="ConfigPanel_AdvancedExpander.Header"><value>Erweitert</value></data>
+  <data name="ConfigPanel_CompressOptionsButton.Content"><value>Komprimieroptionen</value></data>
   <data name="ConfigPanel_DropHintTitle.Text"><value>Dateien hier ablegen</value></data>
   <data name="ConfigPanel_DropHintSubtitle.Text"><value>Oder klicken zum manuellen Auswählen</value></data>
   <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>Kennwort</value></data>

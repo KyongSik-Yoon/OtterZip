@@ -184,6 +184,7 @@
 
   <data name="ConfigPanel_PasswordLabel.Text"><value>Password:</value></data>
   <data name="ConfigPanel_AdvancedExpander.Header"><value>Avanzate</value></data>
+  <data name="ConfigPanel_CompressOptionsButton.Content"><value>Opzioni di compressione</value></data>
   <data name="ConfigPanel_DropHintTitle.Text"><value>Trascina i file qui</value></data>
   <data name="ConfigPanel_DropHintSubtitle.Text"><value>O fai clic per scegliere manualmente</value></data>
   <data name="ConfigPanel_PasswordPlaceholder.PlaceholderText"><value>Password</value></data>
