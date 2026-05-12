@@ -850,7 +850,7 @@ public sealed partial class MainWindow : Window
         => PickExtractHeight(ExtractPanel.IsDestinationVisible);
 
     private static int PickExtractHeight(bool showDestination)
-        => showDestination ? 540 : 360;
+        => showDestination ? 420 : 360;
 
     /// <summary>
     /// Run one extract attempt — opens the archive, drives ExtractAllAsync
@@ -990,11 +990,11 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Toggle the body view + resize the window to fit. ConfigPanel is
     /// 460 tall; ExtractPanel sizes between 360 (compact, password-only)
-    /// and 540 (full, with destination row) depending on what the user
+    /// and 420 (full, with destination row) depending on what the user
     /// is being asked to confirm. Callers pass the desired ExtractPanel
     /// height; idle always returns to 460.
     /// </summary>
-    private void SwitchView(AppView view, int extractHeight = 540)
+    private void SwitchView(AppView view, int extractHeight = 420)
     {
         _currentView = view;
         bool extract = view == AppView.Extract;
