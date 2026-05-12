@@ -221,6 +221,35 @@ public sealed class JobQueue : IDisposable
     });
 
     /// <summary>
+    /// Surface a synchronous failure as a ghost JobCard in the Error
+    /// state — no slot acquisition, no work delegate, just a card with
+    /// the message so the user sees what went wrong. Used for failures
+    /// that happen before any real archive work starts (probe failure,
+    /// shell-invoke routing error, drop-classification fault) — the old
+    /// hidden status-bar path silently swallowed these.
+    ///
+    /// Returns the item so the caller can hold a reference if they
+    /// want to dismiss it programmatically.
+    /// </summary>
+    public JobItem ReportError(JobKind kind, string displayName, string message)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(displayName);
+        var item = new JobItem(kind, displayName)
+        {
+            Dispatcher = _ui,
+            State = JobState.Error,
+            StatusText = string.IsNullOrEmpty(message) ? "Error" : message,
+            IsIndeterminate = false,
+        };
+        _ui.TryEnqueue(() =>
+        {
+            Jobs.Add(item);
+            JobSettled?.Invoke(this, item);
+        });
+        return item;
+    }
+
+    /// <summary>
     /// Remove a job from the visible list. Cancels first if still active.
     /// Safe to call from any thread.
     /// </summary>

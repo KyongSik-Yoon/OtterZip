@@ -32,6 +32,15 @@ public sealed class JobItem : INotifyPropertyChanged
     public string? ResultPath { get; set; }
 
     /// <summary>
+    /// Optional path the work consumed. For extract jobs this is the
+    /// archive being extracted — needed by the
+    /// <c>Settings_DeleteArchiveAfterExtract</c> follow-up so the queue
+    /// completion handler knows which file to recycle. Unused for
+    /// compress (source is the input list, not a single file).
+    /// </summary>
+    public string? SourcePath { get; set; }
+
+    /// <summary>
     /// Backing CancellationTokenSource for the work. The queue creates
     /// and disposes it; the card calls Cancel() through
     /// <see cref="RequestCancel"/>.

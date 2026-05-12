@@ -249,9 +249,15 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Hook for JobQueue's JobSettled event — fires on the dispatcher
     /// thread after any terminal transition. Wired in the constructor.
-    /// For now we just bubble Done jobs out as a toast when the user
-    /// has Settings_ShowToast enabled; auto-fade and history reaping
-    /// land in Phase 5.
+    ///
+    /// Successful jobs trigger three opt-in follow-ups, gated by Settings:
+    ///   * Toast notification (<c>Settings_ShowToast</c>, default ON)
+    ///   * Reveal-in-Explorer (<c>Settings_RevealAfter*</c>, default ON)
+    ///   * Recycle source archive after extract
+    ///     (<c>Settings_DeleteArchiveAfterExtract</c>, default OFF)
+    /// All three live in this single hook so the queue's work delegates
+    /// stay focused on the actual archive op — side effects only run
+    /// once per Done transition, never on Error/Cancelled.
     /// </summary>
     private void OnJobSettled(object? sender, JobItem item)
     {
@@ -259,19 +265,72 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
+        TryToastCompletion(item);
+        TryRevealOnCompletion(item);
+        TryRecycleSourceArchive(item);
+    }
+
+    private void TryToastCompletion(JobItem item)
+    {
         try
         {
             string fmt = item.Kind == JobKind.Compress
                 ? _strings.GetString("Main_StatusBarCompressDoneFormat/Text")
                 : _strings.GetString("Main_StatusBarDoneFormat/Text");
             string body = string.Format(CultureInfo.CurrentCulture, fmt,
-                Path.GetFileName(item.ResultPath),
+                Path.GetFileName(item.ResultPath!),
                 item.StatusText ?? string.Empty);
             ToastService.ShowCompletion(item.DisplayName, body);
         }
         catch
         {
             // Toasts are decoration — never let them break the run.
+        }
+    }
+
+    /// <summary>
+    /// Show the result in Explorer when the corresponding "reveal after"
+    /// setting is on. Compress reveals the archive file itself (selected
+    /// in its parent folder); extract reveals the destination folder.
+    /// </summary>
+    private static void TryRevealOnCompletion(JobItem item)
+    {
+        string key = item.Kind == JobKind.Compress
+            ? "Settings_RevealAfterCompress"
+            : "Settings_RevealAfterExtract";
+        if (!SettingsService.Get<bool>(key, true)) return;
+        try
+        {
+            Win32Helper.RevealInExplorer(item.ResultPath!);
+        }
+        catch
+        {
+            // Reveal is a convenience — never let it break the queue.
+        }
+    }
+
+    /// <summary>
+    /// Move the source archive to the Recycle Bin after a successful
+    /// extract when <c>Settings_DeleteArchiveAfterExtract</c> is on. The
+    /// source path is captured at submit time on <see cref="JobItem.SourcePath"/>
+    /// — relying on local state in the work delegate would race the
+    /// completion handler. Compress jobs have no single source archive
+    /// here (their sources are handled inline via
+    /// <c>MaybeRecycleSources</c>), so this branch is extract-only.
+    /// </summary>
+    private static void TryRecycleSourceArchive(JobItem item)
+    {
+        if (item.Kind != JobKind.Extract) return;
+        if (string.IsNullOrEmpty(item.SourcePath)) return;
+        if (!SettingsService.Get<bool>("Settings_DeleteArchiveAfterExtract", false)) return;
+        try
+        {
+            Win32Helper.MoveToRecycleBin(item.SourcePath);
+        }
+        catch
+        {
+            // Recycle is best-effort; file locks / permissions stay out
+            // of the user's face — the extract itself already succeeded.
         }
     }
 
@@ -396,14 +455,15 @@ public sealed partial class MainWindow : Window
             }
             else
             {
-                ShowError(string.Format(CultureInfo.CurrentCulture,
+                string msg = string.Format(CultureInfo.CurrentCulture,
                     _strings.GetString("Main_StatusBarUnknownInvokeFormat"),
-                    request.Verb));
+                    request.Verb);
+                _jobQueue.ReportError(JobKind.Compress, "OtterZip", msg);
             }
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
+            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
         }
     }
 
@@ -513,7 +573,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
+            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
         }
     }
 
@@ -561,7 +621,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
+            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
             return default;
         }
         finally
@@ -837,7 +897,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
+            _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
             return;
         }
 
@@ -882,8 +942,16 @@ public sealed partial class MainWindow : Window
         {
             return false; // stored password didn't work — surface panel
         }
-        catch (OperationCanceledException) { ResetStatus(); return true; }
-        catch (Exception ex) { ShowError(ex.Message); return true; }
+        catch (OperationCanceledException) { return true; }
+        catch (Exception ex)
+        {
+            // Silent path fatal — surface as a JobCard so the user actually
+            // sees the failure (the queue's own error path runs only when
+            // the work delegate inside PerformExtractAsync was reached;
+            // some failures throw before that).
+            _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
+            return true;
+        }
     }
 
     /// <summary>
@@ -918,7 +986,6 @@ public sealed partial class MainWindow : Window
             if (args is null)
             {
                 SwitchView(AppView.Idle);
-                ResetStatus();
                 return;
             }
 
@@ -945,8 +1012,13 @@ public sealed partial class MainWindow : Window
                 ExtractPanel.ShowError(_strings.GetString("Error_WrongPassword/Text"));
                 // continue while-loop for retry
             }
-            catch (OperationCanceledException) { SwitchView(AppView.Idle); ResetStatus(); return; }
-            catch (Exception ex) { SwitchView(AppView.Idle); ShowError(ex.Message); return; }
+            catch (OperationCanceledException) { SwitchView(AppView.Idle); return; }
+            catch (Exception ex)
+            {
+                SwitchView(AppView.Idle);
+                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
+                return;
+            }
         }
     }
 
@@ -979,8 +1051,6 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task PerformExtractAsync(string archivePath, string destination, string? password)
     {
-        _lastExtractDestination = destination;
-        _lastExtractedArchive = archivePath;
         bool destExistedBefore = Directory.Exists(destination);
         bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
 
@@ -989,7 +1059,10 @@ public sealed partial class MainWindow : Window
         // to know whether the run succeeded or hit WrongPassword, so we
         // bridge with a TaskCompletionSource — the work delegate fulfills
         // it before re-throwing for the queue's own state machine.
-        var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath));
+        var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath))
+        {
+            SourcePath = archivePath, // for Settings_DeleteArchiveAfterExtract
+        };
         var done = new TaskCompletionSource<ExtractReport>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _jobQueue.Submit(item, (ct, progress) =>
@@ -1235,7 +1308,10 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void EnqueueBulkExtractJob(string archivePath, string destination, bool preserveMotw)
     {
-        var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath));
+        var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath))
+        {
+            SourcePath = archivePath, // for Settings_DeleteArchiveAfterExtract
+        };
         bool destExistedBefore = Directory.Exists(destination);
 
         _jobQueue.Submit(item, async (ct, progress) =>
@@ -1854,109 +1930,8 @@ public sealed partial class MainWindow : Window
     }
 
     // ============================================================
-    //  Status helpers
+    //  Formatting helpers
     // ============================================================
-    private void ShowExtractDone(ExtractReport report)
-    {
-        string sizeText = FormatByteSize(report.BytesWritten);
-        string fmt = _strings.GetString("Main_StatusBarDoneFormat/Text");
-        StatusText.Text = string.Format(
-            CultureInfo.CurrentCulture, fmt, report.EntriesExtracted, sizeText);
-        StatusProgress.Value = 1.0;
-        StatusProgress.Visibility = Visibility.Collapsed;
-
-        if (SettingsService.Get<bool>("Settings_PlaySoundOnExtract", true))
-        {
-            Win32Helper.PlayCompletionSound();
-        }
-        ToastService.ShowCompletion(
-            _strings.GetString("Toast_ExtractTitle/Text"),
-            string.Format(CultureInfo.CurrentCulture,
-                _strings.GetString("Toast_ExtractBodyFormat/Text"),
-                report.EntriesExtracted, sizeText));
-        // Reveal-in-Explorer for extract: ExtractDialog stashes the chosen
-        // destination on _lastExtractDestination — we surface it here. The
-        // dest path lives in the calling stack, not in the report, so the
-        // wiring lands when ExtractAsync caches it.
-        if (SettingsService.Get<bool>("Settings_RevealAfterExtract", true)
-            && _lastExtractDestination is not null)
-        {
-            Win32Helper.RevealInExplorer(_lastExtractDestination);
-        }
-        // Phase 6+ rev 3: recycle the just-extracted archive.
-        if (SettingsService.Get<bool>("Settings_DeleteArchiveAfterExtract", false)
-            && _lastExtractedArchive is not null)
-        {
-            _ = Win32Helper.MoveToRecycleBin(_lastExtractedArchive);
-        }
-    }
-
-    private string? _lastExtractDestination;
-    private string? _lastExtractedArchive;
-
-    private void ShowCompressDone(string destination, ulong bytes)
-    {
-        string sizeText = FormatByteSize(bytes);
-        string fmtMsg = _strings.GetString("Main_StatusBarCompressDoneFormat/Text");
-        StatusText.Text = string.Format(
-            CultureInfo.CurrentCulture, fmtMsg, Path.GetFileName(destination), sizeText);
-        StatusProgress.IsIndeterminate = false;
-        StatusProgress.Visibility = Visibility.Collapsed;
-
-        // Post-completion side effects per Settings (Phase 6+).
-        if (SettingsService.Get<bool>("Settings_PlaySoundOnCompress", true))
-        {
-            Win32Helper.PlayCompletionSound();
-        }
-        if (SettingsService.Get<bool>("Settings_RevealAfterCompress", true))
-        {
-            Win32Helper.RevealInExplorer(destination);
-        }
-        ToastService.ShowCompletion(
-            _strings.GetString("Toast_CompressTitle/Text"),
-            string.Format(CultureInfo.CurrentCulture,
-                _strings.GetString("Toast_CompressBodyFormat/Text"),
-                Path.GetFileName(destination), sizeText));
-        // Source deletion is handled inside CompressAsync where we still
-        // know the source paths — Done is too late to recover them here.
-    }
-
-    private void SetBusyCompressing(string outputFileName)
-    {
-        string fmt = _strings.GetString("Main_StatusBarCompressingFormat/Text");
-        StatusText.Text = string.Format(CultureInfo.CurrentCulture, fmt, outputFileName);
-        StatusProgress.IsIndeterminate = true;
-        StatusProgress.Visibility = Visibility.Visible;
-    }
-
-    private void SetBusy(bool extracting, string fileName)
-    {
-        if (extracting)
-        {
-            string fmt = _strings.GetString("Main_StatusBarExtractingFormat/Text");
-            StatusText.Text = string.Format(CultureInfo.CurrentCulture, fmt, fileName);
-            StatusProgress.Value = 0;
-            StatusProgress.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            StatusProgress.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private void ResetStatus()
-    {
-        StatusText.Text = _strings.GetString("Main_StatusBarIdleText/Text");
-        StatusProgress.Visibility = Visibility.Collapsed;
-    }
-
-    private void ShowError(string message)
-    {
-        string fmt = _strings.GetString("Main_StatusBarErrorFormat/Text");
-        StatusText.Text = string.Format(CultureInfo.CurrentCulture, fmt, message);
-        StatusProgress.Visibility = Visibility.Collapsed;
-    }
-
     private static string FormatByteSize(ulong bytes)
     {
         const ulong KB = 1024;

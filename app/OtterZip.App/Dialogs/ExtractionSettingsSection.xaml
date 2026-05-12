@@ -93,9 +93,12 @@
 
             <Border Margin="0,8,0,0" />
 
+            <!-- Hidden until completion-sound assets land. See the
+                 matching note in CompressionSettingsSection.xaml. -->
             <CheckBox x:Name="PlaySoundOnExtractCheck"
                       x:Uid="Settings_PlaySoundOnExtract"
                       MinHeight="0"
+                      Visibility="Collapsed"
                       Checked="OnToggle"
                       Unchecked="OnToggle"
                       Tag="Settings_PlaySoundOnExtract" />

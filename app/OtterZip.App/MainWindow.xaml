@@ -5,7 +5,8 @@
   - Window-wide drop target: root Grid AllowDrop=True receives DragEnter/Drop
   - ConfigPanel hosts the compression-options card stack
   - DropOverlay covers the client area while a compatible drag is hovering
-  - StatusBar shows a single line of progress / done / error feedback
+  - Per-job feedback lives on floating JobCards inside FloatLayer
+  - Settings gear lives on the ConfigPanel corner chip
   - Mica backdrop applied in code-behind
 
   All user-visible strings via x:Uid; all colors via {ThemeResource}.
@@ -28,12 +29,6 @@
                  buttons are drawn by the OS to the right. -->
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
-            <!-- Row 2 (status bar) retired in Phase 4: feedback now lives
-                 on floating JobCards and the gear moved to ConfigPanel's
-                 corner chip. Kept at 0 height so existing element refs
-                 (StatusText/StatusProgress/SettingsButton) still resolve
-                 — Phase 5 will remove the XAML entirely. -->
-            <RowDefinition Height="0" />
         </Grid.RowDefinitions>
 
         <!-- Right-click menu (window-wide) -->
@@ -124,53 +119,6 @@
             </Border>
         </Grid>
 
-        <!-- Status bar retained but row-collapsed (see Row 2 definition).
-             Elements remain in the visual tree so legacy code-behind
-             refs (StatusText/StatusProgress) keep compiling; Phase 5
-             removes the block. -->
-        <Grid Grid.Row="2"
-              Visibility="Collapsed"
-              Padding="16,8"
-              ColumnSpacing="{StaticResource SpacingSValue}"
-              RowSpacing="4">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <TextBlock x:Name="StatusText"
-                       Grid.Row="0"
-                       Grid.Column="0"
-                       x:Uid="Main_StatusBarIdleText"
-                       VerticalAlignment="Center"
-                       Style="{StaticResource CaptionTextStyle}"
-                       AutomationProperties.LiveSetting="Polite" />
-
-            <Button x:Name="SettingsButton"
-                    Grid.Row="0"
-                    Grid.Column="1"
-                    x:Uid="Main_SettingsButton"
-                    Style="{StaticResource IconButtonStyle}"
-                    Click="OnSettingsButtonClick">
-                <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
-                          Glyph="&#xE713;"
-                          FontSize="{StaticResource IconSizeS}" />
-            </Button>
-
-            <ProgressBar x:Name="StatusProgress"
-                         Grid.Row="1"
-                         Grid.Column="0"
-                         Grid.ColumnSpan="2"
-                         Visibility="Collapsed"
-                         Minimum="0"
-                         Maximum="1.0"
-                         Value="0" />
-        </Grid>
-
         <!-- ============================================================ -->
         <!--  Window-wide drop overlay (covers entire client area)         -->
         <!--  rev 5 polish: nearly opaque tinted backdrop hides the cards  -->
@@ -178,7 +126,6 @@
         <!-- ============================================================ -->
         <Border x:Name="DropOverlay"
                 Grid.Row="1"
-                Grid.RowSpan="2"
                 Visibility="Collapsed"
                 Background="{ThemeResource DropOverlayBackgroundBrush}">
 

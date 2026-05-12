@@ -152,9 +152,15 @@
 
             <Border Margin="0,8,0,0" />
 
+            <!-- Hidden until completion-sound assets land. The checkbox
+                 stays in the visual tree so SettingsService writes from
+                 previous installs are still loaded/saved without churn;
+                 only the user-facing toggle is suppressed. Re-enable by
+                 dropping the Visibility attribute once sounds are wired. -->
             <CheckBox x:Name="PlaySoundOnCompressCheck"
                       x:Uid="Settings_PlaySoundOnCompress"
                       MinHeight="0"
+                      Visibility="Collapsed"
                       Checked="OnToggle"
                       Unchecked="OnToggle"
                       Tag="Settings_PlaySoundOnCompress" />
