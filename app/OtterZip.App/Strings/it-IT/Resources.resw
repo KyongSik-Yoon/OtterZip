@@ -33,6 +33,7 @@
   <data name="ExtractDialog_PasswordLabel.Text"><value>Password</value></data>
   <data name="ExtractDialog_AdvancedToggle.Content"><value>Altra cartella…</value></data>
   <data name="Job_StatusStarting.Text"><value>Avvio…</value></data>
+  <data name="Job_StatusCompressing.Text"><value>Compressione…</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>Annullato</value></data>
   <data name="Job_OpenFolder.Content"><value>Apri cartella</value></data>

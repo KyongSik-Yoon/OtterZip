@@ -1286,7 +1286,31 @@ public sealed partial class MainWindow : Window
 
         _jobQueue.Submit(item, async (ct, progress) =>
         {
-            var report = await RunCompressAsync(plan, sources, password, progress, ct).ConfigureAwait(false);
+            // Compose a phase-aware progress hook: Scanning/Finalizing are
+            // short → discrete percentages so the bar visibly moves.
+            // Writing is the long phase and the native side doesn't yet
+            // expose bytes-processed, so we flip the bar back to
+            // indeterminate during it instead of leaving it stuck at 50%.
+            var phaseProgress = new Progress<ArchiveBuildProgress>(p =>
+            {
+                switch (p.Phase)
+                {
+                    case ArchiveBuildPhase.Scanning:
+                        progress.Report(0.05);
+                        break;
+                    case ArchiveBuildPhase.Writing:
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            item.IsIndeterminate = true;
+                            item.StatusText = _strings.GetString("Job_StatusCompressing/Text");
+                        });
+                        break;
+                    case ArchiveBuildPhase.Finalizing:
+                        progress.Report(0.95);
+                        break;
+                }
+            });
+            var report = await RunCompressAsync(plan, sources, password, phaseProgress, ct).ConfigureAwait(false);
             await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
             MaybeRecycleSources(sources);
 
@@ -1604,7 +1628,7 @@ public sealed partial class MainWindow : Window
         CompressPlan plan,
         IReadOnlyList<string> sources,
         string? password,
-        IProgress<double>? progress,
+        IProgress<ArchiveBuildProgress>? progress,
         CancellationToken ct)
     {
         // Settings toggles read once at the start of a compress job, so
@@ -1613,23 +1637,9 @@ public sealed partial class MainWindow : Window
 
         if (sources.Count == 1 && Directory.Exists(sources[0]))
         {
-            // ArchiveBuildProgress only ships discrete phase events
-            // (Scanning / Writing / Finalizing), not a continuous byte
-            // fraction. Map each phase to a rough percentage so the bar
-            // visibly advances; the per-byte plumbing through the native
-            // builder is a separate follow-up.
-            IProgress<ArchiveBuildProgress>? bridge = progress is null
-                ? null
-                : new Progress<ArchiveBuildProgress>(p => progress.Report(p.Phase switch
-                {
-                    ArchiveBuildPhase.Scanning   => 0.05,
-                    ArchiveBuildPhase.Writing    => 0.50,
-                    ArchiveBuildPhase.Finalizing => 0.95,
-                    _ => 0.0,
-                }));
             return ArchiveBuilder.CreateFromDirectoryAsync(
                 plan.Destination, sources[0], plan.Format, plan.Method,
-                plan.Level, progress: bridge,
+                plan.Level, progress: progress,
                 excludeSystemMetadata: excludeMeta,
                 password: password,
                 cancellationToken: ct);
