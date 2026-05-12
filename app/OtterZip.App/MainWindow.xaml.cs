@@ -1283,49 +1283,87 @@ public sealed partial class MainWindow : Window
     {
         var plan = PlanCompress(sources);
         var item = new JobItem(JobKind.Compress, Path.GetFileName(plan.Destination));
+        _jobQueue.Submit(item, (ct, progress) =>
+            RunCompressWorkAsync(item, plan, sources, password, ct, progress));
+    }
 
-        _jobQueue.Submit(item, async (ct, progress) =>
+    /// <summary>
+    /// Compress work delegate body. Extracted from EnqueueCompressJob so
+    /// the public method stays under the analyzer's 60-line cap.
+    /// </summary>
+    private async Task RunCompressWorkAsync(
+        JobItem item, CompressPlan plan, IReadOnlyList<string> sources,
+        string? password, CancellationToken ct, IProgress<double> progress)
+    {
+        var phaseProgress = new Progress<ArchiveBuildProgress>(p =>
         {
-            // Compose a phase-aware progress hook: Scanning/Finalizing are
-            // short → discrete percentages so the bar visibly moves.
-            // Writing is the long phase and the native side doesn't yet
-            // expose bytes-processed, so we flip the bar back to
-            // indeterminate during it instead of leaving it stuck at 50%.
-            var phaseProgress = new Progress<ArchiveBuildProgress>(p =>
+            switch (p.Phase)
             {
-                switch (p.Phase)
-                {
-                    case ArchiveBuildPhase.Scanning:
-                        progress.Report(0.05);
-                        break;
-                    case ArchiveBuildPhase.Writing:
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
-                            item.IsIndeterminate = true;
-                            item.StatusText = _strings.GetString("Job_StatusCompressing/Text");
-                        });
-                        break;
-                    case ArchiveBuildPhase.Finalizing:
-                        progress.Report(0.95);
-                        break;
-                }
-            });
+                case ArchiveBuildPhase.Scanning:
+                    progress.Report(0.05);
+                    break;
+                case ArchiveBuildPhase.Writing:
+                    // Native side doesn't expose bytes-processed for the
+                    // long Writing phase — flip to indeterminate so the
+                    // bar doesn't look frozen at 50%.
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        item.IsIndeterminate = true;
+                        item.StatusText = _strings.GetString("Job_StatusCompressing/Text");
+                    });
+                    break;
+                case ArchiveBuildPhase.Finalizing:
+                    progress.Report(0.95);
+                    break;
+            }
+        });
+
+        // Surface "취소 중…" instantly when the user clicks X. The native
+        // builder doesn't observe CT mid-write yet, so the real cancel
+        // may not land until the current operation finishes — at least
+        // the user sees the request was registered.
+        string cancellingText = _strings.GetString("Job_StatusCancelling/Text");
+        using var cancellingReg = ct.Register(() =>
+            DispatcherQueue.TryEnqueue(() => item.StatusText = cancellingText));
+
+        try
+        {
             var report = await RunCompressAsync(plan, sources, password, phaseProgress, ct).ConfigureAwait(false);
             await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
             MaybeRecycleSources(sources);
-
-            // Marshal the final visible state onto the UI thread AND wait
-            // for it to flush before letting the queue mark the job Done.
-            // Without this synchronous bridge a fast job can race the
-            // queue's MarkDone enqueue — the State→Done callback runs
-            // before the StatusText handler dispatches, and JobCard
-            // freezes on "시작 중…" even after the archive is finished.
             await DispatchUiAndWaitAsync(() =>
             {
                 item.ResultPath = plan.Destination;
                 item.StatusText = FormatByteSize(report.BytesWritten);
             }).ConfigureAwait(false);
-        });
+        }
+        catch (OperationCanceledException)
+        {
+            // The archive may have been fully written before the cancel
+            // landed — clean it up so the user doesn't see a stale ZIP
+            // from a job they explicitly aborted.
+            TryDeletePartialArchive(plan.Destination);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort cleanup for an archive that was completed natively but
+    /// the user had already cancelled. Silently swallows IO errors — the
+    /// cancellation path runs as a finalizer and shouldn't crash on file
+    /// locks or permission issues.
+    /// </summary>
+    private static void TryDeletePartialArchive(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>

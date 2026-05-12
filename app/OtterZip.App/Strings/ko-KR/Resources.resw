@@ -78,6 +78,7 @@
   <!-- Job cards (Phase 1 — JobQueue floating cards) -->
   <data name="Job_StatusStarting.Text"><value>시작 중…</value></data>
   <data name="Job_StatusCompressing.Text"><value>압축 중…</value></data>
+  <data name="Job_StatusCancelling.Text"><value>취소 중…</value></data>
   <data name="Job_StatusRunningPercent.Text"><value>{0}%</value></data>
   <data name="Job_StatusCancelled.Text"><value>취소됨</value></data>
   <data name="Job_OpenFolder.Content"><value>폴더 열기</value></data>
