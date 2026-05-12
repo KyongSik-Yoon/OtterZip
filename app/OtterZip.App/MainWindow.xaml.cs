@@ -37,7 +37,6 @@ namespace OtterZip.App;
 public sealed partial class MainWindow : Window
 {
     private readonly ResourceLoader _strings;
-    private CancellationTokenSource? _activeCts;
     private readonly JobQueue _jobQueue;
 
     // ============================================================
@@ -254,7 +253,7 @@ public sealed partial class MainWindow : Window
         // Already confirmed once — let the second event through.
         if (_confirmedExit) { TryCloseSubWindows(); return; }
         // No active job — nothing to confirm.
-        if (_activeCts is null && !HasActiveQueueJobs()) { TryCloseSubWindows(); return; }
+        if (!HasActiveQueueJobs()) { TryCloseSubWindows(); return; }
         // User opted out — let it close.
         if (!SettingsService.Get<bool>("Settings_ConfirmExitWhileBusy", true))
         {
@@ -268,12 +267,8 @@ public sealed partial class MainWindow : Window
         bool quit = await PromptExitWhileBusyAsync().ConfigureAwait(true);
         if (quit)
         {
-            // Cancel the in-flight job first, then allow the next close
-            // attempt to pass through unobstructed. Both the legacy
-            // _activeCts path (extract) and any JobQueue card need to
-            // stop so the OS hand-off below doesn't strand work mid-flight.
-            try { _activeCts?.Cancel(); }
-            catch (ObjectDisposedException) { }
+            // Cancel any in-flight queue card so the OS hand-off below
+            // doesn't strand work mid-flight.
             CancelAllQueueJobs();
             _confirmedExit = true;
             TryCloseSubWindows();
@@ -946,44 +941,62 @@ public sealed partial class MainWindow : Window
     {
         _lastExtractDestination = destination;
         _lastExtractedArchive = archivePath;
-
         bool destExistedBefore = Directory.Exists(destination);
+        bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
 
-        await CancelInFlightAsync().ConfigureAwait(true);
-        var cts = new CancellationTokenSource();
-        _activeCts = cts;
-        SetBusy(extracting: true, Path.GetFileName(archivePath));
+        // Phase 2: the actual archive work lives inside a JobQueue card.
+        // The caller (RunExtractPanelLoopAsync or silent path) still needs
+        // to know whether the run succeeded or hit WrongPassword, so we
+        // bridge with a TaskCompletionSource — the work delegate fulfills
+        // it before re-throwing for the queue's own state machine.
+        var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath));
+        var done = new TaskCompletionSource<ExtractReport>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var progress = new Progress<ProgressUpdate>(p =>
-            StatusProgress.Value = Math.Clamp(p.FractionComplete, 0.0, 1.0));
+        _jobQueue.Submit(item, async (ct, progress) =>
+        {
+            try
+            {
+                using var archive = string.IsNullOrEmpty(password)
+                    ? Archive.Open(archivePath)
+                    : Archive.OpenWithPassword(archivePath, password);
 
-        try
-        {
-            bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
-            using var archive = string.IsNullOrEmpty(password)
-                ? Archive.Open(archivePath)
-                : Archive.OpenWithPassword(archivePath, password);
-            var report = await archive
-                .ExtractAllAsync(destination, OverwritePolicy.Always, progress,
-                    preserveZoneIdentifier: preserveMotw, cancellationToken: cts.Token)
-                .ConfigureAwait(true);
-            ShowExtractDone(report);
-        }
-        catch (OtterzipException ex) when (ex.IsWrongPassword)
-        {
-            RollbackPartialExtract(destination, destExistedBefore);
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            RollbackPartialExtract(destination, destExistedBefore);
-            throw;
-        }
-        finally
-        {
-            if (_activeCts == cts) _activeCts = null;
-            cts.Dispose();
-        }
+                // Adapter: ProgressUpdate (rich, archive-side type) → simple
+                // 0..1 fraction the JobQueue card consumes.
+                var progressBridge = new Progress<ProgressUpdate>(p =>
+                    progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
+
+                var report = await archive
+                    .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                        preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
+                    .ConfigureAwait(false);
+
+                item.ResultPath = destination;
+                item.StatusText = string.Format(CultureInfo.CurrentCulture,
+                    _strings.GetString("Main_StatusBarDoneFormat/Text"),
+                    report.EntriesExtracted,
+                    FormatByteSize(report.BytesWritten));
+                done.TrySetResult(report);
+            }
+            catch (OtterzipException ex) when (ex.IsWrongPassword)
+            {
+                RollbackPartialExtract(destination, destExistedBefore);
+                done.TrySetException(ex);
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                RollbackPartialExtract(destination, destExistedBefore);
+                done.TrySetCanceled(ct);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                done.TrySetException(ex);
+                throw;
+            }
+        });
+
+        await done.Task.ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1101,67 +1114,70 @@ public sealed partial class MainWindow : Window
         _pendingExtractTcs = null;
     }
 
-    private async Task ExtractManyAsync(IReadOnlyList<string> archives)
+    private Task ExtractManyAsync(IReadOnlyList<string> archives)
     {
-        // Bulk extract: each archive → its own folder next to itself.
-        // No per-archive prompts; uses sensible defaults (Always overwrite).
-        await CancelInFlightAsync().ConfigureAwait(true);
-        var cts = new CancellationTokenSource();
-        _activeCts = cts;
+        // Bulk extract: each archive becomes its own JobQueue card so the
+        // user sees per-archive progress and per-archive cancel. No batch
+        // password prompt — the queue UI handles errors per-card.
+        string extractLoc = SettingsService.Get<string>("Settings_ExtractLocation", "same");
+        string customDir = SettingsService.Get<string>("Settings_ExtractLocationPath", "");
+        bool useSubfolder = SettingsService.Get<bool>("Settings_AlwaysExtractToSubfolder", true);
+        bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
+        bool useCustom = string.Equals(extractLoc, "custom", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(customDir)
+            && Directory.Exists(customDir);
 
-        try
+        foreach (var archivePath in archives)
         {
-            // Settings driving bulk extract path. Custom location collapses
-            // every archive into siblings inside the chosen folder; subfolder
-            // ON adds a per-archive nesting layer to keep them separated.
-            string extractLoc = SettingsService.Get<string>("Settings_ExtractLocation", "same");
-            string customDir = SettingsService.Get<string>("Settings_ExtractLocationPath", "");
-            bool useSubfolder = SettingsService.Get<bool>("Settings_AlwaysExtractToSubfolder", true);
-            bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
-            bool useCustom = string.Equals(extractLoc, "custom", StringComparison.Ordinal)
-                && !string.IsNullOrWhiteSpace(customDir)
-                && Directory.Exists(customDir);
+            string baseDir = useCustom
+                ? customDir
+                : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
+            string stem = Path.GetFileNameWithoutExtension(archivePath);
+            string dest = useSubfolder ? Path.Combine(baseDir, stem) : baseDir;
+            EnqueueBulkExtractJob(archivePath, dest, preserveMotw);
+        }
+        return Task.CompletedTask;
+    }
 
-            ulong totalBytes = 0;
-            uint totalEntries = 0;
-            foreach (var archivePath in archives)
+    /// <summary>
+    /// Submit one archive's worth of extract work as a JobQueue card.
+    /// Used by the bulk-extract path where there's no password prompt
+    /// in the flow (archives that need a password surface as Error on
+    /// their card, and the user can retry by single-dropping).
+    /// </summary>
+    private void EnqueueBulkExtractJob(string archivePath, string destination, bool preserveMotw)
+    {
+        var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath));
+        bool destExistedBefore = Directory.Exists(destination);
+
+        _jobQueue.Submit(item, async (ct, progress) =>
+        {
+            try
             {
-                cts.Token.ThrowIfCancellationRequested();
-                SetBusy(extracting: true, Path.GetFileName(archivePath));
-                string baseDir = useCustom
-                    ? customDir
-                    : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
-                string stem = Path.GetFileNameWithoutExtension(archivePath);
-                string dest = useSubfolder ? Path.Combine(baseDir, stem) : baseDir;
-                _lastExtractDestination = dest;
-
                 using var archive = Archive.Open(archivePath);
+                var progressBridge = new Progress<ProgressUpdate>(p =>
+                    progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
                 var report = await archive
-                    .ExtractAllAsync(dest, OverwritePolicy.Always, progress: null,
-                        preserveZoneIdentifier: preserveMotw, cancellationToken: cts.Token)
-                    .ConfigureAwait(true);
-                totalBytes += report.BytesWritten;
-                totalEntries += report.EntriesExtracted;
+                    .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                        preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
+                    .ConfigureAwait(false);
+                item.ResultPath = destination;
+                item.StatusText = string.Format(CultureInfo.CurrentCulture,
+                    _strings.GetString("Main_StatusBarDoneFormat/Text"),
+                    report.EntriesExtracted,
+                    FormatByteSize(report.BytesWritten));
             }
-            ShowExtractDone(new ExtractReport
+            catch (OperationCanceledException)
             {
-                EntriesExtracted = totalEntries,
-                BytesWritten = totalBytes,
-            });
-        }
-        catch (OperationCanceledException)
-        {
-            ResetStatus();
-        }
-        catch (Exception ex)
-        {
-            ShowError(ex.Message);
-        }
-        finally
-        {
-            if (_activeCts == cts) _activeCts = null;
-            cts.Dispose();
-        }
+                RollbackPartialExtract(destination, destExistedBefore);
+                throw;
+            }
+            catch (OtterzipException ex) when (ex.IsWrongPassword)
+            {
+                RollbackPartialExtract(destination, destExistedBefore);
+                throw;
+            }
+        });
     }
 
     // ExtractWithPasswordRetryAsync was retired with the inline-panel
@@ -1663,14 +1679,6 @@ public sealed partial class MainWindow : Window
         string fmt = _strings.GetString("Main_StatusBarErrorFormat/Text");
         StatusText.Text = string.Format(CultureInfo.CurrentCulture, fmt, message);
         StatusProgress.Visibility = Visibility.Collapsed;
-    }
-
-    private async Task CancelInFlightAsync()
-    {
-        if (_activeCts is { } previous)
-        {
-            await previous.CancelAsync().ConfigureAwait(true);
-        }
     }
 
     private static string FormatByteSize(ulong bytes)
