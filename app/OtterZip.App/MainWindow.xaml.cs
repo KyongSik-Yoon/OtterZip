@@ -1122,15 +1122,17 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// "여기에 풀기" semantics — always sibling subfolder, ignore the
-    /// Settings_ExtractLocation custom-folder rule (the user explicitly
-    /// chose to extract right next to the archive).
+    /// "여기에 풀기" semantics — standard 7-Zip / WinRAR / Keka
+    /// convention: drop every entry directly into the archive's parent
+    /// folder, no subfolder. This is what makes the button meaningfully
+    /// different from "추출" (which honours Settings_AlwaysExtractToSubfolder
+    /// and Settings_ExtractLocation). No uniqueness suffix here either —
+    /// the destination IS the user's chosen folder; files merging with
+    /// existing siblings is the intended behaviour.
     /// </summary>
     private static string ComputeExtractHerePath(string archivePath)
     {
-        string parent = Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory();
-        string stem = Path.GetFileNameWithoutExtension(archivePath);
-        return EnsureUniqueExtractDirectory(Path.Combine(parent, stem));
+        return Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory();
     }
 
     /// <summary>
