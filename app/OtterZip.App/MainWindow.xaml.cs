@@ -1500,11 +1500,53 @@ public sealed partial class MainWindow : Window
         var (fmt, method, ext) = MapFormatAndMethod(ConfigPanel.SelectedFormat, methodIndex);
         byte level = MapMethodIndexToLevel(methodIndex);
 
+        string destination = EnsureUniqueDestination(Path.Combine(parentDir, $"{stem}{ext}"));
         return new CompressPlan(
-            Destination: Path.Combine(parentDir, $"{stem}{ext}"),
+            Destination: destination,
             Format: fmt,
             Method: method,
             Level: level);
+    }
+
+    /// <summary>
+    /// Avoid silently overwriting an existing archive. Mirrors Windows
+    /// Explorer's "Copy" behaviour: if "foo.zip" exists, return
+    /// "foo (1).zip"; if that exists too, "foo (2).zip"; and so on.
+    /// Handles dotted extensions like ".tar.gz" / ".tar.bz2" / ".tar.xz"
+    /// as a unit so the suffix lands between the stem and the whole
+    /// extension, not between ".tar" and ".gz".
+    ///
+    /// Race note: ConcurrentLimit=1 makes the File.Exists / write pair
+    /// sequential per process. With a higher limit two parallel jobs
+    /// could pick the same unused index — fine for now, revisit if the
+    /// concurrency option is raised by default.
+    /// </summary>
+    private static string EnsureUniqueDestination(string path)
+    {
+        if (!File.Exists(path)) return path;
+        string dir = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+        string nameOnly = Path.GetFileNameWithoutExtension(path);
+        string ext = Path.GetExtension(path);
+        // Stitch back compound .tar.* extensions so the numeric suffix
+        // doesn't split them.
+        if (nameOnly.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(ext, ".gz", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".bz2", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".xz", StringComparison.OrdinalIgnoreCase)))
+        {
+            nameOnly = Path.GetFileNameWithoutExtension(nameOnly);
+            ext = ".tar" + ext;
+        }
+        for (int i = 1; i < 10000; i++)
+        {
+            string candidate = Path.Combine(dir, string.Format(
+                CultureInfo.InvariantCulture, "{0} ({1}){2}", nameOnly, i, ext));
+            if (!File.Exists(candidate)) return candidate;
+        }
+        // Pathological fallback — millions of duplicates. Stamp with a
+        // timestamp rather than blowing the loop.
+        return Path.Combine(dir, string.Format(CultureInfo.InvariantCulture,
+            "{0} ({1:yyyyMMddHHmmss}){2}", nameOnly, DateTime.Now, ext));
     }
 
     /// <summary>
