@@ -7,6 +7,7 @@
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -133,22 +134,58 @@ public sealed class ArchiveBuilder : IDisposable
 
     /// <summary>Append a directory recursively under <paramref name="entryPrefix"/>.</summary>
     public void AddDirectory(string sourceDirectory, string entryPrefix = "")
+        => AddDirectory(sourceDirectory, entryPrefix, progress: null, cancellationToken: default);
+
+    /// <summary>
+    /// Append a directory recursively with optional progress + cancel
+    /// callback. Routes through ABI v7's <c>otterzip_archive_add_directory_p</c>
+    /// — the native side ticks the callback after each file written
+    /// (Phase Scanning once + Writing per-entry) and aborts with
+    /// <see cref="OperationCanceledException"/> as soon as the token is
+    /// signalled OR the progress callback returns non-zero.
+    /// </summary>
+    public void AddDirectory(
+        string sourceDirectory,
+        string entryPrefix,
+        IProgress<ProgressUpdate>? progress,
+        CancellationToken cancellationToken)
     {
         EnsureOpen();
         ArgumentException.ThrowIfNullOrEmpty(sourceDirectory);
-        unsafe
+
+        // Wire IProgress + CT into the unmanaged callback via the same
+        // ProgressBridge the extract path uses. The bridge's
+        // [UnmanagedCallersOnly] trampoline is AOT-safe; GCHandle keeps
+        // the managed instance reachable for the duration of the call.
+        var bridge = new Archive.ProgressBridge(progress, cancellationToken);
+        var bridgeHandle = GCHandle.Alloc(bridge);
+        try
         {
-            var srcBytes = Encoding.UTF8.GetBytes(sourceDirectory);
-            var prefixBytes = Encoding.UTF8.GetBytes(entryPrefix);
-            fixed (byte* sp = srcBytes)
-            fixed (byte* pp = prefixBytes)
+            unsafe
             {
-                int rc = NativeMethods.ArchiveAddDirectory(
-                    _handle,
-                    sp, (nuint)srcBytes.Length,
-                    pp, (nuint)prefixBytes.Length);
-                ThrowIfError(rc);
+                var srcBytes = Encoding.UTF8.GetBytes(sourceDirectory);
+                var prefixBytes = Encoding.UTF8.GetBytes(entryPrefix);
+                fixed (byte* sp = srcBytes)
+                fixed (byte* pp = prefixBytes)
+                {
+                    int rc = NativeMethods.ArchiveAddDirectoryP(
+                        _handle,
+                        sp, (nuint)srcBytes.Length,
+                        pp, (nuint)prefixBytes.Length,
+                        progressCb: &Archive.ProgressBridge.UnmanagedTrampoline,
+                        userData: GCHandle.ToIntPtr(bridgeHandle));
+                    if (rc == -30 /* OperationCanceled */)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        throw new OperationCanceledException("otterzip compress canceled");
+                    }
+                    ThrowIfError(rc);
+                }
             }
+        }
+        finally
+        {
+            bridgeHandle.Free();
         }
     }
 
@@ -172,7 +209,7 @@ public sealed class ArchiveBuilder : IDisposable
         ArchiveFormat format,
         CompressionMethod compression = CompressionMethod.Deflate,
         byte compressionLevel = 5,
-        IProgress<ArchiveBuildProgress>? progress = null,
+        IProgress<ProgressUpdate>? progress = null,
         bool excludeSystemMetadata = true,
         string? password = null,
         CancellationToken cancellationToken = default)
@@ -183,8 +220,6 @@ public sealed class ArchiveBuilder : IDisposable
         return Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report(new ArchiveBuildProgress { Phase = ArchiveBuildPhase.Scanning });
-
             var startTicks = Environment.TickCount64;
 
             using var builder = Create(
@@ -193,12 +228,12 @@ public sealed class ArchiveBuilder : IDisposable
                 excludeSystemMetadata: excludeSystemMetadata,
                 password: password);
 
-            progress?.Report(new ArchiveBuildProgress { Phase = ArchiveBuildPhase.Writing });
-            builder.AddDirectory(sourceDirectory);
+            // ABI v7: the native side now drives a real Progress sink that
+            // reports entries / bytes per file and checks the cancel
+            // callback after every entry, so we can stop mid-write.
+            builder.AddDirectory(sourceDirectory, entryPrefix: "", progress, cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
-
-            progress?.Report(new ArchiveBuildProgress { Phase = ArchiveBuildPhase.Finalizing });
             builder.Commit();
 
             long elapsed = Environment.TickCount64 - startTicks;

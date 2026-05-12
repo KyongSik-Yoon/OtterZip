@@ -1,5 +1,6 @@
 //! Create / Update FFI surface. See `ffi-api.md` §9.
 
+use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::path::PathBuf;
 
@@ -9,7 +10,12 @@ use zeroize::Zeroizing;
 
 use crate::archive::OtterzipArchive;
 use crate::error::{ErrorCode, OK};
+use crate::extract::{CallbackSink, OtterzipProgressCb, OtterzipProgressView};
 use crate::util::{catch_unwind_to_error, read_optional_utf8, read_utf8};
+// OtterzipProgressView is unused at module level (only referenced inside
+// extract::CallbackSink); the explicit import documents the C ABI tie.
+#[allow(unused_imports)]
+use OtterzipProgressView as _UsedFromExtract;
 
 /// Mirror of the C `OtterzipCreateOptions` struct (ffi-api.md §9.1).
 ///
@@ -177,6 +183,55 @@ pub extern "C" fn otterzip_archive_add_directory(
             prefix,
             None,
         )?;
+        Ok(OK)
+    })
+}
+
+/// Like [`otterzip_archive_add_directory`] but with a progress + cancel
+/// callback that fires once per pre-scan and again after every file
+/// written. The callback returns `0` to continue or non-zero to abort,
+/// matching the extract-side convention (`ffi-api.md` §8.2).
+///
+/// ABI v7 addition — older callers continue to call the no-callback
+/// variant. The handle and string arguments stay binary-compatible.
+#[no_mangle]
+pub extern "C" fn otterzip_archive_add_directory_p(
+    handle: *mut OtterzipArchive,
+    src_dir_utf8: *const c_char,
+    src_dir_len: usize,
+    entry_prefix_utf8: *const c_char,
+    entry_prefix_len: usize,
+    progress_cb: OtterzipProgressCb,
+    user_data: *mut c_void,
+) -> i32 {
+    catch_unwind_to_error(|| {
+        if handle.is_null() {
+            return Ok(ErrorCode::InvalidHandle as i32);
+        }
+        // SAFETY: forwarded.
+        let src = unsafe { read_utf8(src_dir_utf8, src_dir_len)? };
+        let prefix =
+            unsafe { read_optional_utf8(entry_prefix_utf8, entry_prefix_len)? }.unwrap_or("");
+        // SAFETY: handle from `otterzip_archive_create`.
+        let archive = unsafe { &mut *handle.cast::<Archive>() };
+
+        match progress_cb {
+            Some(cb) => {
+                let mut sink = CallbackSink::new(cb, user_data);
+                archive.add_dir_recursive(
+                    PathBuf::from(src),
+                    prefix,
+                    Some(&mut sink),
+                )?;
+            }
+            None => {
+                archive.add_dir_recursive::<fn(&otterzip_core::Progress) -> bool>(
+                    PathBuf::from(src),
+                    prefix,
+                    None,
+                )?;
+            }
+        }
         Ok(OK)
     })
 }

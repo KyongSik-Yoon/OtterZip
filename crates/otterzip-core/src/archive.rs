@@ -251,11 +251,12 @@ impl Archive {
         let exclude_meta = self.exclude_system_metadata;
         let writer = self.writer_mut()?;
         let src = src.as_ref();
-        // Sprint 4 keeps progress hooks coarse — we tick once per
-        // `add_dir_recursive_through` invocation, which is fine for a
-        // first compress flow. Per-file progress wires in S5.
-        let _ = progress;
-        add_dir_recursive_through(writer, src, entry_prefix, false, exclude_meta)
+        // Promote the user's `&mut S` (statically typed) into a
+        // `&mut dyn ProgressSink` so the helper can stay format-agnostic
+        // without dragging the generic parameter through every layer.
+        let sink_dyn: Option<&mut dyn ProgressSink> =
+            progress.map(|s| s as &mut dyn ProgressSink);
+        add_dir_recursive_through(writer, src, entry_prefix, false, exclude_meta, sink_dyn)
     }
 
     /// Finalise a write-mode archive and flush to disk. Consumes the handle.

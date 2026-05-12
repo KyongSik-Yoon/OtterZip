@@ -1295,40 +1295,35 @@ public sealed partial class MainWindow : Window
         JobItem item, CompressPlan plan, IReadOnlyList<string> sources,
         string? password, CancellationToken ct, IProgress<double> progress)
     {
-        var phaseProgress = new Progress<ArchiveBuildProgress>(p =>
+        // ABI v7: the native side reports byte/entry counts per file.
+        // Convert that to a 0..1 fraction for the JobCard's progress
+        // bar and swap the "Starting…" caption for "Compressing…" once
+        // the first Writing tick lands.
+        string compressingText = _strings.GetString("Job_StatusCompressing/Text");
+        var richProgress = new Progress<ProgressUpdate>(p =>
         {
-            switch (p.Phase)
+            double frac = p.FractionComplete;
+            if (frac > 0)
             {
-                case ArchiveBuildPhase.Scanning:
-                    progress.Report(0.05);
-                    break;
-                case ArchiveBuildPhase.Writing:
-                    // Native side doesn't expose bytes-processed for the
-                    // long Writing phase — flip to indeterminate so the
-                    // bar doesn't look frozen at 50%.
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
-                        item.IsIndeterminate = true;
-                        item.StatusText = _strings.GetString("Job_StatusCompressing/Text");
-                    });
-                    break;
-                case ArchiveBuildPhase.Finalizing:
-                    progress.Report(0.95);
-                    break;
+                progress.Report(Math.Clamp(frac, 0.0, 1.0));
+            }
+            if (p.Phase == ProgressPhase.Writing)
+            {
+                DispatcherQueue.TryEnqueue(() => item.StatusText = compressingText);
             }
         });
 
-        // Surface "취소 중…" instantly when the user clicks X. The native
-        // builder doesn't observe CT mid-write yet, so the real cancel
-        // may not land until the current operation finishes — at least
-        // the user sees the request was registered.
+        // Cancel feedback: caption flips to "취소 중…" the moment the
+        // user clicks X. Native side observes the CT on the next entry
+        // boundary and throws OperationCanceledException; the catch
+        // below cleans up the partial archive.
         string cancellingText = _strings.GetString("Job_StatusCancelling/Text");
         using var cancellingReg = ct.Register(() =>
             DispatcherQueue.TryEnqueue(() => item.StatusText = cancellingText));
 
         try
         {
-            var report = await RunCompressAsync(plan, sources, password, phaseProgress, ct).ConfigureAwait(false);
+            var report = await RunCompressAsync(plan, sources, password, richProgress, ct).ConfigureAwait(false);
             await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
             MaybeRecycleSources(sources);
             await DispatchUiAndWaitAsync(() =>
@@ -1339,9 +1334,8 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // The archive may have been fully written before the cancel
-            // landed — clean it up so the user doesn't see a stale ZIP
-            // from a job they explicitly aborted.
+            // Native side aborts at the next entry boundary; whatever's
+            // been written so far is incomplete, so delete the file.
             TryDeletePartialArchive(plan.Destination);
             throw;
         }
@@ -1666,7 +1660,7 @@ public sealed partial class MainWindow : Window
         CompressPlan plan,
         IReadOnlyList<string> sources,
         string? password,
-        IProgress<ArchiveBuildProgress>? progress,
+        IProgress<ProgressUpdate>? progress,
         CancellationToken ct)
     {
         // Settings toggles read once at the start of a compress job, so
@@ -1675,6 +1669,8 @@ public sealed partial class MainWindow : Window
 
         if (sources.Count == 1 && Directory.Exists(sources[0]))
         {
+            // ABI v7 path: native reports bytes_processed / entries_processed
+            // per file and honours mid-write cancellation.
             return ArchiveBuilder.CreateFromDirectoryAsync(
                 plan.Destination, sources[0], plan.Format, plan.Method,
                 plan.Level, progress: progress,

@@ -202,6 +202,19 @@ internal static partial class NativeMethods
         byte* entryPrefixUtf8,
         nuint entryPrefixLen);
 
+    // ABI v7 (2026-05-12) — variant with progress + cancel callback.
+    // Mirrors otterzip_archive_extract_all's progress contract: the
+    // callback returns 0 to continue, non-zero to request cancellation.
+    [LibraryImport(Lib, EntryPoint = "otterzip_archive_add_directory_p")]
+    internal static unsafe partial int ArchiveAddDirectoryP(
+        IntPtr handle,
+        byte* srcDirUtf8,
+        nuint srcDirLen,
+        byte* entryPrefixUtf8,
+        nuint entryPrefixLen,
+        delegate* unmanaged[Cdecl]<OtterzipProgressView*, IntPtr, int> progressCb,
+        IntPtr userData);
+
     [LibraryImport(Lib, EntryPoint = "otterzip_archive_commit")]
     internal static partial int ArchiveCommit(IntPtr handle);
 

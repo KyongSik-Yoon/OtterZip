@@ -327,8 +327,10 @@ public sealed class Archive : IDisposable
     /// across the unmanaged callback boundary. AOT requires the trampoline to be
     /// a static <c>UnmanagedCallersOnly</c> method; we recover the bridge via
     /// <see cref="GCHandle"/>.
+    /// Internal so the same bridge can be reused by
+    /// <see cref="ArchiveBuilder"/> for the ABI v7 compress-progress path.
     /// </summary>
-    private sealed class ProgressBridge
+    internal sealed class ProgressBridge
     {
         private readonly IProgress<ProgressUpdate>? _progress;
         private readonly CancellationToken _cancellationToken;

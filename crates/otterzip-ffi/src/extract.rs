@@ -106,12 +106,25 @@ fn overwrite_from_u32(value: u32) -> Result<OverwritePolicy, OtterzipError> {
 /// `*mut c_void` is opaque; the C ABI contract (`ffi-api.md` §0.1 #7)
 /// already requires the caller to handle thread-safety on the user
 /// pointer side, so it's safe to ferry across threads at the Rust layer.
-struct CallbackSink {
-    cb: extern "C" fn(*const OtterzipProgressView, *mut c_void) -> i32,
-    user: *mut c_void,
+pub(crate) struct CallbackSink {
+    pub(crate) cb: extern "C" fn(*const OtterzipProgressView, *mut c_void) -> i32,
+    pub(crate) user: *mut c_void,
     /// Reusable scratch for entry-name CString → keeps the pointer stable
     /// for the duration of one callback invocation.
-    name_buf: Vec<u8>,
+    pub(crate) name_buf: Vec<u8>,
+}
+
+impl CallbackSink {
+    /// Build the adapter directly from a non-NULL C function pointer.
+    /// Used by [`crate::create::otterzip_archive_add_directory_p`] which
+    /// shares the same on-wire protocol but only invokes the callback
+    /// during compress.
+    pub(crate) fn new(
+        cb: extern "C" fn(*const OtterzipProgressView, *mut c_void) -> i32,
+        user: *mut c_void,
+    ) -> Self {
+        Self { cb, user, name_buf: Vec::new() }
+    }
 }
 
 // SAFETY: see doc comment on CallbackSink — the C ABI contract pushes

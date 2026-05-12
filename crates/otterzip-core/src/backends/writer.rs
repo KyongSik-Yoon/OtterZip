@@ -474,13 +474,24 @@ impl ArchiveWriter for TarGzWriterBackend {
 ///
 /// When `exclude_system_metadata` is true, files/folders matching the
 /// [`crate::options::SYSTEM_METADATA_FILES`] / `_FOLDERS` lists are silently
-/// skipped (Phase 6+ — the matching policy lives in [`crate::options::is_system_metadata`]).
+/// skipped (Phase 6+ — the matching policy lives in
+/// [`crate::options::is_system_metadata`]).
+///
+/// When a `progress` sink is supplied, this function:
+///   * pre-walks `src` once to compute `entries_total` / `bytes_total`
+///     (cheap metadata-only traversal) and reports a single
+///     `ProgressPhase::Scanning` tick;
+///   * reports a `ProgressPhase::Writing` tick after each file entry is
+///     added, with cumulative `entries_processed` and `bytes_processed`;
+///   * returns [`OtterzipError::Canceled`] as soon as
+///     [`ProgressSink::update`] returns `false`.
 pub(crate) fn add_dir_recursive_through(
     writer: &mut dyn ArchiveWriter,
     src: &Path,
     entry_prefix: &str,
     follow_symlinks: bool,
     exclude_system_metadata: bool,
+    mut progress: Option<&mut dyn crate::progress::ProgressSink>,
 ) -> Result<()> {
     if !src.exists() {
         return Err(OtterzipError::Io(std::io::Error::new(
@@ -488,7 +499,123 @@ pub(crate) fn add_dir_recursive_through(
             src.display().to_string(),
         )));
     }
-    walk(writer, src, src, entry_prefix, follow_symlinks, exclude_system_metadata)
+
+    // Pre-scan to enable percentage-style progress. Cheap: metadata-only
+    // traversal of the same tree we're about to compress. Skipped when
+    // no sink is attached — saves the second filesystem walk for headless
+    // / API callers that don't care about progress.
+    let (entries_total, bytes_total) = if progress.is_some() {
+        pre_scan(src, follow_symlinks, exclude_system_metadata)?
+    } else {
+        (0, 0)
+    };
+
+    let start = std::time::Instant::now();
+    let mut state = WalkState {
+        entries_processed: 0,
+        bytes_processed: 0,
+        entries_total,
+        bytes_total,
+        start,
+    };
+
+    // Initial "Scanning" tick lets the UI move off 0% instantly so the
+    // user doesn't think the click was lost. Skip when no sink.
+    if let Some(sink) = progress.as_deref_mut() {
+        let snapshot = state.snapshot(crate::progress::ProgressPhase::Scanning, None);
+        if !sink.update(&snapshot) {
+            return Err(OtterzipError::Canceled);
+        }
+    }
+
+    walk(
+        writer,
+        src,
+        src,
+        entry_prefix,
+        follow_symlinks,
+        exclude_system_metadata,
+        &mut state,
+        &mut progress,
+    )
+}
+
+struct WalkState {
+    entries_processed: u32,
+    bytes_processed: u64,
+    entries_total: u32,
+    bytes_total: u64,
+    start: std::time::Instant,
+}
+
+impl WalkState {
+    fn snapshot(
+        &self,
+        phase: crate::progress::ProgressPhase,
+        current_entry: Option<&str>,
+    ) -> crate::progress::Progress {
+        crate::progress::Progress {
+            bytes_processed: self.bytes_processed,
+            bytes_total: self.bytes_total,
+            entries_processed: self.entries_processed,
+            entries_total: self.entries_total,
+            current_entry: current_entry.map(str::to_owned),
+            phase,
+            elapsed: self.start.elapsed(),
+        }
+    }
+}
+
+fn pre_scan(
+    src: &Path,
+    follow_symlinks: bool,
+    exclude_system_metadata: bool,
+) -> Result<(u32, u64)> {
+    let mut entries: u32 = 0;
+    let mut bytes: u64 = 0;
+    pre_scan_visit(src, src, follow_symlinks, exclude_system_metadata, &mut entries, &mut bytes)?;
+    Ok((entries, bytes))
+}
+
+fn pre_scan_visit(
+    root: &Path,
+    current: &Path,
+    follow_symlinks: bool,
+    exclude_system_metadata: bool,
+    entries: &mut u32,
+    bytes: &mut u64,
+) -> Result<()> {
+    if exclude_system_metadata
+        && current != root
+        && crate::options::is_system_metadata(current)
+    {
+        return Ok(());
+    }
+    let meta = if follow_symlinks {
+        std::fs::metadata(current)?
+    } else {
+        std::fs::symlink_metadata(current)?
+    };
+    if meta.is_dir() {
+        for child in std::fs::read_dir(current)? {
+            let child = child?;
+            pre_scan_visit(
+                root,
+                &child.path(),
+                follow_symlinks,
+                exclude_system_metadata,
+                entries,
+                bytes,
+            )?;
+        }
+        return Ok(());
+    }
+    if meta.file_type().is_symlink() && !follow_symlinks {
+        return Ok(());
+    }
+    *entries = entries.saturating_add(1);
+    *bytes = bytes.saturating_add(meta.len());
+    Ok(())
 }
 
 fn walk(
@@ -498,6 +625,8 @@ fn walk(
     entry_prefix: &str,
     follow_symlinks: bool,
     exclude_system_metadata: bool,
+    state: &mut WalkState,
+    progress: &mut Option<&mut dyn crate::progress::ProgressSink>,
 ) -> Result<()> {
     // Skip OS-noise files/folders before any I/O. We exempt the root itself
     // so `add_dir_recursive("$RECYCLE.BIN", ...)` stays a deliberate
@@ -523,7 +652,16 @@ fn walk(
         }
         for child in std::fs::read_dir(current)? {
             let child = child?;
-            walk(writer, root, &child.path(), entry_prefix, follow_symlinks, exclude_system_metadata)?;
+            walk(
+                writer,
+                root,
+                &child.path(),
+                entry_prefix,
+                follow_symlinks,
+                exclude_system_metadata,
+                state,
+                progress,
+            )?;
         }
         return Ok(());
     }
@@ -536,6 +674,19 @@ fn walk(
     let file = File::open(current)?;
     let mut reader = BufReader::new(file);
     writer.add_entry(&entry_name, &mut reader, Some(meta.len()), false)?;
+
+    state.entries_processed = state.entries_processed.saturating_add(1);
+    state.bytes_processed = state.bytes_processed.saturating_add(meta.len());
+
+    if let Some(sink) = progress.as_deref_mut() {
+        let snapshot = state.snapshot(
+            crate::progress::ProgressPhase::Writing,
+            Some(&entry_name),
+        );
+        if !sink.update(&snapshot) {
+            return Err(OtterzipError::Canceled);
+        }
+    }
     Ok(())
 }
 

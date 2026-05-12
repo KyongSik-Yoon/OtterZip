@@ -30,8 +30,9 @@ pub use archive::{
     otterzip_detect_format, otterzip_detect_format_bytes, OtterzipArchive,
 };
 pub use create::{
-    otterzip_archive_add_directory, otterzip_archive_add_file, otterzip_archive_commit,
-    otterzip_archive_create, otterzip_archive_rollback, OtterzipCreateOptions,
+    otterzip_archive_add_directory, otterzip_archive_add_directory_p, otterzip_archive_add_file,
+    otterzip_archive_commit, otterzip_archive_create, otterzip_archive_rollback,
+    OtterzipCreateOptions,
 };
 pub use error::ErrorCode;
 pub use extract::{
@@ -56,7 +57,11 @@ use std::os::raw::c_char;
 /// `exclude_system_metadata: u8`. Backwards-compatible with v5 callers
 /// (uninitialised tail reads as 0 = "include everything", matching the
 /// previous unconditional behavior).
-const ABI_VERSION: u32 = 6;
+///
+/// v7 (2026-05-12, Phase 6+): adds `otterzip_archive_add_directory_p` —
+/// progress + cancel-aware variant of `_add_directory`. The original
+/// no-callback symbol is preserved unchanged.
+const ABI_VERSION: u32 = 7;
 
 /// Returns a pointer to a null-terminated static version string.
 ///

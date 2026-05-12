@@ -50,6 +50,27 @@ typedef struct {
 } OtterzipCreateOptions;
 
 /**
+ * Mirror of `OtterzipProgressView` from `ffi-api.md` §8.2. Passed by const
+ * pointer to the C callback.
+ */
+typedef struct {
+  uint64_t bytes_processed;
+  uint64_t bytes_total;
+  uint32_t entries_processed;
+  uint32_t entries_total;
+  const char *current_entry_utf8;
+  size_t current_entry_len;
+  uint32_t phase;
+  uint64_t elapsed_ms;
+} OtterzipProgressView;
+
+/**
+ * C function pointer type for progress reporting. Returns 0 to continue,
+ * non-zero (typically negative) to request cancellation.
+ */
+typedef int32_t (*OtterzipProgressCb)(const OtterzipProgressView *progress, void *user_data);
+
+/**
  * Mirror of the C `OtterzipExtractOptions` struct. Field order and types
  * **must** match `ffi-api.md` §8.1; cbindgen reproduces this struct in the
  * generated header so any change here is an ABI change.
@@ -93,27 +114,6 @@ typedef struct {
   const char *entry_filter_utf8;
   size_t entry_filter_len;
 } OtterzipExtractOptions;
-
-/**
- * Mirror of `OtterzipProgressView` from `ffi-api.md` §8.2. Passed by const
- * pointer to the C callback.
- */
-typedef struct {
-  uint64_t bytes_processed;
-  uint64_t bytes_total;
-  uint32_t entries_processed;
-  uint32_t entries_total;
-  const char *current_entry_utf8;
-  size_t current_entry_len;
-  uint32_t phase;
-  uint64_t elapsed_ms;
-} OtterzipProgressView;
-
-/**
- * C function pointer type for progress reporting. Returns 0 to continue,
- * non-zero (typically negative) to request cancellation.
- */
-typedef int32_t (*OtterzipProgressCb)(const OtterzipProgressView *progress, void *user_data);
 
 /**
  * Mirror of `OtterzipExtractReport`.
@@ -280,6 +280,23 @@ int32_t otterzip_archive_add_directory(OtterzipArchive *handle,
                                        size_t src_dir_len,
                                        const char *entry_prefix_utf8,
                                        size_t entry_prefix_len);
+
+/**
+ * Like [`otterzip_archive_add_directory`] but with a progress + cancel
+ * callback that fires once per pre-scan and again after every file
+ * written. The callback returns `0` to continue or non-zero to abort,
+ * matching the extract-side convention (`ffi-api.md` §8.2).
+ *
+ * ABI v7 addition — older callers continue to call the no-callback
+ * variant. The handle and string arguments stay binary-compatible.
+ */
+int32_t otterzip_archive_add_directory_p(OtterzipArchive *handle,
+                                         const char *src_dir_utf8,
+                                         size_t src_dir_len,
+                                         const char *entry_prefix_utf8,
+                                         size_t entry_prefix_len,
+                                         OtterzipProgressCb progress_cb,
+                                         void *user_data);
 
 /**
  * Finalise the archive on disk. Consumes the handle — caller must not
