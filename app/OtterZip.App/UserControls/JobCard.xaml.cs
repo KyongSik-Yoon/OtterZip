@@ -145,6 +145,9 @@ public sealed partial class JobCard : UserControl
         // for fast jobs even after the archive is fully written).
         NameText.Text = _item.DisplayName;
         StatusTextEl.Text = _item.StatusText ?? string.Empty;
+        // ErrorRow is opt-in per state — clear it here and the Error
+        // case below re-shows it with the live message.
+        ErrorRow.Visibility = Visibility.Collapsed;
         switch (_item.State)
         {
             case JobState.Queued:
@@ -182,13 +185,30 @@ public sealed partial class JobCard : UserControl
                 IconGlyph.Foreground = Resource("TextFillColorTertiaryBrush");
                 break;
             case JobState.Error:
-                IconGlyph.Glyph = GlyphWarning;
-                ProgressEl.Visibility = Visibility.Collapsed;
-                ActionsRow.Visibility = Visibility.Collapsed;
-                IconHost.Background = Resource("SystemFillColorCriticalBackgroundBrush");
-                IconGlyph.Foreground = Resource("SystemFillColorCriticalBrush");
+                ApplyErrorState();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Error visual: warning glyph + dedicated multi-line message row
+    /// under the filename. The top-right status caption is cleared so a
+    /// truncated copy of the message doesn't double up against the
+    /// wider ErrorRow underneath.
+    /// </summary>
+    private void ApplyErrorState()
+    {
+        IconGlyph.Glyph = GlyphWarning;
+        ProgressEl.Visibility = Visibility.Collapsed;
+        ActionsRow.Visibility = Visibility.Collapsed;
+        string err = _item!.StatusText ?? string.Empty;
+        StatusTextEl.Text = string.Empty;
+        ErrorRow.Text = err;
+        ErrorRow.Visibility = string.IsNullOrWhiteSpace(err)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        IconHost.Background = Resource("SystemFillColorCriticalBackgroundBrush");
+        IconGlyph.Foreground = Resource("SystemFillColorCriticalBrush");
     }
 
     private static Brush Resource(string key)

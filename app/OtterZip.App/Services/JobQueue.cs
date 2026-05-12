@@ -175,12 +175,16 @@ public sealed class JobQueue : IDisposable
         string percentFormat = Localize("Job_StatusRunningPercent");
         return new Progress<double>(p => _ui.TryEnqueue(() =>
         {
-            // Monotonic guard: Progress<T> posts via the thread pool and
-            // a late-arriving callback can land AFTER the work delegate's
-            // final doneText set. The strict-less guard handled "0%"
-            // stragglers, but an equal 1.0 still slipped past and turned
-            // a "5.79 KB" done caption back into "100%". Once we reach
-            // 1.0 the run is by definition over — drop everything.
+            // Terminal-state guard: late progress callbacks must NOT
+            // overwrite the Done caption ("5.79 KB"), the Cancelled
+            // caption ("취소됨"), or — newly — the Error caption (the
+            // exception message). Multi-layer Progress<T> posts via the
+            // thread pool with no ordering guarantees, so we may see a
+            // "0%" tick land after MarkError has already fired.
+            if (item.State is JobState.Done or JobState.Cancelled or JobState.Error)
+            {
+                return;
+            }
             if (item.Progress >= 1.0) return;
             double clamped = Math.Clamp(p, 0.0, 1.0);
             if (clamped < item.Progress) return;

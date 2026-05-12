@@ -94,7 +94,18 @@
                          CornerRadius="2"
                          IsIndeterminate="True" />
 
-            <!-- Row 3: follow-up actions (Done state only) -->
+            <!-- Row 3a: error message (Error state only). Indented to
+                 match the filename column; wraps so long messages stay
+                 readable instead of being squeezed into the top-right
+                 status column. -->
+            <TextBlock x:Name="ErrorRow"
+                       Style="{StaticResource CaptionTextStyle}"
+                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                       TextWrapping="Wrap"
+                       Margin="36,0,4,0"
+                       Visibility="Collapsed" />
+
+            <!-- Row 3b: follow-up actions (Done state only) -->
             <StackPanel x:Name="ActionsRow"
                         Orientation="Horizontal"
                         Spacing="12"
