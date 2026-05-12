@@ -26,6 +26,19 @@ public sealed partial class ExtractPanel : UserControl
     /// </summary>
     public event EventHandler? PasswordEdited;
 
+    /// <summary>
+    /// Raised when the destination section visibility changes (either
+    /// via Configure or the Advanced toggle). Lets the host re-pick the
+    /// window height to match the current footprint.
+    /// </summary>
+    public event EventHandler? LayoutChanged;
+
+    /// <summary>
+    /// True when the destination row is currently visible. The host uses
+    /// this to choose a compact vs full window height.
+    /// </summary>
+    public bool IsDestinationVisible => DestinationSection.Visibility == Visibility.Visible;
+
     public ExtractPanel()
     {
         InitializeComponent();
@@ -47,17 +60,22 @@ public sealed partial class ExtractPanel : UserControl
     }
 
     /// <summary>
-    /// Reset the panel for a new archive. <paramref name="needsPassword"/>
-    /// surfaces the password row. <paramref name="suggestedDestination"/>
-    /// is the path the host wants pre-filled (typically derived from
-    /// Settings_ExtractLocation rules).
+    /// Reset the panel for a new archive.
+    /// <paramref name="needsPassword"/> surfaces the password row.
+    /// <paramref name="suggestedDestination"/> is the path the host
+    /// wants pre-filled (typically derived from Settings_ExtractLocation
+    /// rules). <paramref name="showDestination"/> controls whether the
+    /// destination row + browse button are visible up-front — false
+    /// shrinks the panel to a compact "just enter your password"
+    /// surface, with an Advanced link to bring the row back.
     /// </summary>
-    public void Configure(string archivePath, string suggestedDestination, bool needsPassword)
+    public void Configure(string archivePath, string suggestedDestination, bool needsPassword, bool showDestination)
     {
         ArchiveNameText.Text = Path.GetFileName(archivePath);
         DestinationField.Text = suggestedDestination;
         PasswordField.Password = "";
         PasswordRow.Visibility = needsPassword ? Visibility.Visible : Visibility.Collapsed;
+        SetDestinationVisible(showDestination);
         ClearError();
         // Focus the password field if encrypted (user likely just wants
         // to type the password and hit Enter); otherwise focus the
@@ -66,7 +84,7 @@ public sealed partial class ExtractPanel : UserControl
         {
             _ = PasswordField.Focus(FocusState.Programmatic);
         }
-        else
+        else if (showDestination)
         {
             _ = DestinationField.Focus(FocusState.Programmatic);
         }
@@ -93,6 +111,27 @@ public sealed partial class ExtractPanel : UserControl
     {
         ErrorText.Text = string.Empty;
         ErrorText.Visibility = Visibility.Collapsed;
+    }
+
+    private void SetDestinationVisible(bool visible)
+    {
+        var target = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (DestinationSection.Visibility == target)
+        {
+            // Still toggle the advanced link in case it drifted.
+            AdvancedToggle.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+            return;
+        }
+        DestinationSection.Visibility = target;
+        AdvancedToggle.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+        LayoutChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnAdvancedToggleClick(object sender, RoutedEventArgs e)
+    {
+        SetDestinationVisible(true);
+        // After expanding, give the user the field they just asked for.
+        _ = DestinationField.Focus(FocusState.Programmatic);
     }
 
     private void OnExtractClick(object sender, RoutedEventArgs e)

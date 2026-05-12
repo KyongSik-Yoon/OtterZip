@@ -88,6 +88,16 @@ public sealed partial class MainWindow : Window
         ExtractPanel.Submitted += OnExtractSubmitted;
         ExtractPanel.Dismissed += OnExtractDismissed;
         ExtractPanel.PasswordEdited += (_, _) => ExtractPanel.ClearError();
+        // Re-fit the window when the Advanced toggle expands the
+        // destination row — keeps the panel from clipping or floating
+        // in dead space.
+        ExtractPanel.LayoutChanged += (_, _) =>
+        {
+            if (_currentView == AppView.Extract)
+            {
+                TrySizeWindow(width: 420, height: PickExtractWindowHeight());
+            }
+        };
 
         // Phase 6+ rev 4: hook AppWindow.Closing so an in-flight job can
         // prompt the user before the window vanishes. WinUI 3 Window.Closed
@@ -739,7 +749,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        await RunExtractPanelLoopAsync(archivePath, suggestedDest, isEncrypted).ConfigureAwait(true);
+        await RunExtractPanelLoopAsync(archivePath, suggestedDest, isEncrypted, forceDialog).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -781,11 +791,18 @@ public sealed partial class MainWindow : Window
     /// Shows the inline ExtractPanel and loops on it until the user
     /// either submits a working extract or cancels. Wrong-password
     /// retries stay inside the same panel — no second dialog ever opens.
+    ///
+    /// <paramref name="forceDialog"/> doubles as <c>showDestination</c>:
+    /// when the user held Ctrl/Alt during the drop they explicitly want
+    /// to pick the destination, otherwise the panel starts in compact
+    /// mode (password-only) and exposes an Advanced link to reveal the
+    /// destination row on demand.
     /// </summary>
-    private async Task RunExtractPanelLoopAsync(string archivePath, string suggestedDest, bool isEncrypted)
+    private async Task RunExtractPanelLoopAsync(string archivePath, string suggestedDest, bool isEncrypted, bool forceDialog)
     {
-        SwitchView(AppView.Extract);
-        ExtractPanel.Configure(archivePath, suggestedDest, isEncrypted);
+        bool showDestination = forceDialog;
+        SwitchView(AppView.Extract, extractHeight: PickExtractHeight(showDestination));
+        ExtractPanel.Configure(archivePath, suggestedDest, isEncrypted, showDestination);
 
         while (true)
         {
@@ -809,8 +826,12 @@ public sealed partial class MainWindow : Window
             }
             catch (OtterzipException ex) when (ex.IsWrongPassword)
             {
-                SwitchView(AppView.Extract);
-                ExtractPanel.Configure(archivePath, dest, needsPassword: true);
+                // Preserve the user's destination-visibility choice on
+                // retry — if they expanded "Advanced" before submitting,
+                // keep it expanded; otherwise stay compact.
+                showDestination = showDestination || ExtractPanel.IsDestinationVisible;
+                SwitchView(AppView.Extract, extractHeight: PickExtractHeight(showDestination));
+                ExtractPanel.Configure(archivePath, dest, needsPassword: true, showDestination: showDestination);
                 ExtractPanel.ShowError(_strings.GetString("Error_WrongPassword/Text"));
                 // continue while-loop for retry
             }
@@ -818,6 +839,18 @@ public sealed partial class MainWindow : Window
             catch (Exception ex) { SwitchView(AppView.Idle); ShowError(ex.Message); return; }
         }
     }
+
+    /// <summary>
+    /// Window height for the ExtractPanel in its current footprint.
+    /// Compact mode (password-only) shrinks well below the idle config
+    /// panel; full mode needs the destination row plus the action bar
+    /// to clear the status strip below.
+    /// </summary>
+    private int PickExtractWindowHeight()
+        => PickExtractHeight(ExtractPanel.IsDestinationVisible);
+
+    private static int PickExtractHeight(bool showDestination)
+        => showDestination ? 540 : 360;
 
     /// <summary>
     /// Run one extract attempt — opens the archive, drives ExtractAllAsync
@@ -956,16 +989,18 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Toggle the body view + resize the window to fit. ConfigPanel is
-    /// 460 tall; ExtractPanel needs ~540 to comfortably surface the
-    /// password row without clipping action buttons.
+    /// 460 tall; ExtractPanel sizes between 360 (compact, password-only)
+    /// and 540 (full, with destination row) depending on what the user
+    /// is being asked to confirm. Callers pass the desired ExtractPanel
+    /// height; idle always returns to 460.
     /// </summary>
-    private void SwitchView(AppView view)
+    private void SwitchView(AppView view, int extractHeight = 540)
     {
         _currentView = view;
         bool extract = view == AppView.Extract;
         ConfigPanel.Visibility = extract ? Visibility.Collapsed : Visibility.Visible;
         ExtractPanel.Visibility = extract ? Visibility.Visible : Visibility.Collapsed;
-        TrySizeWindow(width: 420, height: extract ? 540 : 460);
+        TrySizeWindow(width: 420, height: extract ? extractHeight : 460);
     }
 
     /// <summary>

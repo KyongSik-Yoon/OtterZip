@@ -2,11 +2,11 @@
 <!--
   Inline extract-config panel.
 
-  Layout strategy: outer 2-row Grid — content (top, fills) + action row
-  (bottom, pinned). Inside the content row a StackPanel groups title +
-  destination + password + error so they stack naturally at the top
-  without requiring a separate "*"-sized spacer row that swallows visual
-  weight even when collapsed.
+  Layout strategy: a single Auto-sized StackPanel centered vertically
+  inside the host. The panel grows or shrinks with its own contents
+  (compact mode = password-only; full mode = destination + password),
+  and the host window picks its target height from RunExtractPanelLoop
+  so we never reserve dead vertical space.
 
   All user-visible strings via x:Uid; all colors via {ThemeResource}.
 -->
@@ -18,49 +18,48 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource SpacingL}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <StackPanel Padding="{StaticResource SpacingL}"
+                Spacing="{StaticResource SpacingSValue}"
+                VerticalAlignment="Center">
 
-        <!-- ============================================================
-             Content area — stacks naturally at the top.
-             ============================================================ -->
-        <StackPanel Grid.Row="0"
-                    Spacing="{StaticResource SpacingSValue}"
-                    VerticalAlignment="Top">
+        <!-- Title row: archive filename + close (×). The filename is the
+             only thing that varies per archive; we keep it on BodyText
+             weight (down from Subtitle) so it doesn't dominate small
+             dialogs. The close button is a quiet icon-only action. -->
+        <Grid ColumnSpacing="{StaticResource SpacingSValue}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Grid.Column="0"
+                      Glyph="&#xE7B8;"
+                      FontSize="14"
+                      VerticalAlignment="Center"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="ArchiveNameText"
+                       Grid.Column="1"
+                       Style="{StaticResource BodyStrongTextStyle}"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+            <Button x:Name="CloseButton"
+                    Grid.Column="2"
+                    Style="{StaticResource IconButtonStyle}"
+                    AutomationProperties.Name="Close"
+                    Click="OnCloseClick">
+                <FontIcon Glyph="&#xE711;" FontSize="14" />
+            </Button>
+        </Grid>
 
-            <!-- Title row: archive filename + close (×). The filename is
-                 the only thing that varies per archive so it gets the
-                 SubtitleTextStyle weight; the close button is a quiet
-                 icon-only secondary action. -->
-            <Grid ColumnSpacing="{StaticResource SpacingSValue}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="ArchiveNameText"
-                           Grid.Column="0"
-                           Style="{StaticResource SubtitleTextStyle}"
-                           TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" />
-                <Button x:Name="CloseButton"
-                        Grid.Column="1"
-                        Style="{StaticResource IconButtonStyle}"
-                        AutomationProperties.Name="Close"
-                        Click="OnCloseClick">
-                    <FontIcon Glyph="&#xE711;" FontSize="14" />
-                </Button>
-            </Grid>
-
-            <!-- Destination label sits a bit closer to its input below
-                 (Margin trims the parent StackPanel spacing for this
-                 pairing only). -->
+        <!-- Destination section. Visibility flipped from code-behind via
+             Configure(showDestination). Collapsed by default in compact
+             mode (encrypted drop without Ctrl); the "Advanced" toggle
+             below brings it back. -->
+        <StackPanel x:Name="DestinationSection"
+                    Spacing="{StaticResource SpacingXSValue}">
             <TextBlock x:Uid="ExtractDialog_DestinationLabel"
                        Style="{StaticResource CaptionTextStyle}"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       Margin="0,8,0,-4" />
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             <Grid ColumnSpacing="{StaticResource SpacingXSValue}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MinWidth="180" />
@@ -75,66 +74,73 @@
                         MinWidth="92"
                         Click="OnBrowseClick" />
             </Grid>
-
-            <!-- Password row (hidden unless encrypted). Lock glyph +
-                 PasswordBox in a single row reads as one affordance.
-                 PlaceholderText is set from code-behind because the
-                 resw entry uses .Text suffix and PasswordBox lacks
-                 that property. -->
-            <Grid x:Name="PasswordRow"
-                  ColumnSpacing="{StaticResource SpacingSValue}"
-                  Visibility="Collapsed">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <FontIcon Grid.Column="0"
-                          Glyph="&#xE72E;"
-                          FontSize="14"
-                          VerticalAlignment="Center"
-                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <PasswordBox x:Name="PasswordField"
-                             Grid.Column="1"
-                             PasswordChanged="OnPasswordFieldChanged" />
-            </Grid>
-
-            <!-- Error caption (wrong password retry, etc). Collapsed
-                 takes zero vertical space so the layout stays tight. -->
-            <TextBlock x:Name="ErrorText"
-                       Style="{StaticResource CaptionTextStyle}"
-                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                       TextWrapping="Wrap"
-                       Visibility="Collapsed" />
         </StackPanel>
 
-        <!-- ============================================================
-             Action row — pinned to the bottom of the panel.
-             ============================================================ -->
-        <Grid Grid.Row="1"
-              ColumnSpacing="{StaticResource SpacingSValue}"
-              Margin="0,12,0,0">
+        <!-- "Advanced" link reveals the destination section in compact
+             mode. Auto-hides itself once the section is shown. -->
+        <HyperlinkButton x:Name="AdvancedToggle"
+                         x:Uid="ExtractDialog_AdvancedToggle"
+                         Padding="0,2"
+                         Visibility="Collapsed"
+                         Click="OnAdvancedToggleClick" />
+
+        <!-- Password section (hidden unless encrypted). A small lock +
+             "Password" caption pair labels the box, matching the
+             destination label style above. PasswordBox.PlaceholderText
+             is set from code-behind because the resw entry uses .Text
+             suffix and PasswordBox lacks a Text property. -->
+        <StackPanel x:Name="PasswordRow"
+                    Spacing="{StaticResource SpacingXSValue}"
+                    Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <FontIcon Glyph="&#xE72E;"
+                          FontSize="12"
+                          VerticalAlignment="Center"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Uid="ExtractDialog_PasswordLabel"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+            <PasswordBox x:Name="PasswordField"
+                         PasswordChanged="OnPasswordFieldChanged" />
+        </StackPanel>
+
+        <!-- Error caption (wrong password retry, etc). Collapsed takes
+             zero vertical space so the layout stays tight. -->
+        <TextBlock x:Name="ErrorText"
+                   Style="{StaticResource CaptionTextStyle}"
+                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed" />
+
+        <!-- Action row. Windows convention: Cancel on the left, primary
+             on the far right. All buttons share MinWidth for visual
+             symmetry. -->
+        <Grid ColumnSpacing="{StaticResource SpacingSValue}"
+              Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="ExtractButton"
-                    Grid.Column="1"
-                    x:Uid="ExtractDialog_PrimaryButton"
-                    Style="{StaticResource AccentButtonStyle}"
-                    MinWidth="84"
-                    Click="OnExtractClick" />
+            <Button x:Name="CancelButton"
+                    Grid.Column="0"
+                    x:Uid="ExtractDialog_CancelButton"
+                    MinWidth="96"
+                    Click="OnCancelClick" />
             <Button x:Name="ExtractHereButton"
                     Grid.Column="2"
                     x:Uid="ExtractDialog_SecondaryButton"
-                    MinWidth="84"
+                    MinWidth="96"
                     Click="OnExtractHereClick" />
-            <Button x:Name="CancelButton"
+            <Button x:Name="ExtractButton"
                     Grid.Column="3"
-                    x:Uid="ExtractDialog_CancelButton"
-                    MinWidth="60"
-                    Click="OnCancelClick" />
+                    x:Uid="ExtractDialog_PrimaryButton"
+                    Style="{StaticResource AccentButtonStyle}"
+                    MinWidth="96"
+                    Click="OnExtractClick" />
         </Grid>
-    </Grid>
+    </StackPanel>
 </UserControl>

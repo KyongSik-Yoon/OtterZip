@@ -30,6 +30,8 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Carpeta de destino</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Examinar…</value></data>
+  <data name="ExtractDialog_PasswordLabel.Text"><value>Contraseña</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>Más opciones…</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Configuración</value></data>
   <data name="Settings_TitleLabel.Text"><value>Configuración</value></data>

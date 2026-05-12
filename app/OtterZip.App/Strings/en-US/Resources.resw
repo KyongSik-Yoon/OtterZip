@@ -33,6 +33,8 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Destination folder</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Browse…</value></data>
+  <data name="ExtractDialog_PasswordLabel.Text"><value>Password</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>More options…</value></data>
 
   <!-- Settings Dialog (Phase 6+, 12 items in 4 sections) -->
   <data name="Settings_DialogTitle.Title"><value>Settings</value></data>

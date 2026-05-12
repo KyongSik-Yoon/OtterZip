@@ -30,6 +30,8 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>展開先フォルダー</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>参照…</value></data>
+  <data name="ExtractDialog_PasswordLabel.Text"><value>パスワード</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>詳細設定…</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>設定</value></data>
   <data name="Settings_TitleLabel.Text"><value>設定</value></data>

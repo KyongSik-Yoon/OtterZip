@@ -30,6 +30,8 @@
   <data name="ExtractDialog_DestinationLabel.Text"><value>Dossier de destination</value></data>
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Parcourir…</value></data>
+  <data name="ExtractDialog_PasswordLabel.Text"><value>Mot de passe</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>Plus d'options…</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Paramètres</value></data>
   <data name="Settings_TitleLabel.Text"><value>Paramètres</value></data>
