@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Windows.Storage;
 
@@ -17,6 +18,20 @@ namespace OtterZip.App.Services;
 /// </summary>
 public static class SettingsService
 {
+    /// <summary>
+    /// In-memory session fallback. <see cref="ApplicationData.Current"/> is
+    /// only available when the process has package identity — unpackaged
+    /// dev runs throw <see cref="InvalidOperationException"/> on every
+    /// Get/Set. Without a fallback, writes silently no-op and reads always
+    /// return defaults, so a checked ConfigPanel option would visibly turn
+    /// on but never persist to the next read (e.g.
+    /// Settings_CompressSeparately stayed false even after the user ticked
+    /// the box). This dictionary preserves the user's intent within the
+    /// running session.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, object?> s_fallback =
+        new(StringComparer.Ordinal);
+
     /// <summary>
     /// Fired when any key is written through <see cref="Set{T}"/>. UI hosts
     /// (SettingsWindow sections, ConfigPanel) subscribe to react live —
@@ -40,9 +55,9 @@ public static class SettingsService
                 return direct;
             }
             // bool/int/double/string round-trip: LocalSettings preserves type.
-            // A type mismatch usually means a schema change — fall back to default
-            // rather than throwing, so an old key with the wrong type doesn't
-            // crash the app on startup.
+            // A type mismatch usually means a schema change — fall through
+            // to the in-memory fallback (and then the caller's default),
+            // so an old key with the wrong type doesn't crash on startup.
         }
         catch (InvalidOperationException)
         {
@@ -52,6 +67,10 @@ public static class SettingsService
         {
             // Same root cause — package identity gate, surfaces as COM
             // hresult instead of InvalidOperationException on some builds.
+        }
+        if (s_fallback.TryGetValue(key, out var memVal) && memVal is T memDirect)
+        {
+            return memDirect;
         }
         return defaultValue;
     }
@@ -63,6 +82,11 @@ public static class SettingsService
     public static void Set<T>(string key, T value)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
+        // Always mirror to the in-memory fallback so subsequent Get<T>
+        // calls observe the new value even when LocalSettings isn't
+        // available (unpackaged dev). Cheap when both stores work and
+        // load-bearing when only one does.
+        s_fallback[key] = value;
         try
         {
             // Box T into object — LocalSettings.Values is IPropertySet.
@@ -73,12 +97,11 @@ public static class SettingsService
         }
         catch (InvalidOperationException)
         {
-            // Same fallback path as Get — silent no-op when no store.
-            return;
+            // LocalSettings unavailable — fallback dict already holds the
+            // value, so notify subscribers as if the persist had succeeded.
         }
         catch (System.Runtime.InteropServices.COMException)
         {
-            return;
         }
         Changed?.Invoke(null, new SettingsChangedEventArgs(key));
     }
@@ -90,17 +113,16 @@ public static class SettingsService
     public static void Remove(string key)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
+        s_fallback.TryRemove(key, out _);
         try
         {
             ApplicationData.Current.LocalSettings.Values.Remove(key);
         }
         catch (InvalidOperationException)
         {
-            return;
         }
         catch (System.Runtime.InteropServices.COMException)
         {
-            return;
         }
         Changed?.Invoke(null, new SettingsChangedEventArgs(key));
     }
