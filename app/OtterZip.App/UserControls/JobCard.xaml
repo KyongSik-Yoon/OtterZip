@@ -20,16 +20,22 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Border x:Name="CardRoot"
-            Background="{ThemeResource DropOverlayCardBackgroundBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="12"
-            Padding="12,10"
-            Translation="0,0,24">
-        <Border.Shadow>
-            <ThemeShadow />
-        </Border.Shadow>
+    <!-- ShadowHost sits directly behind CardRoot. We attach a
+         Composition DropShadow in code-behind matching the v2 mockup's
+         CSS rule `0 10px 30px rgba(0,0,0,0.45)` — WinUI's
+         ThemeShadow renders nearly invisible against a dark canvas, so
+         a manual composition shadow is the only way to get the
+         "floating above the surface" feel the mockup advertises. -->
+    <Grid>
+        <Border x:Name="ShadowHost"
+                CornerRadius="12"
+                Background="Transparent" />
+        <Border x:Name="CardRoot"
+                Background="{ThemeResource DropOverlayCardBackgroundBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="12,10">
         <StackPanel Spacing="4">
 
             <!-- Row 1: icon + name + status + cancel -->
@@ -101,5 +107,6 @@
                                  Click="OnOpenFolderClick" />
             </StackPanel>
         </StackPanel>
-    </Border>
+        </Border>
+    </Grid>
 </UserControl>

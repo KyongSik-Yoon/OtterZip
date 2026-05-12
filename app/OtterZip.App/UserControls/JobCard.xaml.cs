@@ -42,6 +42,49 @@ public sealed partial class JobCard : UserControl
     public JobCard()
     {
         InitializeComponent();
+        Loaded += (_, _) => AttachDropShadow();
+        SizeChanged += (_, _) => ResizeDropShadow();
+    }
+
+    private Microsoft.UI.Composition.SpriteVisual? _shadowSprite;
+
+    /// <summary>
+    /// Attach a composition DropShadow under <c>ShadowHost</c>. We pick
+    /// blur / offset / opacity to match the v2 mockup's CSS
+    /// <c>0 10px 30px rgba(0,0,0,0.45)</c>. WinUI's built-in
+    /// <c>ThemeShadow</c> washes out on dark backgrounds and gives the
+    /// card a flat feel; composition lets us control the shadow
+    /// explicitly per design.
+    /// </summary>
+    private void AttachDropShadow()
+    {
+        if (_shadowSprite is not null) return;
+        var rootVisual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+            .GetElementVisual(ShadowHost);
+        var compositor = rootVisual.Compositor;
+
+        var shadow = compositor.CreateDropShadow();
+        shadow.BlurRadius = 28;
+        shadow.Offset = new System.Numerics.Vector3(0, 6, 0);
+        shadow.Opacity = 0.55f;
+        shadow.Color = Microsoft.UI.Colors.Black;
+
+        _shadowSprite = compositor.CreateSpriteVisual();
+        _shadowSprite.Shadow = shadow;
+        _shadowSprite.Size = new System.Numerics.Vector2(
+            (float)ShadowHost.ActualWidth,
+            (float)ShadowHost.ActualHeight);
+
+        Microsoft.UI.Xaml.Hosting.ElementCompositionPreview
+            .SetElementChildVisual(ShadowHost, _shadowSprite);
+    }
+
+    private void ResizeDropShadow()
+    {
+        if (_shadowSprite is null) return;
+        _shadowSprite.Size = new System.Numerics.Vector2(
+            (float)ShadowHost.ActualWidth,
+            (float)ShadowHost.ActualHeight);
     }
 
     /// <summary>
