@@ -160,6 +160,21 @@ internal static partial class NativeMethods
         nuint passwordLen,
         out IntPtr outHandle);
 
+    // ABI v8 — open a split / spanned archive given an ordered list of
+    // volume paths. The native side reassembles every volume into a
+    // virtual byte stream so the standard extract pipeline can walk it
+    // as if it were a single file. See `otterzip_archive_open_multi`
+    // in `crates/otterzip-ffi/src/archive.rs`.
+    [LibraryImport(Lib, EntryPoint = "otterzip_archive_open_multi")]
+    internal static unsafe partial int ArchiveOpenMulti(
+        byte* packedPathsUtf8,
+        nuint packedPathsLen,
+        nuint* pathOffsets,
+        nuint* pathLengths,
+        nuint pathCount,
+        uint mode,
+        out IntPtr outHandle);
+
     [LibraryImport(Lib, EntryPoint = "otterzip_archive_close")]
     internal static partial void ArchiveClose(IntPtr handle);
 

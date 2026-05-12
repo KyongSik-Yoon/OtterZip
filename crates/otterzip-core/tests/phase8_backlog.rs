@@ -88,10 +88,93 @@ fn open_multi_single_file_reports_one_volume() {
     let p = td.path().join("solo.zip");
     build_zip(&p, &[("a.txt", b"x")]);
 
-    let archive = Archive::open_multi(&p, OpenMode::Read).unwrap();
+    let archive = Archive::open_multi_auto(&p, OpenMode::Read).unwrap();
     assert_eq!(archive.volume_count(), Some(1));
     assert_eq!(archive.volumes().len(), 1);
     assert_eq!(archive.volumes()[0].index, 1);
+}
+
+#[test]
+fn open_multi_roundtrip_extracts_split_zip() {
+    // Build a real ZIP, slice its bytes into 5 chunks (.z01..z04 + .zip),
+    // open them as one virtual stream, and verify every entry decodes.
+    // This is the "byte-split" shape that WinRAR / 7-Zip produce when
+    // they're asked to split a ZIP into volumes without container
+    // spanning — the most common case real users see.
+    let td = tempdir().unwrap();
+    // Large enough that even after Deflate compression each volume
+    // ends up non-empty. Random bytes don't compress, so 4 × 8 KiB
+    // entries yield ~32 KiB on disk → easily slices into 5 parts.
+    let mut rng_state: u64 = 0xC0FFEE_DEADBEEF;
+    let mut pseudo = move |n: usize| -> Vec<u8> {
+        let mut v = Vec::with_capacity(n);
+        for _ in 0..n {
+            rng_state = rng_state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            v.push((rng_state >> 33) as u8);
+        }
+        v
+    };
+    let mut original_entries = vec![
+        ("alpha.bin".to_string(), pseudo(8 * 1024)),
+        ("beta.bin".to_string(), pseudo(8 * 1024)),
+        ("gamma/nested.dat".to_string(), pseudo(8 * 1024)),
+        ("delta.bin".to_string(), pseudo(8 * 1024)),
+    ];
+    let single = td.path().join("source.zip");
+    let refs: Vec<(&str, &[u8])> = original_entries
+        .iter()
+        .map(|(n, b)| (n.as_str(), b.as_slice()))
+        .collect();
+    build_zip(&single, &refs);
+
+    let blob = fs::read(&single).unwrap();
+    assert!(blob.len() > 4096, "test fixture too small to split sensibly");
+    let chunk = blob.len() / 5;
+    let stem = "source";
+    let parent = td.path();
+    let mut volumes = Vec::new();
+    // 4 fixed-size mid volumes (.z01..z04), each `chunk` bytes wide.
+    for i in 0..4 {
+        let path = parent.join(format!("{stem}.z{:02}", i + 1));
+        let start = i * chunk;
+        let end = start + chunk;
+        fs::write(&path, &blob[start..end]).unwrap();
+        volumes.push(path);
+    }
+    // Last volume keeps the .zip extension and carries every remaining
+    // byte (which includes the EOCD).
+    let last = parent.join(format!("{stem}.zip"));
+    let tail_start = 4 * chunk;
+    fs::write(&last, &blob[tail_start..]).unwrap();
+    volumes.push(last.clone());
+    // Sanity: bytes round-trip.
+    let recombined: Vec<u8> = volumes
+        .iter()
+        .flat_map(|v| fs::read(v).unwrap())
+        .collect();
+    assert_eq!(recombined, blob, "split + recombine must be byte-identical");
+
+    // Now open via the multi-volume path and extract.
+    let archive = Archive::open_multi(&volumes, OpenMode::Read).unwrap();
+    assert_eq!(archive.volumes().len(), 5);
+    let dest = td.path().join("out");
+    let opts = otterzip_core::options::ExtractOptions {
+        destination: dest.clone(),
+        ..Default::default()
+    };
+    archive
+        .extract_all::<fn(&otterzip_core::Progress) -> bool>(&opts, None)
+        .unwrap();
+
+    // Verify every original entry made it to disk byte-identical.
+    original_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    for (name, body) in &original_entries {
+        let p = dest.join(name);
+        let got = fs::read(&p).unwrap_or_else(|_| panic!("missing extracted entry: {name}"));
+        assert_eq!(&got, body, "entry {name} did not round-trip");
+    }
 }
 
 #[test]

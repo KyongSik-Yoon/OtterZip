@@ -61,7 +61,12 @@ use std::os::raw::c_char;
 /// v7 (2026-05-12, Phase 6+): adds `otterzip_archive_add_directory_p` —
 /// progress + cancel-aware variant of `_add_directory`. The original
 /// no-callback symbol is preserved unchanged.
-const ABI_VERSION: u32 = 7;
+///
+/// v8 (2026-05-13): adds `otterzip_archive_open_multi` — opens a split
+/// / spanned ZIP given an explicit ordered list of volume paths. Backed
+/// by `Archive::open_multi` and the new `MultiVolumeReader` virtual
+/// stream. Single-volume read path is unchanged.
+const ABI_VERSION: u32 = 8;
 
 /// Returns a pointer to a null-terminated static version string.
 ///

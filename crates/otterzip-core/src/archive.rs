@@ -162,17 +162,80 @@ impl Archive {
         })
     }
 
-    /// Open a split archive given the path of its first volume. Phase 8
-    /// G6: discovery only — siblings are listed via `volume_count` /
-    /// `volumes()`, but extraction itself stays on the first-volume
-    /// backend. Cross-volume reading needs format-specific glue
-    /// (ZIP `.z01..zN` / 7z `.7z.001..00N`) that the underlying crates
-    /// don't expose for our feature flags yet; backlog item ↓
-    pub fn open_multi(first_volume: impl AsRef<Path>, mode: OpenMode) -> Result<Self> {
-        let path = first_volume.as_ref();
-        let mut archive = Self::open_inner(path, mode, None)?;
-        archive.volumes = Some(discover_split_volumes(path));
-        Ok(archive)
+    /// Open a split / spanned archive given an ordered list of every
+    /// volume path (disk 0 → last). The volumes are presented to the
+    /// underlying ZIP backend as a single virtual byte stream so the
+    /// central directory and per-entry local headers in the last
+    /// volume can resolve absolute byte positions across the whole
+    /// concatenation. Works for the "split byte-stream" shape of
+    /// spanned ZIPs produced by WinRAR / 7-Zip / Info-ZIP `zip -s`;
+    /// real APPNOTE-spanned archives with `disk_number_start > 0`
+    /// references in the central directory may still trip the upstream
+    /// crate's single-disk assertion (v1.1).
+    ///
+    /// 7z spanning (`name.7z.001..NNN`) is not supported on this path
+    /// yet — `sevenz-rust2` does not expose a multi-volume reader for
+    /// our feature flags. Such inputs return `UnsupportedFormat`.
+    pub fn open_multi(volumes: &[PathBuf], mode: OpenMode) -> Result<Self> {
+        if mode != OpenMode::Read {
+            return Err(OtterzipError::FeatureDisabled(
+                "open_multi() requires OpenMode::Read",
+            ));
+        }
+        let first = match volumes.first() {
+            Some(p) => p.as_path(),
+            None => {
+                return Err(OtterzipError::InvalidArgument(
+                    "open_multi() requires at least one volume",
+                ));
+            }
+        };
+        let format = detect(first)?;
+        match format {
+            ArchiveFormat::Zip | ArchiveFormat::Zipx => {
+                let backend = crate::backends::zip::ZipBackend::open_multi(volumes, None)?;
+                let volumes_meta: Vec<VolumeInfo> = volumes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| VolumeInfo {
+                        index: u32::try_from(i + 1).unwrap_or(u32::MAX),
+                        total: u32::try_from(volumes.len()).ok(),
+                        path: p.clone(),
+                        size_bytes: fs::metadata(p).map(|m| m.len()).unwrap_or(0),
+                    })
+                    .collect();
+                Ok(Self {
+                    path: first.to_path_buf(),
+                    format,
+                    mode,
+                    password: None,
+                    volumes: Some(volumes_meta),
+                    exclude_system_metadata: false,
+                    inner: ArchiveInner::Reader(Box::new(backend)),
+                })
+            }
+            _ => Err(OtterzipError::UnsupportedFormat(Some(format!(
+                "multi-volume read for format {format:?} is not supported (planned for v1.1)"
+            )))),
+        }
+    }
+
+    /// Convenience wrapper over [`Archive::open_multi`] that
+    /// auto-discovers sibling volumes around `first_volume` using the
+    /// extension conventions Rust knows about (ZIP `.z01..zN + .zip`,
+    /// 7z `.7z.001..NNN`). C# already runs its own discovery via
+    /// `SplitArchiveDetector` so the FFI side typically calls
+    /// `open_multi` with an explicit list; this entry point exists for
+    /// direct Rust API consumers and for the round-trip test path.
+    pub fn open_multi_auto(first_volume: impl AsRef<Path>, mode: OpenMode) -> Result<Self> {
+        let first = first_volume.as_ref();
+        let discovered = discover_split_volumes(first);
+        let paths: Vec<PathBuf> = if discovered.is_empty() {
+            vec![first.to_path_buf()]
+        } else {
+            discovered.iter().map(|v| v.path.clone()).collect()
+        };
+        Self::open_multi(&paths, mode)
     }
 
     /// Number of volumes discovered. `Some(1)` when the archive is

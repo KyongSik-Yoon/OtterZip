@@ -10,7 +10,7 @@
 
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read};
+use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
@@ -19,6 +19,7 @@ use zeroize::Zeroizing;
 use zip::ZipArchive;
 
 use crate::archive::ExtractWarning;
+use crate::backends::multi_volume_reader::MultiVolumeReader;
 use crate::backends::{ArchiveBackend, StreamingExtractCtx};
 use crate::entry::{Entry, HostOs};
 use crate::error::{Result, OtterzipError};
@@ -26,7 +27,35 @@ use crate::format::{CompressionMethod, EncryptionMethod};
 use crate::options::OverwritePolicy;
 use crate::progress::{Progress, ProgressPhase};
 
-/// Wrapper around `zip::ZipArchive<BufReader<File>>`.
+/// Reader source for the ZIP backend. Single-file is the common case;
+/// multi-volume presents a sequence of split / spanned volumes as one
+/// virtual byte stream so `zip::ZipArchive` can read across them
+/// without any awareness of disk boundaries.
+pub(crate) enum ZipReader {
+    Single(BufReader<File>),
+    Multi(MultiVolumeReader),
+}
+
+impl Read for ZipReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Single(r) => r.read(buf),
+            Self::Multi(r) => r.read(buf),
+        }
+    }
+}
+
+impl Seek for ZipReader {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        match self {
+            Self::Single(r) => r.seek(pos),
+            Self::Multi(r) => r.seek(pos),
+        }
+    }
+}
+
+/// Wrapper around `zip::ZipArchive` over either a single-file or
+/// multi-volume reader.
 ///
 /// Held behind `Box<dyn ArchiveBackend>` in `Archive`. The inner archive
 /// is wrapped in a `RefCell` because the `zip` crate requires `&mut self`
@@ -35,26 +64,63 @@ use crate::progress::{Progress, ProgressPhase};
 /// being `!Sync` — the doc contract already forbids cross-thread sharing
 /// without a mutex (§5).
 pub(crate) struct ZipBackend {
-    inner: RefCell<ZipArchive<BufReader<File>>>,
+    inner: RefCell<ZipArchive<ZipReader>>,
     /// Held in zeroized memory so the bytes are wiped on drop. We clone
     /// when calling into the `zip` crate's password APIs; the source-of-
     /// truth string lives here and is never logged or formatted.
     password: Option<Zeroizing<String>>,
-    /// Path to the underlying file. Held so worker threads in
+    /// Path to the first / only volume. Held so worker threads in
     /// [`ZipBackend::extract_all_streaming`] can re-open their own
-    /// archive handle for parallel decompression.
+    /// archive handle for parallel decompression (single-volume path
+    /// only — multi-volume always uses the serial extractor since
+    /// re-opening N file handles per worker would defeat the win).
     path: PathBuf,
+    /// True when [`inner`] holds a `ZipReader::Multi` view over a
+    /// spanned / split archive. Gates the parallel-extract path.
+    is_multi_volume: bool,
 }
 
 impl ZipBackend {
     pub(crate) fn open(path: &Path, password: Option<&Zeroizing<String>>) -> Result<Self> {
         let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        let reader = ZipReader::Single(BufReader::new(file));
         let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
         Ok(Self {
             inner: RefCell::new(inner),
             password: password.cloned(),
             path: path.to_path_buf(),
+            is_multi_volume: false,
+        })
+    }
+
+    /// Open a spanned / split ZIP given its volume paths in disk order
+    /// (first volume → last). The volumes are presented to the `zip`
+    /// crate as a single virtual seekable stream via
+    /// [`MultiVolumeReader`], so the central directory and per-entry
+    /// local headers can reference absolute byte positions across the
+    /// concatenation without any disk-boundary awareness in the
+    /// upstream crate.
+    ///
+    /// Limitations: backed by the same parser as single-volume ZIP, so
+    /// archives whose central-directory entries set
+    /// `disk_number_start > 0` may fail with a malformed-archive error
+    /// from the `zip` crate's single-disk assertion — those layouts
+    /// require a v1.1 deeper integration. The "split byte-stream"
+    /// shape produced by WinRAR / 7-Zip / Info-ZIP `zip -s` works.
+    pub(crate) fn open_multi(volumes: &[PathBuf], password: Option<&Zeroizing<String>>) -> Result<Self> {
+        if volumes.is_empty() {
+            return Err(OtterzipError::InvalidArgument(
+                "ZipBackend::open_multi requires at least one volume",
+            ));
+        }
+        let mvr = MultiVolumeReader::open(volumes)?;
+        let reader = ZipReader::Multi(mvr);
+        let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
+        Ok(Self {
+            inner: RefCell::new(inner),
+            password: password.cloned(),
+            path: volumes[0].clone(),
+            is_multi_volume: true,
         })
     }
 
@@ -62,7 +128,7 @@ impl ZipBackend {
     /// when the entry is encrypted. Wrapped here so both `extract_entry`
     /// and `open_entry_stream` get the same decryption discipline.
     fn read_by_name<'a>(
-        archive: &'a mut ZipArchive<BufReader<File>>,
+        archive: &'a mut ZipArchive<ZipReader>,
         name: &str,
         password: Option<&Zeroizing<String>>,
     ) -> Result<zip::read::ZipFile<'a>> {
@@ -184,6 +250,15 @@ impl ArchiveBackend for ZipBackend {
         &self,
         ctx: &mut StreamingExtractCtx<'_>,
     ) -> Option<Result<()>> {
+        // Multi-volume reads can't use the parallel path: each worker
+        // re-opens the archive via `open_local(&self.path)`, which
+        // points at the *first* volume only — single-volume reading
+        // would EOF before reaching any data in vol2..N. The serial
+        // extract loop in archive.rs walks the same backend instance
+        // we built in `open_multi`, so it sees all volumes.
+        if self.is_multi_volume {
+            return None;
+        }
         // Decision rule (per `performance.md` §4): only switch to the
         // parallel path when there's enough work to amortise the
         // per-thread `ZipArchive::new` cost (re-parses the central
@@ -498,9 +573,9 @@ fn set_first_err(
     canceled.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
-fn open_local(path: &Path) -> Result<ZipArchive<BufReader<File>>> {
+fn open_local(path: &Path) -> Result<ZipArchive<ZipReader>> {
     let file = File::open(path)?;
-    let reader = BufReader::new(file);
+    let reader = ZipReader::Single(BufReader::new(file));
     ZipArchive::new(reader).map_err(map_zip_err)
 }
 
@@ -543,7 +618,7 @@ fn resolve_output_path(
 /// `_raw` variant so encrypted entries don't trip the metadata pass — the
 /// caller still has to provide a password to actually *read* their bytes,
 /// but listing them is allowed.
-fn entry_at(archive: &mut ZipArchive<BufReader<File>>, i: usize) -> Result<Entry> {
+fn entry_at(archive: &mut ZipArchive<ZipReader>, i: usize) -> Result<Entry> {
     let zf = archive.by_index_raw(i).map_err(map_zip_err)?;
 
     let path = zf.name().to_string();

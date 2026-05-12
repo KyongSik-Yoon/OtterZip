@@ -939,10 +939,7 @@ public sealed partial class MainWindow : Window
         switch (split.Kind)
         {
             case SplitKind.Spanned:
-                string msg = string.Format(CultureInfo.CurrentCulture,
-                    _strings.GetString("Split_NotSupportedFormat/Text"),
-                    split.Volumes.Count);
-                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), msg);
+                EnqueueSpannedExtractJob(split);
                 return true;
             case SplitKind.RawByteSplit:
                 EnqueueRawByteSplitExtractJob(split);
@@ -1418,6 +1415,85 @@ public sealed partial class MainWindow : Window
     // — by then the native multi-volume reader should subsume this
     // helper entirely.
     // ============================================================
+    // ============================================================
+    //  Spanned ZIP / 7z extract (.z01..zN + .zip / .7z.001..NNN)
+    //
+    // v1.0 (ABI v8): supported for ZIP via Archive.OpenMulti — the
+    // native side stitches all volumes into a virtual byte stream so
+    // the standard extract pipeline can walk them as one archive. 7z
+    // container spanning still falls through with UnsupportedFormat,
+    // which we catch here and surface as the localized "v1.1 예정"
+    // card.
+    // ============================================================
+    private void EnqueueSpannedExtractJob(SplitArchiveDetector.DetectionResult split)
+    {
+        var item = new JobItem(JobKind.Extract, Path.GetFileName(split.EntryPath))
+        {
+            SourcePath = split.EntryPath,
+        };
+        string destination = ResolveExtractDestination(split.EntryPath);
+        bool destExistedBefore = Directory.Exists(destination);
+        bool preserveMotw = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
+
+        _jobQueue.Submit(item, (ct, progress) =>
+            RunSpannedExtractWorkAsync(
+                item, split, destination, destExistedBefore, preserveMotw, ct, progress));
+    }
+
+    /// <summary>
+    /// Work delegate for the spanned (container-aware) extract job.
+    /// Opens every volume via <see cref="Archive.OpenMulti"/> and runs
+    /// the standard extract pipeline. If the native side reports
+    /// UnsupportedFormat (e.g. 7z spanning — not yet implemented), the
+    /// job surfaces a localized "v1.1 예정" message instead of leaking
+    /// the raw native error.
+    /// </summary>
+    private async Task RunSpannedExtractWorkAsync(
+        JobItem item, SplitArchiveDetector.DetectionResult split,
+        string destination, bool destExistedBefore, bool preserveMotw,
+        CancellationToken ct, IProgress<double> progress)
+    {
+        try
+        {
+            using var archive = Archive.OpenMulti(split.Volumes);
+            var progressBridge = new Progress<ProgressUpdate>(p =>
+                progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
+            var report = await archive
+                .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                    preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
+                .ConfigureAwait(false);
+
+            string doneText = string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("Main_StatusBarDoneFormat/Text"),
+                report.EntriesExtracted,
+                FormatByteSize(report.BytesWritten));
+            await DispatchUiAndWaitAsync(() =>
+            {
+                item.ResultPath = destination;
+                item.Progress = 1.0;
+                item.StatusText = doneText;
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            RollbackPartialExtract(destination, destExistedBefore);
+            throw;
+        }
+        catch (OtterzipException ex)
+            when (ex.Message.Contains("UnsupportedFormat", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("not supported", StringComparison.OrdinalIgnoreCase))
+        {
+            // 7z spanning lands here. Convert to the user-facing
+            // "v1.1 예정" card so the message is intelligible regardless
+            // of locale or upstream wording.
+            RollbackPartialExtract(destination, destExistedBefore);
+            string msg = string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("Split_NotSupportedFormat/Text"),
+                split.Volumes.Count);
+            throw new OtterzipException(-1, msg);
+        }
+    }
+
     private void EnqueueRawByteSplitExtractJob(SplitArchiveDetector.DetectionResult split)
     {
         var item = new JobItem(JobKind.Extract, Path.GetFileName(split.EntryPath))

@@ -17,6 +17,7 @@ pub(crate) mod cab;
 pub(crate) mod deb;
 pub(crate) mod iso;
 pub(crate) mod msi;
+pub(crate) mod multi_volume_reader;
 pub(crate) mod sevenz;
 pub(crate) mod single_stream;
 pub(crate) mod tar_family;

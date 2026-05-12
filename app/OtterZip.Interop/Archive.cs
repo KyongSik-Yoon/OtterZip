@@ -49,6 +49,100 @@ public sealed class Archive : IDisposable
         return OpenInternal(path, password);
     }
 
+    /// <summary>
+    /// Open a split / spanned archive given every volume path in disk
+    /// order (volume 1 → last). The native side concatenates the
+    /// volumes into one virtual byte stream so the standard extract
+    /// pipeline can read across them — the user-visible archive has
+    /// the same Format / IsEncrypted / Entries surface as a single
+    /// file.
+    ///
+    /// Currently wired for ZIP / ZIPX volumes only. 7z spanning falls
+    /// through to <see cref="OtterzipException"/> with UnsupportedFormat.
+    /// </summary>
+    public static Archive OpenMulti(IReadOnlyList<string> volumePaths)
+    {
+        ArgumentNullException.ThrowIfNull(volumePaths);
+        if (volumePaths.Count == 0)
+        {
+            throw new ArgumentException("at least one volume required", nameof(volumePaths));
+        }
+        OtterzipLibrary.Initialize();
+
+        var (packed, offsets, lengths) = PackVolumePaths(volumePaths);
+        IntPtr handle = CallArchiveOpenMulti(packed, offsets, lengths, volumePaths.Count);
+
+        if (handle == IntPtr.Zero)
+        {
+            throw new OtterzipException(-1, "otterzip_archive_open_multi returned OK but null handle");
+        }
+        if (NativeMethods.ArchiveFormat(handle, out uint fmt) != 0)
+        {
+            NativeMethods.ArchiveClose(handle);
+            throw new OtterzipException(-1, "otterzip_archive_format failed");
+        }
+        return new Archive(handle, volumePaths[0], (ArchiveFormat)fmt);
+    }
+
+    /// <summary>
+    /// Pack every path into one contiguous UTF-8 buffer and remember
+    /// each path's byte offset + length so the native side can rebuild
+    /// PathBuf entries without scanning for separators. Honours the
+    /// "no null terminator in FFI strings" rule from CLAUDE.md while
+    /// keeping the call AOT-friendly (no per-path AllocHGlobal).
+    /// </summary>
+    private static (byte[] packed, nuint[] offsets, nuint[] lengths) PackVolumePaths(
+        IReadOnlyList<string> volumePaths)
+    {
+        var pathLengths = new nuint[volumePaths.Count];
+        var pathOffsets = new nuint[volumePaths.Count];
+        int totalBytes = 0;
+        var encoded = new byte[volumePaths.Count][];
+        for (int i = 0; i < volumePaths.Count; i++)
+        {
+            string v = volumePaths[i];
+            if (string.IsNullOrEmpty(v))
+            {
+                throw new ArgumentException("volume path is null or empty", nameof(volumePaths));
+            }
+            encoded[i] = Encoding.UTF8.GetBytes(v);
+            pathOffsets[i] = (nuint)totalBytes;
+            pathLengths[i] = (nuint)encoded[i].Length;
+            totalBytes += encoded[i].Length;
+        }
+        var packed = new byte[totalBytes];
+        int writeCursor = 0;
+        for (int i = 0; i < encoded.Length; i++)
+        {
+            Buffer.BlockCopy(encoded[i], 0, packed, writeCursor, encoded[i].Length);
+            writeCursor += encoded[i].Length;
+        }
+        return (packed, pathOffsets, pathLengths);
+    }
+
+    private static IntPtr CallArchiveOpenMulti(byte[] packed, nuint[] offsets, nuint[] lengths, int count)
+    {
+        IntPtr handle;
+        unsafe
+        {
+            fixed (byte* pbuf = packed)
+            fixed (nuint* poff = offsets)
+            fixed (nuint* plen = lengths)
+            {
+                int rc = NativeMethods.ArchiveOpenMulti(
+                    pbuf,
+                    (nuint)packed.Length,
+                    poff,
+                    plen,
+                    (nuint)count,
+                    mode: 0, // OpenMode::Read
+                    out handle);
+                ThrowIfError(rc);
+            }
+        }
+        return handle;
+    }
+
     private static Archive OpenInternal(string path, string? password)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);

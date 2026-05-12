@@ -242,6 +242,31 @@ int32_t otterzip_archive_open(const char *path_utf8,
                               OtterzipArchive **out_handle);
 
 /**
+ * Open a split / spanned archive given an ordered list of volume
+ * paths. Layout (per `schema.md` §4 UTF-8 + explicit-length rule):
+ *
+ *   * `packed_paths_utf8` — one packed UTF-8 buffer holding every
+ *     path's bytes back-to-back (no separators, no null terminators).
+ *   * `packed_paths_len` — total byte length of that buffer.
+ *   * `path_offsets` — array of `path_count` byte offsets into the
+ *     packed buffer marking each path's start.
+ *   * `path_lengths` — parallel array of `path_count` lengths.
+ *
+ * On success `out_handle` receives a fresh archive handle to be
+ * released via `otterzip_archive_close`. The volumes must be supplied
+ * in disk order (volume 1 → last).
+ *
+ * ABI v8: added.
+ */
+int32_t otterzip_archive_open_multi(const uint8_t *packed_paths_utf8,
+                                    size_t packed_paths_len,
+                                    const size_t *path_offsets,
+                                    const size_t *path_lengths,
+                                    size_t path_count,
+                                    uint32_t mode,
+                                    OtterzipArchive **out_handle);
+
+/**
  * Close a previously-opened archive. Accepts NULL as a no-op so callers can
  * always defer-free without branching.
  */

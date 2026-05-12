@@ -183,6 +183,79 @@ pub extern "C" fn otterzip_archive_open(
     })
 }
 
+/// Open a split / spanned archive given an ordered list of volume
+/// paths. Layout (per `schema.md` §4 UTF-8 + explicit-length rule):
+///
+///   * `packed_paths_utf8` — one packed UTF-8 buffer holding every
+///     path's bytes back-to-back (no separators, no null terminators).
+///   * `packed_paths_len` — total byte length of that buffer.
+///   * `path_offsets` — array of `path_count` byte offsets into the
+///     packed buffer marking each path's start.
+///   * `path_lengths` — parallel array of `path_count` lengths.
+///
+/// On success `out_handle` receives a fresh archive handle to be
+/// released via `otterzip_archive_close`. The volumes must be supplied
+/// in disk order (volume 1 → last).
+///
+/// ABI v8: added.
+#[no_mangle]
+pub extern "C" fn otterzip_archive_open_multi(
+    packed_paths_utf8: *const u8,
+    packed_paths_len: usize,
+    path_offsets: *const usize,
+    path_lengths: *const usize,
+    path_count: usize,
+    mode: u32,
+    out_handle: *mut *mut OtterzipArchive,
+) -> i32 {
+    catch_unwind_to_error(|| {
+        if out_handle.is_null() {
+            return Err(OtterzipError::InvalidArgument("out_handle is null"));
+        }
+        if path_count == 0 {
+            return Err(OtterzipError::InvalidArgument(
+                "open_multi requires path_count > 0",
+            ));
+        }
+        if packed_paths_utf8.is_null() || path_offsets.is_null() || path_lengths.is_null() {
+            return Err(OtterzipError::InvalidArgument(
+                "open_multi: packed buffer / offset / length pointer is null",
+            ));
+        }
+
+        // SAFETY: caller contract — pointers reference buffers sized by
+        // `packed_paths_len` and `path_count` respectively.
+        let packed = unsafe { std::slice::from_raw_parts(packed_paths_utf8, packed_paths_len) };
+        let offsets = unsafe { std::slice::from_raw_parts(path_offsets, path_count) };
+        let lengths = unsafe { std::slice::from_raw_parts(path_lengths, path_count) };
+
+        let mut volumes: Vec<std::path::PathBuf> = Vec::with_capacity(path_count);
+        for i in 0..path_count {
+            let off = offsets[i];
+            let len = lengths[i];
+            let end = off
+                .checked_add(len)
+                .ok_or(OtterzipError::InvalidArgument("path offset+length overflow"))?;
+            if end > packed.len() {
+                return Err(OtterzipError::InvalidArgument(
+                    "path slice extends past packed buffer end",
+                ));
+            }
+            let s = std::str::from_utf8(&packed[off..end])
+                .map_err(|_| OtterzipError::InvalidArgument("path is not valid UTF-8"))?;
+            volumes.push(std::path::PathBuf::from(s));
+        }
+        let mode = open_mode_from_u32(mode)?;
+        let archive = Archive::open_multi(&volumes, mode)?;
+        let boxed = Box::new(archive);
+        // SAFETY: out_handle null-checked above.
+        unsafe {
+            *out_handle = Box::into_raw(boxed).cast::<OtterzipArchive>();
+        }
+        Ok(OK)
+    })
+}
+
 /// Close a previously-opened archive. Accepts NULL as a no-op so callers can
 /// always defer-free without branching.
 #[no_mangle]
