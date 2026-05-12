@@ -31,7 +31,7 @@
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Sfoglia…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>Password</value></data>
-  <data name="ExtractDialog_AdvancedToggle.Content"><value>Altre opzioni…</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>Altra cartella…</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Impostazioni</value></data>
   <data name="Settings_TitleLabel.Text"><value>Impostazioni</value></data>

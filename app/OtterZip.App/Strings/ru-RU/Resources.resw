@@ -31,7 +31,7 @@
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>Обзор…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>Пароль</value></data>
-  <data name="ExtractDialog_AdvancedToggle.Content"><value>Дополнительно…</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>Другая папка…</value></data>
 
   <data name="Settings_DialogTitle.Title"><value>Параметры</value></data>
   <data name="Settings_TitleLabel.Text"><value>Параметры</value></data>

@@ -73,7 +73,7 @@
   <data name="ExtractDialog_DestinationPlaceholder.PlaceholderText"><value>C:\…</value></data>
   <data name="ExtractDialog_BrowseButton.Content"><value>찾아보기…</value></data>
   <data name="ExtractDialog_PasswordLabel.Text"><value>비밀번호</value></data>
-  <data name="ExtractDialog_AdvancedToggle.Content"><value>고급 옵션…</value></data>
+  <data name="ExtractDialog_AdvancedToggle.Content"><value>다른 폴더로…</value></data>
 
   <!-- ================================================================ -->
   <!--  Settings Dialog (Phase 6+, 12 items in 4 sections)               -->
