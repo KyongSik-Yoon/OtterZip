@@ -59,11 +59,12 @@ public sealed partial class MainWindow : Window
         // limit follows Settings_ConcurrentJobs (1-4). Default 2 reflects
         // the common case of "drop a few archives at once and want them
         // moving in parallel" — single-core / contention-sensitive users
-        // can drop it to 1 in Settings. Setting changes take effect on
-        // next launch (SemaphoreSlim count is fixed at ctor).
+        // can drop it to 1 in Settings.
         int concurrency = Math.Clamp(
             SettingsService.Get<int>("Settings_ConcurrentJobs", 2), 1, 4);
         _jobQueue = new JobQueue(DispatcherQueue, concurrency);
+
+        WireConcurrentJobsLiveUpdate();
         _jobQueue.JobSettled += OnJobSettled;
         FloatLayerHost.Attach(_jobQueue);
 
@@ -109,6 +110,27 @@ public sealed partial class MainWindow : Window
         // prompt the user before the window vanishes. WinUI 3 Window.Closed
         // is non-cancellable; AppWindow.Closing carries `args.Cancel`.
         WireAppWindow();
+    }
+
+    /// <summary>
+    /// Live-update hook for Settings_ConcurrentJobs. When the user bumps
+    /// the setting in Settings UI, raise the JobQueue's limit on the
+    /// spot so already-queued cards start moving without an app restart.
+    /// Lowering still needs a restart — we can't yank a slot from work
+    /// already running.
+    /// </summary>
+    private void WireConcurrentJobsLiveUpdate()
+    {
+        SettingsService.Changed += (_, args) =>
+        {
+            if (!string.Equals(args.Key, "Settings_ConcurrentJobs", StringComparison.Ordinal))
+            {
+                return;
+            }
+            int n = Math.Clamp(
+                SettingsService.Get<int>("Settings_ConcurrentJobs", 2), 1, 4);
+            _jobQueue.TrySetConcurrentLimit(n);
+        };
     }
 
     /// <summary>

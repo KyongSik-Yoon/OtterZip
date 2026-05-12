@@ -35,8 +35,12 @@ namespace OtterZip.App.Services;
 /// </summary>
 public sealed class JobQueue : IDisposable
 {
+    private const int MaxSlots = 8;
+
     private readonly DispatcherQueue _ui;
     private readonly SemaphoreSlim _slots;
+    private readonly System.Threading.Lock _limitLock = new();
+    private int _currentLimit;
 
     public ObservableCollection<JobItem> Jobs { get; } = new();
 
@@ -47,13 +51,48 @@ public sealed class JobQueue : IDisposable
     /// </summary>
     public event EventHandler<JobItem>? JobSettled;
 
-    public int ConcurrentLimit { get; }
+    public int ConcurrentLimit
+    {
+        get { lock (_limitLock) { return _currentLimit; } }
+    }
 
     public JobQueue(DispatcherQueue ui, int concurrentLimit = 1)
     {
         _ui = ui;
-        ConcurrentLimit = Math.Max(1, concurrentLimit);
-        _slots = new SemaphoreSlim(ConcurrentLimit, ConcurrentLimit);
+        _currentLimit = Math.Clamp(concurrentLimit, 1, MaxSlots);
+        // Pre-allocate the maximum so TrySetConcurrentLimit can raise the
+        // ceiling without recreating the semaphore — Release brings the
+        // active count up to the new limit without touching jobs that
+        // are already holding slots.
+        _slots = new SemaphoreSlim(_currentLimit, MaxSlots);
+    }
+
+    /// <summary>
+    /// Adjust the active concurrency live. Raising the limit releases
+    /// more slots so any queued jobs unblock on the spot; lowering
+    /// requires a restart (we have no safe way to revoke a slot that's
+    /// currently running work without aborting that work). Safe to call
+    /// from any thread.
+    /// </summary>
+    public void TrySetConcurrentLimit(int newLimit)
+    {
+        newLimit = Math.Clamp(newLimit, 1, MaxSlots);
+        lock (_limitLock)
+        {
+            if (newLimit <= _currentLimit)
+            {
+                return;
+            }
+            try
+            {
+                _slots.Release(newLimit - _currentLimit);
+            }
+            catch (SemaphoreFullException)
+            {
+                // Already at the hard ceiling; nothing more to release.
+            }
+            _currentLimit = newLimit;
+        }
     }
 
     /// <summary>
