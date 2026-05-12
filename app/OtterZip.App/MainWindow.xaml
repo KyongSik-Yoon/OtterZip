@@ -28,7 +28,12 @@
                  buttons are drawn by the OS to the right. -->
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
+            <!-- Row 2 (status bar) retired in Phase 4: feedback now lives
+                 on floating JobCards and the gear moved to ConfigPanel's
+                 corner chip. Kept at 0 height so existing element refs
+                 (StatusText/StatusProgress/SettingsButton) still resolve
+                 — Phase 5 will remove the XAML entirely. -->
+            <RowDefinition Height="0" />
         </Grid.RowDefinitions>
 
         <!-- Right-click menu (window-wide) -->
@@ -85,8 +90,12 @@
                                  IsHitTestVisible="True" />
         </Grid>
 
-        <!-- Status bar (always visible) -->
+        <!-- Status bar retained but row-collapsed (see Row 2 definition).
+             Elements remain in the visual tree so legacy code-behind
+             refs (StatusText/StatusProgress) keep compiling; Phase 5
+             removes the block. -->
         <Grid Grid.Row="2"
+              Visibility="Collapsed"
               Padding="16,8"
               ColumnSpacing="{StaticResource SpacingSValue}"
               RowSpacing="4">

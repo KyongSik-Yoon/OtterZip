@@ -89,6 +89,11 @@ public sealed partial class MainWindow : Window
         // backs the right-click "Add files…" menu.
         ConfigPanel.DropHintTapped += async (_, _) =>
             await PickFilesAndProcessAsync().ConfigureAwait(false);
+        // Phase 4: gear chip in the corner strip replaces the bottom
+        // status-bar settings button. Forward to the same handler so
+        // both routes open the same Settings surface.
+        ConfigPanel.SettingsRequested += (s, _) =>
+            OnSettingsButtonClick(s ?? this, new RoutedEventArgs());
 
         // Window-wide drag/drop. Wired once in ctor — the root grid never
         // changes its lifetime so detaching is unnecessary.

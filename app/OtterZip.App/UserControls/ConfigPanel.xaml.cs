@@ -29,6 +29,12 @@ public sealed partial class ConfigPanel : UserControl
     /// decoupled from picker APIs.</summary>
     public event EventHandler? DropHintTapped;
 
+    /// <summary>Raised when the user clicks the gear chip in the
+    /// corner-strip. MainWindow opens the Settings surface. Lets the
+    /// panel stay agnostic about whether Settings is a separate window
+    /// (Phase 4) or an inline view (Phase 5).</summary>
+    public event EventHandler? SettingsRequested;
+
     public ConfigPanel()
     {
         InitializeComponent();
@@ -45,6 +51,11 @@ public sealed partial class ConfigPanel : UserControl
     private void OnDropHintTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
         DropHintTapped?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnSettingsChipClick(object sender, RoutedEventArgs e)
+    {
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnAdvancedExpanderToggled(object sender, object e)
