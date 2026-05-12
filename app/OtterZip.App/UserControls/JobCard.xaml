@@ -26,7 +26,7 @@
             BorderThickness="1"
             CornerRadius="12"
             Padding="12,10"
-            Translation="0,0,4">
+            Translation="0,0,24">
         <Border.Shadow>
             <ThemeShadow />
         </Border.Shadow>
