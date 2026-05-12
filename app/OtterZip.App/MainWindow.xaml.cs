@@ -143,13 +143,10 @@ public sealed partial class MainWindow : Window
         ExtractPanel.Submitted += OnExtractSubmitted;
         ExtractPanel.Dismissed += OnExtractDismissed;
         ExtractPanel.PasswordEdited += (_, _) => ExtractPanel.ClearError();
-        ExtractPanel.LayoutChanged += (_, _) =>
-        {
-            if (_currentView == AppView.Extract)
-            {
-                TrySizeWindow(width: 420, height: PickExtractWindowHeight());
-            }
-        };
+        // ExtractPanel.LayoutChanged used to resize the host window
+        // when the destination row toggled. The popup-card refactor
+        // keeps the window fixed and lets the card grow/shrink in
+        // place, so the handler is no-op now — left unsubscribed.
     }
 
     /// <summary>
@@ -1156,16 +1153,15 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void SwitchView(AppView view, int extractHeight = 360)
     {
+        _ = extractHeight;   // legacy param — window no longer resizes for Extract
         _currentView = view;
         bool extract = view == AppView.Extract;
-        ConfigPanel.Visibility = extract ? Visibility.Collapsed : Visibility.Visible;
-        ExtractPanel.Visibility = extract ? Visibility.Visible : Visibility.Collapsed;
-        // Hide the floating cards while ExtractPanel is taking input —
-        // a tall stack would otherwise hide the password box and action
-        // buttons. Jobs keep running in the background; the cards
-        // reappear as soon as the user submits or dismisses.
-        FloatLayerHost.Visibility = extract ? Visibility.Collapsed : Visibility.Visible;
-        TrySizeWindow(width: 420, height: extract ? extractHeight : 460);
+        // ConfigPanel stays visible underneath the extract overlay so
+        // the canvas / cards remain perceptible behind the backdrop.
+        ConfigPanel.Visibility = Visibility.Visible;
+        // ExtractOverlay carries the dim backdrop + the floating card.
+        ExtractOverlay.Visibility = extract ? Visibility.Visible : Visibility.Collapsed;
+        // The window stays at its idle size — no shrinking, no growing.
     }
 
     /// <summary>

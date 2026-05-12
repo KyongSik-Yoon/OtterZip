@@ -82,21 +82,45 @@
              floating cards there. -->
         <Grid Grid.Row="1" x:Name="BodyHost">
             <controls:ConfigPanel x:Name="ConfigPanel" />
-            <!-- FloatLayer sits BETWEEN ConfigPanel and ExtractPanel so
-                 the cards overlay the drop canvas (intended) but the
-                 inline extract password input renders above the cards
-                 (otherwise tall stacks would hide the password box).
-                 Top margin = chip-strip area (~56px chip + 12px outer
-                 margin) so the gear, Format combo and "압축 옵션" stay
-                 clickable. The layer scrolls internally once it
-                 exceeds its bounds. -->
+            <!-- FloatLayer sits BETWEEN the canvas and the extract
+                 overlay so floating job cards stay over the drop area
+                 (intended) but get dimmed-but-visible behind the
+                 modal-ish extract card when it's open. Top margin = the
+                 chip-strip area so corner chips stay clickable. -->
             <controls:FloatLayer x:Name="FloatLayerHost"
                                  HorizontalAlignment="Stretch"
                                  VerticalAlignment="Stretch"
                                  Margin="12,68,12,8"
                                  IsHitTestVisible="True" />
-            <controls:ExtractPanel x:Name="ExtractPanel"
-                                   Visibility="Collapsed" />
+
+            <!-- Extract popup: dim backdrop + centered floating card.
+                 Replaces the old SwitchView-style ConfigPanel↔ExtractPanel
+                 toggle that used to shrink the whole window — now the
+                 main canvas stays at full size and the password / target
+                 dialog floats on top, matching the Concept C mockup
+                 (concept-c-floating-cards.html S06). The backdrop
+                 captures pointer events so the canvas behind doesn't
+                 react to clicks while extract input is taking focus. -->
+            <Border x:Name="ExtractOverlay"
+                    Visibility="Collapsed"
+                    Background="{ThemeResource SmokeFillColorDefaultBrush}"
+                    IsHitTestVisible="True">
+                <Border x:Name="ExtractCard"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Width="360"
+                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="14"
+                        Translation="0,0,32"
+                        Margin="16">
+                    <Border.Shadow>
+                        <ThemeShadow />
+                    </Border.Shadow>
+                    <controls:ExtractPanel x:Name="ExtractPanel" />
+                </Border>
+            </Border>
         </Grid>
 
         <!-- Status bar retained but row-collapsed (see Row 2 definition).
