@@ -70,6 +70,9 @@ public sealed class JobQueue : IDisposable
         ArgumentNullException.ThrowIfNull(work);
 
         item.Cts = new CancellationTokenSource();
+        // Wire the dispatcher so JobItem.PropertyChanged auto-marshals
+        // to the UI thread no matter where the work delegate runs.
+        item.Dispatcher = _ui;
 
         // Add to the collection eagerly so the user immediately sees a
         // "queued" card even if all slots are busy.

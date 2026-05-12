@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using Microsoft.UI.Dispatching;
 
 namespace OtterZip.App.Models;
 
@@ -11,9 +12,13 @@ namespace OtterZip.App.Models;
 /// fraction, optional sub-text like "42% · 12.3 MB/s") and a cancel
 /// hook the card's X button calls.
 ///
-/// Designed for hand-written code-behind binding — UI controls subscribe
-/// to PropertyChanged and refresh whichever element changed. This keeps
-/// us off x:Bind generated code paths that get hairy under AOT.
+/// Threading: writes can come from any thread (the JobQueue's work
+/// delegate runs on the thread pool), but XAML listeners on
+/// <see cref="PropertyChanged"/> must receive notifications on the UI
+/// thread or they raise RPC_E_WRONG_THREAD. <see cref="Dispatcher"/>
+/// is set by the queue at submit time and used to marshal every
+/// notification — callers can then assign properties from any thread
+/// without thinking about it.
 /// </summary>
 public sealed class JobItem : INotifyPropertyChanged
 {
@@ -32,6 +37,13 @@ public sealed class JobItem : INotifyPropertyChanged
     /// <see cref="RequestCancel"/>.
     /// </summary>
     internal CancellationTokenSource? Cts { get; set; }
+
+    /// <summary>
+    /// UI dispatcher used to marshal PropertyChanged events. Set by
+    /// JobQueue when the item is submitted; before that, raises fire
+    /// synchronously (no XAML listeners yet, so it's safe).
+    /// </summary>
+    internal DispatcherQueue? Dispatcher { get; set; }
 
     public JobItem(JobKind kind, string displayName)
     {
@@ -91,6 +103,18 @@ public sealed class JobItem : INotifyPropertyChanged
     {
         if (Equals(field, value)) return;
         field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        var handler = PropertyChanged;
+        if (handler is null) return;
+
+        var args = new PropertyChangedEventArgs(propertyName);
+        var dispatcher = Dispatcher;
+        if (dispatcher is null || dispatcher.HasThreadAccess)
+        {
+            handler(this, args);
+        }
+        else
+        {
+            dispatcher.TryEnqueue(() => handler(this, args));
+        }
     }
 }
