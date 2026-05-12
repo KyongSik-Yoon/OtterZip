@@ -95,6 +95,13 @@ public sealed partial class JobCard : UserControl
     private void ApplyState()
     {
         if (_item is null) return;
+        // Belt-and-suspenders: pull the latest scalar values every time
+        // state transitions. If a property-change dispatch was dropped or
+        // arrived out of order, the State→Done transition still resyncs
+        // the visible text (otherwise the card can freeze on "시작 중…"
+        // for fast jobs even after the archive is fully written).
+        NameText.Text = _item.DisplayName;
+        StatusTextEl.Text = _item.StatusText ?? string.Empty;
         switch (_item.State)
         {
             case JobState.Queued:
