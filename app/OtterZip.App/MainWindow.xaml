@@ -84,9 +84,15 @@
             <controls:ConfigPanel x:Name="ConfigPanel" />
             <controls:ExtractPanel x:Name="ExtractPanel"
                                    Visibility="Collapsed" />
+            <!-- FloatLayer overlays the canvas. Top margin = chip-strip
+                 area (~56px chip + 12px outer margin) so the gear,
+                 Format combo and "압축 옵션" stay clickable even when
+                 the card stack is tall enough to want the whole body.
+                 The layer scrolls internally once it exceeds its bounds. -->
             <controls:FloatLayer x:Name="FloatLayerHost"
-                                 VerticalAlignment="Bottom"
-                                 Margin="12,0,12,8"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Stretch"
+                                 Margin="12,68,12,8"
                                  IsHitTestVisible="True" />
         </Grid>
 

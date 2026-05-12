@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using OtterZip.App.Models;
 using OtterZip.App.Services;
@@ -86,6 +87,23 @@ public sealed partial class FloatLayer : UserControl
         card.Bind(item, _queue);
         _cards[item] = card;
         CardsHost.Items.Add(card);
+        // Wait for the new card to lay out, then scroll the stack so it
+        // peeks above the viewport bottom. Without this the new card
+        // gets created off-screen when the stack already overflows.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            FindAncestorScrollViewer(card)?.ChangeView(null, double.MaxValue, null, disableAnimation: false);
+        });
+    }
+
+    private static ScrollViewer? FindAncestorScrollViewer(DependencyObject child)
+    {
+        var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(child);
+        while (parent is not null and not ScrollViewer)
+        {
+            parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent);
+        }
+        return parent as ScrollViewer;
     }
 
     private void RemoveCard(JobItem item)

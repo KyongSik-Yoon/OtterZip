@@ -20,15 +20,22 @@
     mc:Ignorable="d"
     IsHitTestVisible="True">
 
-    <ItemsControl x:Name="CardsHost"
+    <!-- ScrollViewer fills the available height (MainWindow caps the
+         layer top margin so the chip strip is never covered). Cards
+         scroll inside this area when the stack exceeds the viewport. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollMode="Disabled"
+                  VerticalScrollMode="Enabled"
                   HorizontalAlignment="Stretch"
-                  VerticalAlignment="Bottom">
-        <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-                <StackPanel Orientation="Vertical"
-                            Spacing="6"
-                            VerticalAlignment="Bottom" />
-            </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-    </ItemsControl>
+                  VerticalAlignment="Stretch">
+        <ItemsControl x:Name="CardsHost"
+                      HorizontalAlignment="Stretch">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Vertical"
+                                Spacing="6" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+    </ScrollViewer>
 </UserControl>
