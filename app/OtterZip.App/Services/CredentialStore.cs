@@ -34,6 +34,14 @@ public static class CredentialStore
     private const string UserName = "default";
 
     /// <summary>
+    /// SettingsService fallback key. Used when PasswordVault is
+    /// unavailable (typical unpackaged dev runs). Also the legacy v1.0
+    /// home of the default password — see
+    /// <see cref="MigrateFromSettingsServiceOnce"/>.
+    /// </summary>
+    private const string LegacyFallbackKey = "Settings_DefaultPassword";
+
+    /// <summary>
     /// Returns the stored password, or empty string when none is set
     /// (or the vault isn't available — see class remarks).
     /// </summary>
@@ -44,17 +52,21 @@ public static class CredentialStore
             var vault = new PasswordVault();
             var cred = vault.Retrieve(ResourceName, UserName);
             cred.RetrievePassword();
-            return cred.Password ?? string.Empty;
+            string? fromVault = cred.Password;
+            if (!string.IsNullOrEmpty(fromVault))
+            {
+                return fromVault;
+            }
         }
         catch (Exception)
         {
-            // Two flavours of failure are common and benign:
-            //   1. No credential stored (Retrieve throws).
-            //   2. Unpackaged context — COMException at PasswordVault().
-            // Either way the caller's "no stored password" branch handles
-            // the empty-string return correctly.
-            return string.Empty;
+            // Vault threw — either no credential, or running unpackaged
+            // (no package identity). Fall through to the dev fallback.
         }
+        // Dev / unpackaged fallback: live alongside other settings via
+        // SettingsService (which itself has an in-memory mirror so the
+        // password persists for the lifetime of an unpackaged run).
+        return SettingsService.Get<string>(LegacyFallbackKey, string.Empty);
     }
 
     /// <summary>
@@ -65,6 +77,7 @@ public static class CredentialStore
     public static void Set(string password)
     {
         ArgumentNullException.ThrowIfNull(password);
+        bool vaultAccepted = false;
         try
         {
             var vault = new PasswordVault();
@@ -84,12 +97,28 @@ public static class CredentialStore
             {
                 vault.Add(new PasswordCredential(ResourceName, UserName, password));
             }
+            vaultAccepted = true;
         }
         catch (Exception)
         {
-            // Same fallback contract as Get() — silent no-op when the
-            // vault is unavailable. Dev runs continue to use the
-            // SettingsService path.
+            // PasswordVault unavailable. Fall through to the dev/unpackaged
+            // fallback so the feature still works during F5 sessions.
+        }
+        // Mirror into / clear from the SettingsService fallback. Packaged
+        // runs intentionally also drop the legacy key so a previous dev
+        // install doesn't leave a stale plaintext copy behind.
+        if (vaultAccepted)
+        {
+            SettingsService.Remove(LegacyFallbackKey);
+            return;
+        }
+        if (string.IsNullOrEmpty(password))
+        {
+            SettingsService.Remove(LegacyFallbackKey);
+        }
+        else
+        {
+            SettingsService.Set(LegacyFallbackKey, password);
         }
     }
 
@@ -104,19 +133,16 @@ public static class CredentialStore
     /// </summary>
     public static void MigrateFromSettingsServiceOnce()
     {
-        const string LegacyKey = "Settings_DefaultPassword";
-        string legacy = SettingsService.Get<string>(LegacyKey, "");
+        string legacy = SettingsService.Get<string>(LegacyFallbackKey, "");
         if (string.IsNullOrEmpty(legacy))
         {
             return;
         }
+        // Set() already takes care of clearing the legacy key when the
+        // vault accepts the credential, so the migration is just a
+        // pass-through. If the vault is unavailable Set() leaves the key
+        // intact (it IS the fallback storage in that case) and Get()
+        // keeps reading it.
         Set(legacy);
-        // Verify the vault accepted it before wiping the source — if the
-        // vault is unavailable (unpackaged), Get() returns empty and we
-        // *keep* the legacy value so the user doesn't lose it.
-        if (!string.IsNullOrEmpty(Get()))
-        {
-            SettingsService.Remove(LegacyKey);
-        }
     }
 }
