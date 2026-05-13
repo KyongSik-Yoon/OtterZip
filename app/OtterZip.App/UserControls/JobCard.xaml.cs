@@ -105,23 +105,38 @@ public sealed partial class JobCard : UserControl
 
     private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
+        // Updates marshal through JobItem.SetProp → DispatcherQueue, so
+        // we land on the UI thread; the try/catch guards against the
+        // narrow window where this card has been unloaded (FloatLayer
+        // removed from the visual tree, X clicked) but a pending
+        // dispatched notification still fires — touching the XAML
+        // surface then throws WinRT.Runtime.dll
+        // InvalidOperationException. Swallowing keeps the queue
+        // healthy; the card is going away anyway.
+        try
         {
-            case nameof(JobItem.DisplayName):
-                NameText.Text = _item!.DisplayName;
-                break;
-            case nameof(JobItem.State):
-                ApplyState();
-                break;
-            case nameof(JobItem.Progress):
-                ProgressEl.Value = _item!.Progress;
-                break;
-            case nameof(JobItem.IsIndeterminate):
-                ProgressEl.IsIndeterminate = _item!.IsIndeterminate;
-                break;
-            case nameof(JobItem.StatusText):
-                StatusTextEl.Text = _item!.StatusText ?? string.Empty;
-                break;
+            switch (e.PropertyName)
+            {
+                case nameof(JobItem.DisplayName):
+                    NameText.Text = _item!.DisplayName;
+                    break;
+                case nameof(JobItem.State):
+                    ApplyState();
+                    break;
+                case nameof(JobItem.Progress):
+                    ProgressEl.Value = _item!.Progress;
+                    break;
+                case nameof(JobItem.IsIndeterminate):
+                    ProgressEl.IsIndeterminate = _item!.IsIndeterminate;
+                    break;
+                case nameof(JobItem.StatusText):
+                    StatusTextEl.Text = _item!.StatusText ?? string.Empty;
+                    break;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // See header comment.
         }
     }
 

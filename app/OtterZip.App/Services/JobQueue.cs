@@ -173,26 +173,62 @@ public sealed class JobQueue : IDisposable
     private Progress<double> BuildProgressReporter(JobItem item)
     {
         string percentFormat = Localize("Job_StatusRunningPercent");
-        return new Progress<double>(p => _ui.TryEnqueue(() =>
+        // Throttle UI marshalling to ~30 Hz. Without this gate a fast
+        // extract (rayon parallel workers each firing per-N-entries
+        // through the FFI callback) can produce hundreds of ticks
+        // per second after the C++ exception-spam threshold the
+        // dispatcher queue degrades into "WinRT.Runtime.dll
+        // InvalidOperationException" floods. A 33 ms cadence matches
+        // typical compositor frame time so the UI never sees stale
+        // values, just at a more sane rate. Final 100 % tick is never
+        // throttled — it must always reach the UI so the JobCard
+        // settles cleanly. (System.Diagnostics.Stopwatch is
+        // monotonic; lock-free use of ElapsedMilliseconds is safe
+        // here because at-most-once duplicate ticks during a race are
+        // harmless — the dispatched closure re-guards against stale
+        // state anyway.)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long lastReportMs = -1000; // first tick always passes
+        return new Progress<double>(p =>
         {
-            // Terminal-state guard: late progress callbacks must NOT
-            // overwrite the Done caption ("5.79 KB"), the Cancelled
-            // caption ("취소됨"), or — newly — the Error caption (the
-            // exception message). Multi-layer Progress<T> posts via the
-            // thread pool with no ordering guarantees, so we may see a
-            // "0%" tick land after MarkError has already fired.
-            if (item.State is JobState.Done or JobState.Cancelled or JobState.Error)
+            long now = sw.ElapsedMilliseconds;
+            bool isTerminalTick = p >= 1.0;
+            if (!isTerminalTick && now - lastReportMs < 33)
             {
                 return;
             }
-            if (item.Progress >= 1.0) return;
-            double clamped = Math.Clamp(p, 0.0, 1.0);
-            if (clamped < item.Progress) return;
-            item.IsIndeterminate = false;
-            item.Progress = clamped;
-            item.StatusText = string.Format(CultureInfo.CurrentCulture,
-                percentFormat, Math.Round(clamped * 100));
-        }));
+            lastReportMs = now;
+            _ui.TryEnqueue(() =>
+            {
+                try
+                {
+                    // Terminal-state guard: late progress callbacks must NOT
+                    // overwrite the Done caption ("5.79 KB"), the Cancelled
+                    // caption ("취소됨"), or — newly — the Error caption (the
+                    // exception message). Multi-layer Progress<T> posts via
+                    // the thread pool with no ordering guarantees, so we
+                    // may see a "0%" tick land after MarkError has fired.
+                    if (item.State is JobState.Done or JobState.Cancelled or JobState.Error)
+                    {
+                        return;
+                    }
+                    if (item.Progress >= 1.0) return;
+                    double clamped = Math.Clamp(p, 0.0, 1.0);
+                    if (clamped < item.Progress) return;
+                    item.IsIndeterminate = false;
+                    item.Progress = clamped;
+                    item.StatusText = string.Format(CultureInfo.CurrentCulture,
+                        percentFormat, Math.Round(clamped * 100));
+                }
+                catch (InvalidOperationException)
+                {
+                    // Stale XAML element access (JobCard unbound / unloaded
+                    // mid-extract) and WinRT marshalling edge cases surface
+                    // as InvalidOperationException. Progress reporting is a
+                    // UX nicety — never let it kill the queue.
+                }
+            });
+        });
     }
 
     private void MarkDone(JobItem item) => _ui.TryEnqueue(() =>
