@@ -292,20 +292,38 @@ impl ArchiveBackend for ZipBackend {
         };
         const PARALLEL_MIN_BYTES: u64 = 4 * 1024 * 1024;
         const PARALLEL_MIN_ENTRIES: usize = 8;
-        // Tiny-file regression guard: 1024 × 1 KiB archives extract slower
-        // in parallel because NTFS serialises metadata ops anyway. Require
-        // at least 32 KiB average compressed size before going parallel.
-        // (Tuned 2026-04-27 against the bench harness; re-tune if S5+
-        // backends grow rayon-aware extract paths.)
+        // Tiny-file regression guard. The original 32 KiB threshold
+        // was tuned against synthetic 1024 × 1 KiB archives where the
+        // total payload was sub-megabyte and NTFS metadata
+        // serialisation made parallel a loss. Real-world "many small
+        // files" archives (typical user case — game asset dumps,
+        // source trees, photo libraries — many GB across 100K+ tiny
+        // entries) show the opposite profile: per-entry CPU+I/O is
+        // small, but the *aggregate* serial time is dominated by
+        // total volume × decoder throughput, which parallelises fine.
+        //
+        // Two-tier rule:
+        //   * archives ≥ 50 MiB total bypass the avg-entry check
+        //     entirely (large workloads always win from parallel,
+        //     even with NTFS contention),
+        //   * smaller archives keep the 32 KiB safety to avoid the
+        //     synthetic-fixture regression.
+        //
+        // Symptom that triggered this re-tune: 7 GB / many-file ZIP
+        // ran serial (CPU 14 %, disk read 75 MB/s, write 0 from the
+        // user's view on the source disk), wall ~3× Bandizip.
         const PARALLEL_MIN_AVG_ENTRY_BYTES: u64 = 32 * 1024;
+        const PARALLEL_LARGE_ARCHIVE_BYTES: u64 = 50 * 1024 * 1024;
         let avg = if entries == 0 {
             0
         } else {
             total_compressed / entries as u64
         };
+        let large_enough_to_skip_avg_check =
+            total_compressed >= PARALLEL_LARGE_ARCHIVE_BYTES;
         if entries < PARALLEL_MIN_ENTRIES
             || total_compressed < PARALLEL_MIN_BYTES
-            || avg < PARALLEL_MIN_AVG_ENTRY_BYTES
+            || (!large_enough_to_skip_avg_check && avg < PARALLEL_MIN_AVG_ENTRY_BYTES)
         {
             return None;
         }
