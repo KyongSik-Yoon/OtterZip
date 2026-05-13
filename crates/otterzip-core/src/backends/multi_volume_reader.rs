@@ -22,9 +22,18 @@
 //!   back to the serial `extract_all` loop, which is fine for the
 //!   one-archive-at-a-time UX we ship today.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+
+/// Windows `FILE_FLAG_SEQUENTIAL_SCAN`. Hints to the NTFS cache
+/// manager that the file will be read front-to-back so it can
+/// prefetch aggressively and free pages eagerly behind us. Decisive
+/// on large spanned-ZIP volumes where Bandizip / 7-Zip already
+/// benefit from the same flag. See
+/// <https://devblogs.microsoft.com/oldnewthing/20221130-00/?p=107505>.
+#[cfg(windows)]
+const FILE_FLAG_SEQUENTIAL_SCAN: u32 = 0x0800_0000;
 
 /// Concatenates a sequence of files into one virtual byte stream.
 ///
@@ -49,6 +58,12 @@ pub(crate) struct MultiVolumeReader {
     /// `virtual_pos`. Tracked so back-to-back reads inside one volume
     /// don't pay a redundant `File::seek` syscall.
     active: usize,
+    /// Per-file cursor cache (in raw bytes). When the next read's
+    /// computed `file_offset` matches the cached cursor for that
+    /// file, we skip the `File::seek` syscall entirely — the file's
+    /// own kernel-side position is already where we need it. The
+    /// cache is invalidated by external `Seek` calls.
+    file_cursors: Vec<u64>,
 }
 
 impl MultiVolumeReader {
@@ -69,7 +84,7 @@ impl MultiVolumeReader {
         let mut acc: u64 = 0;
         cumulative.push(0);
         for p in paths {
-            let f = File::open(p)?;
+            let f = open_for_sequential_read(p)?;
             let len = f.metadata()?.len();
             files.push(f);
             sizes.push(len);
@@ -81,6 +96,7 @@ impl MultiVolumeReader {
             })?;
             cumulative.push(acc);
         }
+        let file_cursors = vec![0u64; files.len()];
         Ok(Self {
             files,
             sizes,
@@ -88,6 +104,7 @@ impl MultiVolumeReader {
             total: acc,
             virtual_pos: 0,
             active: 0,
+            file_cursors,
         })
     }
 
@@ -134,13 +151,17 @@ impl Read for MultiVolumeReader {
             return Ok(0);
         }
         let (idx, file_offset) = self.locate(self.virtual_pos);
-        // Re-seek the active file if we just crossed a boundary or
-        // someone called `seek` between reads.
-        if idx != self.active {
-            self.active = idx;
-        }
+        self.active = idx;
         let file = &mut self.files[idx];
-        file.seek(SeekFrom::Start(file_offset))?;
+        // Skip the syscall when the file's kernel cursor is already at
+        // `file_offset` — typical case for back-to-back sequential
+        // reads inside one volume (the BufReader wrapper above batches
+        // these into 64 KiB chunks, so the savings are concentrated at
+        // volume boundaries + occasional EOCD probes).
+        if self.file_cursors[idx] != file_offset {
+            file.seek(SeekFrom::Start(file_offset))?;
+            self.file_cursors[idx] = file_offset;
+        }
 
         // Cap the read at "bytes remaining in this volume" so we never
         // try to satisfy a single read() call across two files — the
@@ -149,6 +170,7 @@ impl Read for MultiVolumeReader {
         let cap = remaining_in_volume.min(out.len() as u64) as usize;
         let n = file.read(&mut out[..cap])?;
         self.virtual_pos = self.virtual_pos.saturating_add(n as u64);
+        self.file_cursors[idx] = self.file_cursors[idx].saturating_add(n as u64);
         Ok(n)
     }
 }
@@ -174,6 +196,31 @@ impl Seek for MultiVolumeReader {
         // magic, so end-seek must always succeed.
         self.virtual_pos = target.min(self.total);
         Ok(self.virtual_pos)
+    }
+}
+
+/// Open a volume with the platform's "sequential streaming" hint set.
+/// On Windows this adds `FILE_FLAG_SEQUENTIAL_SCAN`; on every other
+/// platform it falls back to a plain `File::open`. The hint is
+/// adviso­ry — the OS chooses whether to honour it — but on NTFS it
+/// measurably increases prefetcher throughput for large reads, which
+/// is the exact workload spanned-ZIP extraction produces.
+///
+/// Reused by [`super::zip::ZipBackend`] for single-volume archives —
+/// the prefetch benefit applies equally to a single big `.zip` and to
+/// each `.zNN` chunk in a spanned set.
+pub(crate) fn open_for_sequential_read(path: &Path) -> io::Result<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_SEQUENTIAL_SCAN)
+            .open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
     }
 }
 

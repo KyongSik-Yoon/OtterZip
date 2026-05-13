@@ -19,6 +19,7 @@ use zeroize::Zeroizing;
 use zip::ZipArchive;
 
 use crate::archive::ExtractWarning;
+use crate::backends::multi_volume_reader::open_for_sequential_read;
 use crate::backends::spanned_zip::SpannedZipReader;
 use crate::backends::{ArchiveBackend, StreamingExtractCtx};
 use crate::entry::{Entry, HostOs};
@@ -31,9 +32,18 @@ use crate::progress::{Progress, ProgressPhase};
 /// multi-volume uses the [`SpannedZipReader`] overlay so APPNOTE-spanned
 /// archives (per-disk offset references) and raw byte-split archives
 /// both look like single-disk ZIPs to the upstream `zip` crate.
+///
+/// Both variants are wrapped in `BufReader` so the upstream parser's
+/// many small reads (each CD record is ~46 bytes + variable filename;
+/// each local-file-header decode kicks off a chain of small header
+/// reads before the entry payload begins) coalesce into ~64 KiB
+/// syscalls. Without this, the multi-volume path was hitting the
+/// underlying file once per `zip` crate read — a measurable
+/// regression on archives whose payload is decompressed by zlib-ng
+/// quickly enough that syscall overhead dominates.
 pub(crate) enum ZipReader {
     Single(BufReader<File>),
-    Multi(SpannedZipReader),
+    Multi(BufReader<SpannedZipReader>),
 }
 
 impl Read for ZipReader {
@@ -82,7 +92,7 @@ pub(crate) struct ZipBackend {
 
 impl ZipBackend {
     pub(crate) fn open(path: &Path, password: Option<&Zeroizing<String>>) -> Result<Self> {
-        let file = File::open(path)?;
+        let file = open_for_sequential_read(path)?;
         let reader = ZipReader::Single(BufReader::new(file));
         let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
         Ok(Self {
@@ -114,7 +124,10 @@ impl ZipBackend {
             ));
         }
         let szr = SpannedZipReader::open(volumes)?;
-        let reader = ZipReader::Multi(szr);
+        // 64 KiB BufReader chunks coalesce the upstream `zip` crate's
+        // many small reads into ~16 syscalls per volume rather than
+        // one per read. Matches the Single-volume path's buffering.
+        let reader = ZipReader::Multi(BufReader::with_capacity(64 * 1024, szr));
         let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
         Ok(Self {
             inner: RefCell::new(inner),
@@ -574,7 +587,7 @@ fn set_first_err(
 }
 
 fn open_local(path: &Path) -> Result<ZipArchive<ZipReader>> {
-    let file = File::open(path)?;
+    let file = open_for_sequential_read(path)?;
     let reader = ZipReader::Single(BufReader::new(file));
     ZipArchive::new(reader).map_err(map_zip_err)
 }

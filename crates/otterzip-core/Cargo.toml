@@ -36,7 +36,7 @@ criterion = { workspace = true }
 tempfile  = "3"
 # Enable the AES write side-channel of `zip` only for tests so we can build
 # an encrypted-ZIP fixture without polluting the production feature set.
-zip       = { version = "2", default-features = false, features = ["deflate", "aes-crypto"] }
+zip       = { version = "2", default-features = false, features = ["deflate-zlib-ng", "aes-crypto"] }
 
 [features]
 default = []

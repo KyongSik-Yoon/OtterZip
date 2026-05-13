@@ -36,7 +36,7 @@ tar         = "0.4"
 # write side (zip-rs feature-gates each codec). The read side picks
 # them up automatically; tests verify Bandizip / 7-Zip can decompress
 # the result.
-zip         = { version = "2", default-features = false, features = ["deflate", "bzip2", "lzma"] }
+zip         = { version = "2", default-features = false, features = ["deflate-zlib-ng", "bzip2", "lzma"] }
 sevenz-rust = "0.6"
 unrar       = "0.5"
 # Phase 7+ option Y (PR-F2): LZ4 frame format. Pure-Rust crate, MIT.
