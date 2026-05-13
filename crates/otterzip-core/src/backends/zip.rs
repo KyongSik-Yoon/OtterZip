@@ -99,9 +99,34 @@ pub(crate) struct ZipBackend {
 
 impl ZipBackend {
     pub(crate) fn open(path: &Path, password: Option<&Zeroizing<String>>) -> Result<Self> {
+        let t_file_open = std::time::Instant::now();
         let file = open_for_sequential_read(path)?;
+        tracing::debug!(
+            target: "otterzip::zip",
+            path = %path.display(),
+            elapsed_us = t_file_open.elapsed().as_micros() as u64,
+            "ZipBackend::open file opened"
+        );
+        log_tail_bytes(path);
         let reader = ZipReader::Single(BufReader::new(file));
-        let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
+        let t_zip_new = std::time::Instant::now();
+        let inner = ZipArchive::new(reader).map_err(|e| {
+            tracing::warn!(
+                target: "otterzip::zip",
+                path = %path.display(),
+                elapsed_ms = t_zip_new.elapsed().as_millis() as u64,
+                error = ?e,
+                "ZipBackend::open ZipArchive::new returned error"
+            );
+            map_zip_err(e)
+        })?;
+        tracing::info!(
+            target: "otterzip::zip",
+            path = %path.display(),
+            elapsed_ms = t_zip_new.elapsed().as_millis() as u64,
+            entry_count = inner.len(),
+            "ZipBackend::open ZipArchive::new done"
+        );
         Ok(Self {
             inner: RefCell::new(inner),
             password: password.cloned(),
@@ -774,6 +799,42 @@ fn entry_at(archive: &mut ZipArchive<ZipReader>, i: usize) -> Result<Entry> {
 }
 
 /// Convert a `ZipError` into our error taxonomy without losing context.
+/// Diagnostic helper — dump the last 96 bytes of a file as hex into the
+/// log. EOCD lives at the tail of every well-formed ZIP, so a quick
+/// peek tells us whether the file is even shaped like a ZIP and
+/// whether ZIP64 locator bytes (0x504B0607) are present.
+fn log_tail_bytes(path: &Path) {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let size = match f.metadata() {
+        Ok(m) => m.len(),
+        Err(_) => return,
+    };
+    let tail_len = u64::min(size, 96);
+    if f.seek(SeekFrom::End(-(tail_len as i64))).is_err() {
+        return;
+    }
+    let mut buf = vec![0u8; tail_len as usize];
+    if f.read_exact(&mut buf).is_err() {
+        return;
+    }
+    let hex: String = buf
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    tracing::info!(
+        target: "otterzip::zip",
+        path = %path.display(),
+        size,
+        tail_hex = %hex,
+        "ZipBackend::open tail bytes (last 96) for EOCD diagnostic"
+    );
+}
+
 fn map_zip_err(e: zip::result::ZipError) -> OtterzipError {
     use zip::result::ZipError as Z;
     match e {
