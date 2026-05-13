@@ -18,6 +18,13 @@ pub(crate) mod deb;
 pub(crate) mod iso;
 #[cfg(feature = "libarchive-fallback")]
 pub(crate) mod libarchive;
+// Day-1 lenient parser. Unconditionally compiled even when
+// `libarchive-fallback` is off so the regression test
+// (`tests/lenient_zip.rs`) can exercise it directly — the dispatcher
+// path stays gated until Day 4 renames the feature. Crate-internal
+// visibility; the test reaches in via the doc-hidden wrapper in
+// `lib.rs::__probe_lenient_entries`.
+pub(crate) mod lenient_zip;
 pub(crate) mod msi;
 pub(crate) mod multi_volume_reader;
 pub(crate) mod sevenz;
@@ -131,25 +138,46 @@ pub(crate) fn is_recoverable(err: &OtterzipError) -> bool {
     }
 }
 
-/// Build the fallback backend for `path` / `format`. Returns
-/// `FeatureDisabled` when the `libarchive-fallback` Cargo feature is
-/// off so callers see a clean signal rather than mysterious "no
-/// backend" errors.
+/// Build the fallback backend for `path` / `format`. As of Day 1 of
+/// the v1.0 lenient-parser sprint this routes to the in-tree
+/// [`lenient_zip::LenientZipBackend`] rather than libarchive — the
+/// libarchive module is kept around for Day 4 cleanup so we can
+/// A/B compare during the rollout. Day 1 only wires the metadata
+/// surface; per-entry extract / stream still surface
+/// `FeatureDisabled` until Day 2 lands LFH parsing + decompression
+/// dispatch.
+///
+/// Returns `FeatureDisabled` when the `libarchive-fallback` Cargo
+/// feature is off so callers see a clean signal rather than
+/// mysterious "no backend" errors. The feature itself will be
+/// renamed `lenient-fallback` (and made default-on) on Day 4.
 #[cfg(feature = "libarchive-fallback")]
 pub(crate) fn open_fallback_backend(
     path: &Path,
-    _format: crate::format::ArchiveFormat,
+    format: crate::format::ArchiveFormat,
     password: Option<&Zeroizing<String>>,
 ) -> Result<Box<dyn ArchiveBackend + Send>> {
+    use crate::format::ArchiveFormat as F;
     tracing::warn!(
         target: "otterzip::backends",
         path = %path.display(),
-        format = ?_format,
-        "strict backend rejected — retrying with libarchive fallback"
+        format = ?format,
+        "strict backend rejected — retrying with lenient ZIP fallback"
     );
-    Ok(Box::new(self::libarchive::LibarchiveBackend::open(
-        path, password,
-    )?))
+    // The dispatcher only routes ZIP / ZIPX through the fallback arm
+    // today (see `open_backend`), but be defensive about it. The
+    // lenient parser is ZIP-specific; non-ZIP fallback work was the
+    // old libarchive code path and there's no replacement yet — surface
+    // a clear error instead of attempting an EOCD scan on a 7z / RAR /
+    // tar payload.
+    match format {
+        F::Zip | F::Zipx => Ok(Box::new(self::lenient_zip::LenientZipBackend::open(
+            path, password,
+        )?)),
+        other => Err(OtterzipError::UnsupportedFormat(Some(format!(
+            "lenient fallback only handles ZIP today (got {other:?})"
+        )))),
+    }
 }
 
 #[cfg(not(feature = "libarchive-fallback"))]

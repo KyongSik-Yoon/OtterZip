@@ -54,3 +54,17 @@ pub fn version() -> &'static str {
 pub fn __probe_quick_eocd_sanity(path: &std::path::Path) -> std::result::Result<(), String> {
     backends::zip::__probe_quick_eocd_sanity_check(path)
 }
+
+/// Test-only entry point for the Day-1 lenient ZIP parser. Returns
+/// the `(path, uncompressed_size)` pairs the central-directory walk
+/// produced. Used by `tests/lenient_zip.rs` to assert parity with the
+/// strict `ZipBackend` — the dispatcher's fallback arm only fires on
+/// malformed archives, but parity must hold for healthy ones too or
+/// the v1.0 swap will silently lose entries the user expected.
+/// Not part of the stable surface.
+#[doc(hidden)]
+pub fn __probe_lenient_entries(
+    path: &std::path::Path,
+) -> Result<Vec<(String, u64)>> {
+    backends::lenient_zip::__probe_entries(path)
+}
