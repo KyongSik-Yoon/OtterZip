@@ -72,3 +72,33 @@ debug = true   # ?꾨줈?뚯씪留곸슜 ?щ낵 ?좎?
 [profile.dev]
 opt-level = 0
 debug = true
+
+# Hot-path crates compile with -O2 even in dev profile. Rust's
+# `cargo build` (no --release) is what the WinUI 3 .NET Debug
+# configuration picks up via OtterZip.Interop.csproj's <_RustProfile>
+# branch — leaving these at -O0 made many-files ZIP extracts
+# pathologically slow because the per-entry wrapper code (path
+# resolution, dir creation, BufReader copies) ran 20-100× slower
+# than the C zlib-ng decoder it surrounded, so 8 rayon workers
+# couldn't saturate the NVMe even though the parallel path was
+# firing. Diagnostic that triggered this: 7 GB / many-files archive,
+# CPU 15 %, disk D: read 37 MB/s, write 0, Bandizip 30 s, OtterZip
+# hung. Compile times stay reasonable because only the workspace's
+# own crates + their direct dependencies get optimised — the
+# compiler / proc-macro deps stay at -O0.
+[profile.dev.package.otterzip-core]
+opt-level = 2
+[profile.dev.package.otterzip-ffi]
+opt-level = 2
+[profile.dev.package."zip"]
+opt-level = 2
+[profile.dev.package."flate2"]
+opt-level = 2
+[profile.dev.package."libz-ng-sys"]
+opt-level = 3
+[profile.dev.package."miniz_oxide"]
+opt-level = 3
+[profile.dev.package."rayon"]
+opt-level = 2
+[profile.dev.package."rayon-core"]
+opt-level = 2
