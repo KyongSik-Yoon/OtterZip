@@ -56,6 +56,22 @@ gpt_disk_io = "0.16"
 cab         = "0.6"
 cfb         = "0.10"
 
+# --- lenient fallback (Phase perf-diag, 2026-05-13) ---
+# libarchive via compress-tools: catches malformed archives the `zip`
+# crate rejects (off-by-N CD, truncated EOCD, etc.). Active maintenance,
+# MIT/Apache, ArchiveIterator API streaming. See docs/05-build/
+# libarchive-fallback-plan.md for the routing & risk analysis.
+compress-tools = "0.16"
+
+# --- Korean filename handling ---
+# chardetng = Firefox's fallback encoding detector (CJK-aware). Used in
+# the legacy-codepage cascade after the EFS bit / 0x7075 paths fail.
+# encoding_rs = WHATWG Encoding Standard, EUC_KR static maps to CP949
+# (UHC) which covers every Bandizip-era Korean ZIP filename.
+chardetng    = "0.1"
+encoding_rs  = "0.8"
+sys-locale   = "0.3"
+
 # --- dev ---
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest  = "1"

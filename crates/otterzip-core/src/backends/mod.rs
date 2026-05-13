@@ -16,6 +16,8 @@ use crate::error::{Result, OtterzipError};
 pub(crate) mod cab;
 pub(crate) mod deb;
 pub(crate) mod iso;
+#[cfg(feature = "libarchive-fallback")]
+pub(crate) mod libarchive;
 pub(crate) mod msi;
 pub(crate) mod multi_volume_reader;
 pub(crate) mod sevenz;
@@ -80,7 +82,79 @@ pub(crate) struct StreamingExtractCtx<'a> {
     pub motw_payload: Option<&'a [u8]>,
 }
 
-/// Open the correct backend for the format detected at `path`.
+/// Returns true when an error from the strict backend warrants a
+/// lenient (libarchive) retry. We intentionally start tight — only
+/// errors whose root cause is "the archive bytes don't quite match
+/// the spec" qualify. WrongPassword / PathTraversal / Bomb /
+/// FeatureDisabled / Io don't trigger fallback because libarchive
+/// won't fix them either, just spend another N seconds rejecting.
+#[cfg(feature = "libarchive-fallback")]
+pub(crate) fn is_recoverable(err: &OtterzipError) -> bool {
+    match err {
+        OtterzipError::Corrupted { reason, .. } => {
+            let r = reason.to_ascii_lowercase();
+            // Known zip-crate strict-rejection patterns observed on
+            // real-world archives, plus our own deadline trip.
+            r.contains("invalid cdfh offset")
+                || r.contains("could not find central directory")
+                || r.contains("could not find eocd")
+                || r.contains("invalid zip archive")
+                || r.contains("invalid signature")
+                || r.contains("invalid local header")
+                || r.contains("data descriptor")
+                || r.contains("malformed")
+                || r.contains("deadline exceeded")
+        }
+        // UnsupportedFormat with a message often means "format
+        // variant we don't read but libarchive might" (older 7z, RAR
+        // read, some tar variants). Bare UnsupportedFormat(None) is
+        // detect-layer "no idea what this is" — don't retry.
+        OtterzipError::UnsupportedFormat(Some(_)) => true,
+        _ => false,
+    }
+}
+
+/// Build the fallback backend for `path` / `format`. Returns
+/// `FeatureDisabled` when the `libarchive-fallback` Cargo feature is
+/// off so callers see a clean signal rather than mysterious "no
+/// backend" errors.
+#[cfg(feature = "libarchive-fallback")]
+pub(crate) fn open_fallback_backend(
+    path: &Path,
+    _format: crate::format::ArchiveFormat,
+    password: Option<&Zeroizing<String>>,
+) -> Result<Box<dyn ArchiveBackend + Send>> {
+    tracing::warn!(
+        target: "otterzip::backends",
+        path = %path.display(),
+        format = ?_format,
+        "strict backend rejected — retrying with libarchive fallback"
+    );
+    Ok(Box::new(self::libarchive::LibarchiveBackend::open(
+        path, password,
+    )?))
+}
+
+#[cfg(not(feature = "libarchive-fallback"))]
+pub(crate) fn open_fallback_backend(
+    _path: &Path,
+    _format: crate::format::ArchiveFormat,
+    _password: Option<&Zeroizing<String>>,
+) -> Result<Box<dyn ArchiveBackend + Send>> {
+    Err(OtterzipError::FeatureDisabled(
+        "libarchive-fallback feature is not enabled — recompile with --features libarchive-fallback",
+    ))
+}
+
+#[cfg(not(feature = "libarchive-fallback"))]
+pub(crate) fn is_recoverable(_err: &OtterzipError) -> bool {
+    false
+}
+
+/// Open the correct backend for the format detected at `path`. When
+/// the strict (fast-path) backend returns a recoverable error and
+/// the `libarchive-fallback` feature is on, retry once via libarchive
+/// so malformed-but-readable archives still extract.
 pub(crate) fn open_backend(
     path: &Path,
     format: crate::format::ArchiveFormat,
@@ -88,7 +162,11 @@ pub(crate) fn open_backend(
 ) -> Result<Box<dyn ArchiveBackend + Send>> {
     use crate::format::ArchiveFormat as F;
     match format {
-        F::Zip | F::Zipx => Ok(Box::new(self::zip::ZipBackend::open(path, password)?)),
+        F::Zip | F::Zipx => match self::zip::ZipBackend::open(path, password) {
+            Ok(b) => Ok(Box::new(b)),
+            Err(e) if is_recoverable(&e) => open_fallback_backend(path, format, password),
+            Err(e) => Err(e),
+        },
         F::SevenZ => Ok(Box::new(self::sevenz::SevenZBackend::open(path, password)?)),
         F::Tar => Ok(Box::new(self::tar_family::TarBackend::open(
             path,

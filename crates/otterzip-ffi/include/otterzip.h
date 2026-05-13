@@ -192,6 +192,16 @@ uint32_t otterzip_abi_version(void);
 
 /**
  * Initialise the library. Idempotent. Returns 0 on success.
+ *
+ * Side effect (Phase perf-diag, 2026-05-13): installs a global
+ * `tracing` subscriber writing to `%TEMP%\otterzip\otterzip.log`
+ * on Windows (and `/tmp/otterzip/otterzip.log` elsewhere). Filter
+ * honours the `OTTERZIP_LOG` env var when set, defaults to
+ * `info,otterzip_core=debug,otterzip_ffi=debug`. The guard is
+ * leaked so the file appender keeps flushing for the entire process
+ * lifetime — `otterzip_shutdown` already gets called only on
+ * graceful exit and we'd rather lose 64 bytes of WorkerGuard than
+ * truncate the last buffer.
  */
 int32_t otterzip_init(void);
 

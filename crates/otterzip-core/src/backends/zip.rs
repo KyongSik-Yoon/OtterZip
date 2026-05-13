@@ -43,6 +43,12 @@ use crate::progress::{Progress, ProgressPhase};
 /// quickly enough that syscall overhead dominates.
 pub(crate) enum ZipReader {
     Single(BufReader<File>),
+    /// Wrapped variant used only during `ZipArchive::new` so the
+    /// strict ZIP parser bails inside the 5-second deadline budget on
+    /// pathological CD layouts. Swapped to `Single` immediately after
+    /// the parser returns so the entry-read hot path is never on the
+    /// clock-checked path.
+    SingleDeadline(DeadlineReader<BufReader<File>>),
     Multi(BufReader<SpannedZipReader>),
 }
 
@@ -50,6 +56,7 @@ impl Read for ZipReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Single(r) => r.read(buf),
+            Self::SingleDeadline(r) => r.read(buf),
             Self::Multi(r) => r.read(buf),
         }
     }
@@ -59,8 +66,57 @@ impl Seek for ZipReader {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         match self {
             Self::Single(r) => r.seek(pos),
+            Self::SingleDeadline(r) => r.seek(pos),
             Self::Multi(r) => r.seek(pos),
         }
+    }
+}
+
+/// `Read + Seek` adapter that synthesises an `io::Error` once the
+/// wall-clock budget is exhausted. Used to cap `ZipArchive::new`'s CD
+/// parse so a malformed archive can't burn 30+ seconds on the user's
+/// UI thread before we know to bail.
+pub(crate) struct DeadlineReader<R> {
+    inner: R,
+    started: std::time::Instant,
+    budget: std::time::Duration,
+}
+
+impl<R> DeadlineReader<R> {
+    pub(crate) fn new(inner: R, budget_ms: u64) -> Self {
+        Self {
+            inner,
+            started: std::time::Instant::now(),
+            budget: std::time::Duration::from_millis(budget_ms),
+        }
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.inner
+    }
+
+    fn check_deadline(&self) -> io::Result<()> {
+        if self.started.elapsed() > self.budget {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "ZipArchive::new deadline exceeded — archive may be malformed",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl<R: Read> Read for DeadlineReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.check_deadline()?;
+        self.inner.read(buf)
+    }
+}
+
+impl<R: Seek> Seek for DeadlineReader<R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.check_deadline()?;
+        self.inner.seek(pos)
     }
 }
 
@@ -97,6 +153,17 @@ pub(crate) struct ZipBackend {
     source: OpenSource,
 }
 
+/// Maximum wall-clock budget for `ZipArchive::new` (CD + EOCD parse).
+/// Healthy archives finish in milliseconds even at 7 GB / 10k
+/// entries; we cap at this so a pathological CD (off-by-N, malformed
+/// ZIP64 locator, etc.) bails to the lenient fallback instead of
+/// keeping the user staring at a frozen UI for 30+ seconds. The
+/// deadline is enforced by a guarded reader that returns
+/// `Other("ZipArchive::new deadline")` after the budget — the `zip`
+/// crate maps that to `InvalidArchive`, which `is_recoverable`
+/// recognises as a fallback trigger.
+const OPEN_DEADLINE_MS: u64 = 5_000;
+
 impl ZipBackend {
     pub(crate) fn open(path: &Path, password: Option<&Zeroizing<String>>) -> Result<Self> {
         let t_file_open = std::time::Instant::now();
@@ -108,7 +175,9 @@ impl ZipBackend {
             "ZipBackend::open file opened"
         );
         log_tail_bytes(path);
-        let reader = ZipReader::Single(BufReader::new(file));
+        let buffered = BufReader::new(file);
+        let deadline = DeadlineReader::new(buffered, OPEN_DEADLINE_MS);
+        let reader = ZipReader::SingleDeadline(deadline);
         let t_zip_new = std::time::Instant::now();
         let inner = ZipArchive::new(reader).map_err(|e| {
             tracing::warn!(
@@ -127,6 +196,15 @@ impl ZipBackend {
             entry_count = inner.len(),
             "ZipBackend::open ZipArchive::new done"
         );
+        // After CD parse the deadline has served its purpose — unwrap
+        // back to a plain BufReader for the entry-read path so the
+        // hot loop doesn't pay a per-read clock check.
+        let unwrapped = inner.into_inner();
+        let plain = match unwrapped {
+            ZipReader::SingleDeadline(dl) => ZipReader::Single(dl.into_inner()),
+            other => other,
+        };
+        let inner = ZipArchive::new(plain).map_err(map_zip_err)?;
         Ok(Self {
             inner: RefCell::new(inner),
             password: password.cloned(),
@@ -838,6 +916,15 @@ fn log_tail_bytes(path: &Path) {
 fn map_zip_err(e: zip::result::ZipError) -> OtterzipError {
     use zip::result::ZipError as Z;
     match e {
+        // Deadline-reader synthetic Io error → Corrupted so the
+        // open_backend dispatcher recognises it as recoverable and
+        // hands off to libarchive instead of bubbling Io upward.
+        Z::Io(io) if io.to_string().contains("deadline exceeded") => {
+            OtterzipError::Corrupted {
+                reason: format!("ZipArchive::new deadline exceeded ({io})"),
+                entry: None,
+            }
+        }
         Z::Io(io) => OtterzipError::Io(io),
         Z::InvalidArchive(msg) => OtterzipError::Corrupted {
             reason: msg.to_string(),

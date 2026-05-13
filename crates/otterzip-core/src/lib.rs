@@ -22,6 +22,7 @@
 )]
 
 pub mod archive;
+pub mod encoding;
 pub mod entry;
 pub mod error;
 pub mod format;

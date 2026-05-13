@@ -113,6 +113,11 @@ pub enum ExtractWarning {
     EncodingFallback { lossy: String },
     DuplicateEntry { path: String },
     SymlinkSkipped { path: String, target: String },
+    /// The strict (fast-path) backend rejected the archive; we fell
+    /// back to libarchive's lenient parser. Carries the backend name
+    /// for UI display and the original rejection reason for audit
+    /// logs / bug reports.
+    RecoveredWithFallback { backend: String, original_error: String },
 }
 
 impl Archive {

@@ -12,12 +12,20 @@ rust-version.workspace = true
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-otterzip-core = { path = "../otterzip-core" }
+otterzip-core = { path = "../otterzip-core", default-features = false }
 thiserror    = { workspace = true }
 tracing      = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender   = { workspace = true }
 zeroize      = { workspace = true }
+
+[features]
+# Forward to the core crate. Default-on so every cargo build of the
+# FFI cdylib ships with libarchive lenient fallback — the cost is one
+# vcpkg dep + ~1 MB binary growth, the win is that real-world
+# malformed archives extract instead of hanging the user.
+default = ["libarchive-fallback"]
+libarchive-fallback = ["otterzip-core/libarchive-fallback"]
 
 [dev-dependencies]
 tempfile = "3"

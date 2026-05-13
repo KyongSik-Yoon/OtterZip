@@ -30,6 +30,17 @@ gpt_disk_io = { workspace = true }
 cab         = { workspace = true }
 cfb         = { workspace = true }
 
+# Korean filename handling (always-on — tiny, no native deps).
+chardetng   = { workspace = true }
+encoding_rs = { workspace = true }
+sys-locale  = { workspace = true }
+
+# libarchive fallback — gated by `libarchive-fallback` feature. When
+# OFF, no compress-tools dep is pulled and the lenient route falls
+# back to a clear error message. When ON (release builds) the fallback
+# handles malformed ZIPs the zip crate rejects.
+compress-tools = { workspace = true, optional = true }
+
 [dev-dependencies]
 proptest  = { workspace = true }
 criterion = { workspace = true }
@@ -42,6 +53,11 @@ zip       = { version = "2", default-features = false, features = ["deflate-zlib
 default = []
 # 특정 백엔드를 조건부 비활성화할 때 사용 (예: no-rar feature).
 # 현재는 all-on. Feature 분리는 필요 시 추후.
+
+# libarchive fallback for malformed archives the zip crate rejects.
+# Disabled by default so non-Windows builds + dev iteration don't need
+# vcpkg / native libarchive. Release builds enable explicitly.
+libarchive-fallback = ["dep:compress-tools"]
 
 [[bench]]
 name = "extract"
