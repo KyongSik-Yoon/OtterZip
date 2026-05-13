@@ -73,21 +73,28 @@ impl Seek for ZipReader {
 /// `rust-core-api.md` §1.1. Safety of `RefCell` here relies on `Archive`
 /// being `!Sync` — the doc contract already forbids cross-thread sharing
 /// without a mutex (§5).
+/// Where each parallel-extract worker should re-open the archive
+/// from. Captured at `open` time so the worker closures don't need
+/// to inspect [`ZipBackend`]'s state during dispatch.
+#[derive(Clone)]
+pub(crate) enum OpenSource {
+    Single(PathBuf),
+    Multi(Vec<PathBuf>),
+}
+
 pub(crate) struct ZipBackend {
     inner: RefCell<ZipArchive<ZipReader>>,
     /// Held in zeroized memory so the bytes are wiped on drop. We clone
     /// when calling into the `zip` crate's password APIs; the source-of-
     /// truth string lives here and is never logged or formatted.
     password: Option<Zeroizing<String>>,
-    /// Path to the first / only volume. Held so worker threads in
-    /// [`ZipBackend::extract_all_streaming`] can re-open their own
-    /// archive handle for parallel decompression (single-volume path
-    /// only — multi-volume always uses the serial extractor since
-    /// re-opening N file handles per worker would defeat the win).
-    path: PathBuf,
-    /// True when [`inner`] holds a `ZipReader::Multi` view over a
-    /// spanned / split archive. Gates the parallel-extract path.
-    is_multi_volume: bool,
+    /// Where parallel-extract workers re-open the archive. For
+    /// single-volume this is one path; for multi-volume it carries
+    /// the full ordered volume list so each worker can rebuild its
+    /// own `SpannedZipReader`. Per-worker file handle cost: N volumes
+    /// × workers — fine for typical splits (28 vols × 8 workers = 224
+    /// FDs, well under the process limit).
+    source: OpenSource,
 }
 
 impl ZipBackend {
@@ -98,8 +105,7 @@ impl ZipBackend {
         Ok(Self {
             inner: RefCell::new(inner),
             password: password.cloned(),
-            path: path.to_path_buf(),
-            is_multi_volume: false,
+            source: OpenSource::Single(path.to_path_buf()),
         })
     }
 
@@ -132,8 +138,7 @@ impl ZipBackend {
         Ok(Self {
             inner: RefCell::new(inner),
             password: password.cloned(),
-            path: volumes[0].clone(),
-            is_multi_volume: true,
+            source: OpenSource::Multi(volumes.to_vec()),
         })
     }
 
@@ -263,15 +268,13 @@ impl ArchiveBackend for ZipBackend {
         &self,
         ctx: &mut StreamingExtractCtx<'_>,
     ) -> Option<Result<()>> {
-        // Multi-volume reads can't use the parallel path: each worker
-        // re-opens the archive via `open_local(&self.path)`, which
-        // points at the *first* volume only — single-volume reading
-        // would EOF before reaching any data in vol2..N. The serial
-        // extract loop in archive.rs walks the same backend instance
-        // we built in `open_multi`, so it sees all volumes.
-        if self.is_multi_volume {
-            return None;
-        }
+        // Multi-volume now participates in the parallel path: each
+        // worker re-opens the archive via `open_local(&self.source)`
+        // which dispatches to either `File::open` (Single) or
+        // `SpannedZipReader::open` (Multi). User benchmark
+        // (1.35 GB / 9-entry spanned ZIP) showed disk usage 30–40%
+        // serial — workers needed to saturate the NVMe.
+        //
         // Decision rule (per `performance.md` §4): only switch to the
         // parallel path when there's enough work to amortise the
         // per-thread `ZipArchive::new` cost (re-parses the central
@@ -326,9 +329,9 @@ impl ZipBackend {
         let motw_payload: Option<std::sync::Arc<Vec<u8>>> =
             ctx.motw_payload.map(|p| std::sync::Arc::new(p.to_vec()));
         // Pull the data we need into the closure without aliasing `self`
-        // (which holds a `!Sync` `RefCell`). `path` and `password` are
+        // (which holds a `!Sync` `RefCell`). `source` and `password` are
         // cheap to clone; everything else lives in the `ctx`.
-        let archive_path = self.path.clone();
+        let source = self.source.clone();
         let password = self.password.clone();
 
         // First pass: gather entry POD + total bytes (metadata-only — we
@@ -363,9 +366,11 @@ impl ZipBackend {
         // archive handle, amortising the central-directory parse over
         // every entry the worker takes — critical for small-entry
         // archives where the per-entry overhead would otherwise dominate.
-        let path_for_init = archive_path.clone();
+        // For multi-volume this rebuilds the spanned-ZIP patch view
+        // per worker (cheap — patched_tail is a few hundred bytes).
+        let source_for_init = source.clone();
         metas.par_iter().for_each_init(
-            || open_local(&path_for_init).ok(),
+            || open_local(&source_for_init).ok(),
             |local_handle, entry| {
             if canceled.load(std::sync::atomic::Ordering::Relaxed) {
                 return;
@@ -586,10 +591,23 @@ fn set_first_err(
     canceled.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
-fn open_local(path: &Path) -> Result<ZipArchive<ZipReader>> {
-    let file = open_for_sequential_read(path)?;
-    let reader = ZipReader::Single(BufReader::new(file));
-    ZipArchive::new(reader).map_err(map_zip_err)
+/// Per-worker archive re-open. Dispatches on [`OpenSource`] so the
+/// same closure can drive single-volume and multi-volume parallel
+/// extracts. The buffering / sequential-scan hints match the primary
+/// open path so worker reads enjoy the same I/O profile.
+fn open_local(source: &OpenSource) -> Result<ZipArchive<ZipReader>> {
+    match source {
+        OpenSource::Single(path) => {
+            let file = open_for_sequential_read(path)?;
+            let reader = ZipReader::Single(BufReader::new(file));
+            ZipArchive::new(reader).map_err(map_zip_err)
+        }
+        OpenSource::Multi(volumes) => {
+            let szr = SpannedZipReader::open(volumes)?;
+            let reader = ZipReader::Multi(BufReader::with_capacity(64 * 1024, szr));
+            ZipArchive::new(reader).map_err(map_zip_err)
+        }
+    }
 }
 
 fn resolve_output_path(
