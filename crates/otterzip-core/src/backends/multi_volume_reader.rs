@@ -96,6 +96,19 @@ impl MultiVolumeReader {
         self.total
     }
 
+    /// Virtual offset of the first byte belonging to volume `disk_index`
+    /// (0-based, matching ZIP's `disk_number_start` field). Used by the
+    /// spanned-ZIP patcher to translate per-disk byte positions into
+    /// absolute positions in the virtual stream.
+    ///
+    /// Out-of-range indices clamp to the end of the stream so callers
+    /// dealing with malformed disk references degrade to "no entry
+    /// found" rather than panic.
+    pub(crate) fn disk_origin(&self, disk_index: usize) -> u64 {
+        let idx = disk_index.min(self.cumulative.len() - 1);
+        self.cumulative[idx]
+    }
+
     /// Translate a virtual byte position to `(file_index, offset_within_file)`.
     /// Positions equal to `total` map to `(files.len() - 1, sizes[last])` so
     /// callers reading at EOF land cleanly inside the last file's tail.

@@ -19,7 +19,7 @@ use zeroize::Zeroizing;
 use zip::ZipArchive;
 
 use crate::archive::ExtractWarning;
-use crate::backends::multi_volume_reader::MultiVolumeReader;
+use crate::backends::spanned_zip::SpannedZipReader;
 use crate::backends::{ArchiveBackend, StreamingExtractCtx};
 use crate::entry::{Entry, HostOs};
 use crate::error::{Result, OtterzipError};
@@ -28,12 +28,12 @@ use crate::options::OverwritePolicy;
 use crate::progress::{Progress, ProgressPhase};
 
 /// Reader source for the ZIP backend. Single-file is the common case;
-/// multi-volume presents a sequence of split / spanned volumes as one
-/// virtual byte stream so `zip::ZipArchive` can read across them
-/// without any awareness of disk boundaries.
+/// multi-volume uses the [`SpannedZipReader`] overlay so APPNOTE-spanned
+/// archives (per-disk offset references) and raw byte-split archives
+/// both look like single-disk ZIPs to the upstream `zip` crate.
 pub(crate) enum ZipReader {
     Single(BufReader<File>),
-    Multi(MultiVolumeReader),
+    Multi(SpannedZipReader),
 }
 
 impl Read for ZipReader {
@@ -113,8 +113,8 @@ impl ZipBackend {
                 "ZipBackend::open_multi requires at least one volume",
             ));
         }
-        let mvr = MultiVolumeReader::open(volumes)?;
-        let reader = ZipReader::Multi(mvr);
+        let szr = SpannedZipReader::open(volumes)?;
+        let reader = ZipReader::Multi(szr);
         let inner = ZipArchive::new(reader).map_err(map_zip_err)?;
         Ok(Self {
             inner: RefCell::new(inner),

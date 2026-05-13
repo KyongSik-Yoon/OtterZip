@@ -20,6 +20,7 @@ pub(crate) mod msi;
 pub(crate) mod multi_volume_reader;
 pub(crate) mod sevenz;
 pub(crate) mod single_stream;
+pub(crate) mod spanned_zip;
 pub(crate) mod tar_family;
 pub(crate) mod writer;
 pub(crate) mod zip;
