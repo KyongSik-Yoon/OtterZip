@@ -386,7 +386,26 @@ impl ZipBackend {
         // archives where the per-entry overhead would otherwise dominate.
         // For multi-volume this rebuilds the spanned-ZIP patch view
         // per worker (cheap — patched_tail is a few hundred bytes).
+        //
+        // Worker-count cap: NTFS serialises MFT updates (file create,
+        // rename, set-attributes) at the volume level. With rayon's
+        // default = num_cpus(), modern 12/16/24-thread CPUs spawn that
+        // many workers — all queued behind the same NTFS lock when an
+        // archive has thousands of entries, especially clustered into
+        // a few hot directories. Observed pathology: 7 GB / many-files
+        // archive, CPU 17 %, disk read 57 MB/s, write 1.6 MB/s — the
+        // hardware was idling while workers waited on kernel-side
+        // metadata locks. Cap at 4 to stay in NTFS's concurrency sweet
+        // spot; per-entry CPU work (decompress) parallelises fine
+        // within that envelope, and we stop fighting the OS.
         let source_for_init = source.clone();
+        let worker_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(std::cmp::min(rayon::current_num_threads(), 4))
+            .build()
+            .map_err(|e| OtterzipError::BackendError(format!(
+                "rayon thread-pool build failed: {e}"
+            )))?;
+        worker_pool.install(|| {
         metas.par_iter().for_each_init(
             || open_local(&source_for_init).ok(),
             |local_handle, entry| {
@@ -578,6 +597,7 @@ impl ZipBackend {
             }
             },
         );
+        }); // worker_pool.install
 
         if let Some(err) = first_err.into_inner().unwrap() {
             return Err(err);
