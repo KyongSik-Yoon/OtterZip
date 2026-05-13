@@ -1,14 +1,26 @@
 //! Lenient ZIP backend — custom EOCD / Central Directory parser that
 //! salvages malformed archives the strict `zip` crate refuses.
 //!
-//! ## Status — Day 1 (commit handover from `9777acd`)
+//! ## Status — Day 2 (LFH parse + Store/Deflate dispatch)
 //!
-//! This module currently implements **only** the metadata path:
-//! locating the EOCD (with ZIP64 escalation), walking the central
-//! directory, and producing one `Entry` per CDFH record. The per-entry
-//! LFH parse + decompression dispatch lands on Day 2; until then
-//! [`LenientZipBackend::extract_entry`] / [`open_entry_stream`]
-//! short-circuit to [`OtterzipError::FeatureDisabled`].
+//! Day 1 wired the metadata path: locate EOCD (with ZIP64 escalation),
+//! walk the central directory, produce one [`Entry`] per CDFH. Day 2
+//! extends that with the per-entry payload read: seek to the LFH,
+//! skip its variable-length filename + extra fields, and dispatch
+//! on the CDFH-declared compression method.
+//!
+//! Supported methods on the read path today:
+//!
+//! | Method | Decoder | Notes |
+//! |---|---|---|
+//! | 0 (Stored) | direct copy via `std::io::copy` | `compressed_size == uncompressed_size`. |
+//! | 8 (Deflate) | `flate2::read::DeflateDecoder` | zlib-ng backed; streaming, no size hint needed. |
+//!
+//! Other CDFH methods (BZip2 / LZMA / Zstd / Deflate64 / PPMd) still
+//! surface [`OtterzipError::FeatureDisabled`] on the lenient surface
+//! — those land in a follow-up sprint once Store + Deflate parity is
+//! confirmed against the user's reproducer corpus. The strict
+//! `ZipBackend` covers the healthy-archive case for them today.
 //!
 //! ## Why a custom parser
 //!
@@ -57,6 +69,21 @@ const SIG_ZIP64_LOCATOR: [u8; 4] = [0x50, 0x4b, 0x06, 0x07];
 const SIG_ZIP64_EOCD: [u8; 4] = [0x50, 0x4b, 0x06, 0x06];
 /// Central-directory file header signature ("PK\001\002").
 const SIG_CDFH: [u8; 4] = [0x50, 0x4b, 0x01, 0x02];
+/// Local file header signature ("PK\003\004") — sits before every
+/// entry's payload. Read by [`locate_payload`].
+const SIG_LFH: [u8; 4] = [0x50, 0x4b, 0x03, 0x04];
+
+/// Fixed-size portion of an LFH (filename + extra follow).
+const LFH_FIXED_SIZE: usize = 30;
+
+/// Cap on the inflated bytes a single `extract_entry` call will write
+/// when the CDFH-declared `uncompressed_size` is missing or
+/// untrustworthy (a malformation pattern fuzz corpora love). 4 GiB
+/// matches the practical upper bound of a single Deflate stream and
+/// keeps a hostile entry from running away with all of RAM; legitimate
+/// large entries should always have a populated CDFH size and bypass
+/// this clamp.
+const STREAMING_INFLATE_HARD_CAP: u64 = 4 * 1024 * 1024 * 1024;
 
 /// Fixed-size portion of an EOCD record (variable-length comment follows).
 const EOCD_FIXED_SIZE: usize = 22;
@@ -78,10 +105,19 @@ const EXTRA_TAG_ZIP64: u16 = 0x0001;
 
 // === Backend ==========================================================
 
-/// Per-entry metadata captured from the central directory. Day 1 only
-/// uses the public [`Entry`] half; the sidecar struct carries the LFH
-/// offset + payload sizing Day 2 will need to dispatch decompression
-/// without re-parsing the CD.
+/// Per-entry metadata captured from the central directory. The
+/// `entry` field is what gets handed out via the public
+/// [`ArchiveBackend::entries`] surface; the rest is sidecar carried
+/// for Day 2's per-entry payload reads (the LFH offset + the raw
+/// CDFH method / GP-flag bits — enough to dispatch without
+/// re-parsing the CD).
+///
+/// Cheaply cloneable: every field is fixed-width or already-`Clone`
+/// (`Entry`'s strings are heap-allocated but typically short). The
+/// extract path clones one record per `extract_entry` call so the
+/// `RefCell<Vec<CdRecord>>` borrow can be released before we take a
+/// mutable borrow of the inner reader.
+#[derive(Clone)]
 struct CdRecord {
     entry: Entry,
     /// Absolute byte offset of this entry's local file header. May be
@@ -90,32 +126,44 @@ struct CdRecord {
     /// per-entry errors instead of failing the whole archive.
     lfh_offset: u64,
     /// Compression method straight from the CDFH (APPNOTE.TXT §4.4.5).
-    /// Day 2 dispatches on this to pick `flate2` vs `libdeflater` vs
-    /// `bzip2` etc.
+    /// [`decompress`] dispatches on this to pick `flate2` (today) and
+    /// will fan out to `bzip2` / `lzma` / `zstd` once those land.
     raw_method: u16,
-    /// Raw GP bit flag — needed for encryption detection (bit 0) and
-    /// the data-descriptor case Day 2 must handle (bit 3).
+    /// Raw GP bit flag. Encryption (bit 0) is already projected into
+    /// `entry.encryption`, but bit 3 (data descriptor — sizes/CRC live
+    /// after the compressed payload instead of in the LFH) and bit 11
+    /// (EFS / UTF-8 names) are needed by the per-entry read path
+    /// when we tighten LFH parsing. Kept until that lands.
+    #[allow(dead_code)]
     raw_gpf: u16,
 }
 
-/// Lenient ZIP backend. Holds the source path + the materialised CD
-/// records; per-entry payload reads (Day 2) re-open the file each call
-/// because the metadata path doesn't need a sticky `RefCell<File>`.
+/// Lenient ZIP backend. Holds the source path, the materialised CD
+/// records, and a single buffered file handle reused across per-entry
+/// reads. The trait surface is `&self`, so the handle lives behind a
+/// `RefCell` — matches the strict `ZipBackend`'s borrow discipline and
+/// is sound because the public `Archive` type is `!Sync` per
+/// `rust-core-api.md` §5.
 pub(crate) struct LenientZipBackend {
-    /// Original archive path. Day 2's worker re-open path goes through
-    /// this.
-    _path: PathBuf,
+    /// Original archive path. Reserved for the parallel-extract
+    /// `extract_all_streaming` override (each rayon worker re-opens
+    /// the file on its own handle) — Day 2 ships the serial path
+    /// only, so this is unused today.
+    #[allow(dead_code)]
+    source_path: PathBuf,
     /// Held in zeroized memory so the bytes are wiped on drop. Reserved
-    /// for Day 2's encrypted-entry dispatch; Day 1 never touches it.
+    /// for the encrypted-entry dispatch; Day 2 doesn't actually use a
+    /// password (GP bit 0 entries still surface `FeatureDisabled`).
     _password: Option<Zeroizing<String>>,
-    /// CD records produced by [`walk_central_directory`]. Held behind a
-    /// `RefCell` to satisfy the [`ArchiveBackend`] trait's `&self`
-    /// methods on [`entries`](ArchiveBackend::entries) without forcing
-    /// the caller to take a mutable borrow.
+    /// CD records produced by [`walk_central_directory`].
     records: RefCell<Vec<CdRecord>>,
-    /// Captured at open for diagnostic + Day-2 sanity checks. Total
-    /// physical bytes on disk.
-    _file_size: u64,
+    /// Single buffered reader shared across `extract_entry` /
+    /// `open_entry_stream` calls. `BufReader` coalesces the LFH probe
+    /// (30 bytes) + filename + extra + payload reads into ~64 KiB
+    /// syscalls, matching the strict path's I/O profile.
+    inner: RefCell<BufReader<File>>,
+    /// Captured at open for diagnostic + per-entry LFH sanity checks.
+    file_size: u64,
 }
 
 impl LenientZipBackend {
@@ -151,11 +199,25 @@ impl LenientZipBackend {
         );
 
         Ok(Self {
-            _path: path.to_path_buf(),
+            source_path: path.to_path_buf(),
             _password: password.cloned(),
             records: RefCell::new(records),
-            _file_size: file_size,
+            inner: RefCell::new(reader),
+            file_size,
         })
+    }
+
+    /// Locate the cached record for `entry_path`. Linear scan is fine
+    /// here — typical archives top out around 10–100 K entries, an
+    /// `O(n)` lookup is sub-millisecond even at that scale and avoids
+    /// a parallel HashMap that would need its own lifetime management.
+    fn find_record(&self, entry_path: &str) -> Result<CdRecord> {
+        self.records
+            .borrow()
+            .iter()
+            .find(|r| r.entry.path == entry_path)
+            .cloned()
+            .ok_or_else(|| OtterzipError::EntryNotFound(entry_path.to_string()))
     }
 }
 
@@ -173,20 +235,46 @@ impl ArchiveBackend for LenientZipBackend {
         Ok(Box::new(cloned.into_iter()))
     }
 
-    fn extract_entry(&self, _entry_path: &str, _out: &mut dyn std::io::Write) -> Result<u64> {
-        // Day 2 implements the per-entry LFH parse + decompression
-        // dispatch. Until then this surface is gated so the dispatcher
-        // can still produce a clean error rather than silently writing
-        // zero bytes.
-        Err(OtterzipError::FeatureDisabled(
-            "lenient ZIP extract (Day 2 work — only metadata is wired today)",
-        ))
+    fn extract_entry(&self, entry_path: &str, out: &mut dyn std::io::Write) -> Result<u64> {
+        let record = self.find_record(entry_path)?;
+        if record.entry.is_directory {
+            // Directory entries carry no payload; the caller's
+            // `extract_all` already created the dir before reaching us.
+            return Ok(0);
+        }
+        if record.lfh_offset == u64::MAX {
+            return Err(OtterzipError::Corrupted {
+                reason: "entry marked unreadable during lenient CD walk".into(),
+                entry: Some(entry_path.to_string()),
+            });
+        }
+        if record.entry.encryption != EncryptionMethod::None {
+            // GP bit 0 was set. Encrypted-entry dispatch (ZipCrypto +
+            // WinZip AES) is a follow-up sprint — surface a clean
+            // signal so the strict path's password prompt UX is the
+            // only thing missing rather than confusing CRC errors.
+            return Err(OtterzipError::FeatureDisabled(
+                "lenient ZIP: encrypted entries (v1.1 — AES + ZipCrypto)",
+            ));
+        }
+        let mut reader = self.inner.borrow_mut();
+        let payload_offset = locate_payload(&mut *reader, &record, self.file_size)?;
+        reader.seek(SeekFrom::Start(payload_offset))?;
+        let limited = (&mut *reader).take(record.entry.compressed_size);
+        decompress(record.raw_method, limited, entry_path, out)
     }
 
-    fn open_entry_stream(&self, _entry_path: &str) -> Result<Box<dyn Read + Send + '_>> {
-        Err(OtterzipError::FeatureDisabled(
-            "lenient ZIP stream (Day 2 work — only metadata is wired today)",
-        ))
+    fn open_entry_stream(&self, entry_path: &str) -> Result<Box<dyn Read + Send + '_>> {
+        // Eager-copy into an in-memory buffer so the returned Read
+        // doesn't carry a `RefMut` borrow into the inner reader
+        // (which would also fail the `Send` bound the trait wants).
+        // Matches the strict `ZipBackend::open_entry_stream` shape;
+        // large entries pay the same memory cost there. A real
+        // streaming path needs the trait contract to grow a
+        // generator-style yield, which is out of scope for Day 2.
+        let mut buf: Vec<u8> = Vec::new();
+        let _ = self.extract_entry(entry_path, &mut buf)?;
+        Ok(Box::new(std::io::Cursor::new(buf)))
     }
 
     fn is_encrypted_fast(&self) -> Result<bool> {
@@ -950,13 +1038,130 @@ pub fn __probe_entries(path: &Path) -> Result<Vec<(String, u64)>> {
     iter.map(|r| r.map(|e| (e.path, e.uncompressed_size))).collect()
 }
 
-/// Suppress dead-code warnings on Day-2 fields that the metadata path
-/// doesn't read. Once Day 2 wires the extract path these go away.
-#[allow(dead_code)]
-fn _day2_field_uses(r: &CdRecord) {
-    let _ = r.lfh_offset;
-    let _ = r.raw_method;
-    let _ = r.raw_gpf;
+/// Day-2 sibling of [`__probe_entries`]. Opens the archive through
+/// the lenient backend and extracts a single named entry into a
+/// `Vec<u8>` for byte-level test assertions. The wrapper in
+/// `lib.rs::__probe_lenient_extract` re-exports this to integration
+/// tests; the dispatcher's full `Archive::open → extract_all` path is
+/// covered separately by `tests/libarchive_fallback.rs`.
+#[doc(hidden)]
+pub fn __probe_extract(path: &Path, entry_name: &str) -> Result<Vec<u8>> {
+    let backend = LenientZipBackend::open(path, None)?;
+    let mut sink = Vec::new();
+    backend.extract_entry(entry_name, &mut sink)?;
+    Ok(sink)
+}
+
+// === Per-entry payload read (Day 2) ===================================
+
+/// Seek to `record.lfh_offset`, validate the LFH signature, and return
+/// the absolute byte offset of the entry's payload start (i.e. just
+/// past the LFH's name + extra fields).
+///
+/// Lenient: we trust the LFH's own `name_len` / `extra_len` for the
+/// arithmetic — those can legitimately differ from the CDFH fields
+/// (some authoring tools emit a UTF-8 name in the CDFH and a CP437
+/// fallback in the LFH, with different lengths) and the LFH values
+/// are what govern where the payload actually starts. The CDFH-side
+/// values are still used for everything else: compression method,
+/// sizes, encryption flag — see [`CdRecord`].
+fn locate_payload<R: Read + Seek>(
+    reader: &mut R,
+    record: &CdRecord,
+    file_size: u64,
+) -> Result<u64> {
+    if record.lfh_offset >= file_size {
+        return Err(OtterzipError::Corrupted {
+            reason: format!(
+                "LFH offset {} >= file size {}",
+                record.lfh_offset, file_size
+            ),
+            entry: Some(record.entry.path.clone()),
+        });
+    }
+    reader.seek(SeekFrom::Start(record.lfh_offset))?;
+    let mut header = [0u8; LFH_FIXED_SIZE];
+    reader.read_exact(&mut header)?;
+    if header[..4] != SIG_LFH {
+        return Err(OtterzipError::Corrupted {
+            reason: format!(
+                "LFH at offset {} missing signature (got {:02x?})",
+                record.lfh_offset,
+                &header[..4]
+            ),
+            entry: Some(record.entry.path.clone()),
+        });
+    }
+    let name_len = u64::from(u16::from_le_bytes([header[26], header[27]]));
+    let extra_len = u64::from(u16::from_le_bytes([header[28], header[29]]));
+    let payload = record
+        .lfh_offset
+        .checked_add(LFH_FIXED_SIZE as u64)
+        .and_then(|v| v.checked_add(name_len))
+        .and_then(|v| v.checked_add(extra_len))
+        .ok_or_else(|| OtterzipError::Corrupted {
+            reason: "LFH name/extra arithmetic overflowed u64".into(),
+            entry: Some(record.entry.path.clone()),
+        })?;
+    if payload > file_size {
+        return Err(OtterzipError::Corrupted {
+            reason: format!(
+                "LFH payload start {payload} > file size {file_size}"
+            ),
+            entry: Some(record.entry.path.clone()),
+        });
+    }
+    Ok(payload)
+}
+
+/// Dispatch the compressed bytes in `input` to the right decoder and
+/// copy the inflated bytes into `out`. Returns the number of bytes
+/// written. `entry_path` is used purely for error context.
+///
+/// Supported methods are listed in the module-level doc. Anything
+/// else returns [`OtterzipError::FeatureDisabled`] with a clear hint
+/// so the caller (the framework's per-entry loop) can record the
+/// skip in the `ExtractReport`.
+fn decompress<R: Read>(
+    method: u16,
+    mut input: R,
+    entry_path: &str,
+    out: &mut dyn std::io::Write,
+) -> Result<u64> {
+    match method {
+        0 => {
+            // Stored — compressed == uncompressed, straight copy.
+            let n = std::io::copy(&mut input, out)?;
+            Ok(n)
+        }
+        8 => {
+            // Deflate — flate2 with the zlib-ng backend (feature gate
+            // is set in the workspace Cargo.toml). The hard cap
+            // protects against runaway streams whose CDFH lied about
+            // the inflated size; a healthy entry stops at EOF on the
+            // `Take` reader long before reaching the cap.
+            let mut decoder = flate2::read::DeflateDecoder::new(&mut input);
+            let mut capped = (&mut decoder).take(STREAMING_INFLATE_HARD_CAP);
+            let n = std::io::copy(&mut capped, out)?;
+            Ok(n)
+        }
+        other => Err(OtterzipError::FeatureDisabled(
+            // The static-str variant requires a `&'static str`; we
+            // log the method + entry separately so the message in
+            // the user's logs still has the diagnostic info.
+            match () {
+                () => {
+                    tracing::warn!(
+                        target: "otterzip::lenient",
+                        method = other,
+                        entry = %entry_path,
+                        "lenient: compression method not yet supported"
+                    );
+                    "lenient ZIP: compression method beyond Store/Deflate (v1.1)"
+                }
+            },
+        )),
+    }
 }
 
 // === Tests ============================================================

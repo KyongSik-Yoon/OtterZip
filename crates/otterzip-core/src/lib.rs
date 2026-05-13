@@ -68,3 +68,17 @@ pub fn __probe_lenient_entries(
 ) -> Result<Vec<(String, u64)>> {
     backends::lenient_zip::__probe_entries(path)
 }
+
+/// Test-only entry point for the Day-2 lenient ZIP extract path.
+/// Opens `path` through the lenient backend, locates `entry_name` in
+/// the cached CDFH list, and returns the decompressed payload bytes.
+/// Used by `tests/lenient_zip.rs::extract_*` to verify byte-level
+/// parity with the strict `ZipBackend` on round-trip fixtures.
+/// Not part of the stable surface.
+#[doc(hidden)]
+pub fn __probe_lenient_extract(
+    path: &std::path::Path,
+    entry_name: &str,
+) -> Result<Vec<u8>> {
+    backends::lenient_zip::__probe_extract(path, entry_name)
+}
