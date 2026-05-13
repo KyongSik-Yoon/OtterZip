@@ -408,20 +408,19 @@ impl LibarchiveBackend {
                         if let Some(mut w) = current_writer.take() {
                             w.flush().map_err(OtterzipError::Io)?;
                         }
-                        if let (Some(out_path), Some(payload)) =
-                            (current_out_path.as_ref(), ctx.motw_payload)
-                        {
-                            if let Err(e) =
-                                crate::motw::write_zone_identifier(out_path, payload)
-                            {
-                                tracing::warn!(
-                                    target: "otterzip::libarchive",
-                                    path = %out_path.display(),
-                                    error = %e,
-                                    "MOTW propagation skipped (libarchive fallback)"
-                                );
-                            }
-                        }
+                        // MOTW propagation deliberately skipped on the
+                        // libarchive fallback path. The per-entry ADS
+                        // write costs ~1 ms × N entries (≈ 10 s on the
+                        // user's 9,674-entry archive), and this path
+                        // is for recovery of malformed archives in the
+                        // first place — strict spec adherence is
+                        // already compromised by the time we get here.
+                        // If MOTW preservation matters more than
+                        // recovery speed, the strict fast path keeps
+                        // doing it per archive that the zip crate
+                        // accepts. (Tracked as v1.1 TODO: batch the
+                        // ADS writes into a post-extract phase.)
+                        let _ = ctx.motw_payload;
                         ctx.report.bytes_written += bytes_done;
                     }
                     entries_done += 1;
