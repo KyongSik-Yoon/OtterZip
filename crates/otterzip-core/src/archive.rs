@@ -399,13 +399,7 @@ impl Archive {
     /// scan for tar.* — but `tar` doesn't carry encryption metadata
     /// anyway, so this returns `false` immediately on those formats).
     pub fn is_encrypted(&self) -> Result<bool> {
-        for entry in self.reader()?.entries()? {
-            let entry = entry?;
-            if entry.encryption != crate::format::EncryptionMethod::None {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        self.reader()?.is_encrypted_fast()
     }
 
     /// `Some(true)` for 7z archives marked solid; `Some(false)` for

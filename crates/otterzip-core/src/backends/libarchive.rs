@@ -191,6 +191,20 @@ const S_IFDIR: u32 = 0o040_000;
 const S_IFLNK: u32 = 0o120_000;
 
 impl ArchiveBackend for LibarchiveBackend {
+    /// libarchive can't peek at "is any entry encrypted" without a
+    /// full stream walk, which on a 5 GB archive costs 20-30 seconds.
+    /// Probing twice (host-side `ProbeIsEncrypted` + extract work
+    /// delegate's `Archive.Open` round trip) is the bulk of the
+    /// post-fallback delay the user observed. We short-circuit to
+    /// "no" here — wrong only when the archive genuinely is
+    /// encrypted, in which case the actual extract will throw
+    /// `WrongPassword` and the host UI already handles that by
+    /// surfacing the password panel for a retry. Net effect on
+    /// healthy non-encrypted malformed archives: zero added wait.
+    fn is_encrypted_fast(&self) -> Result<bool> {
+        Ok(false)
+    }
+
     fn entries(&self) -> Result<Box<dyn Iterator<Item = Result<Entry>> + '_>> {
         // Cache + clone-return: matches the cab/iso/msi pattern.
         if self.entry_cache.borrow().is_none() {

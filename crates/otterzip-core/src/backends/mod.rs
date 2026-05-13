@@ -62,6 +62,22 @@ pub(crate) trait ArchiveBackend: Send {
     ) -> Option<Result<()>> {
         None
     }
+
+    /// Cheap is-anything-encrypted probe. Default impl walks
+    /// [`Self::entries`] until one reports encryption; backends with
+    /// a faster path (libarchive can't enumerate without a full
+    /// stream walk, so it short-circuits to "unknown" by returning
+    /// false here) override to avoid a multi-second probe on
+    /// big archives. Surfaced via [`crate::Archive::is_encrypted`].
+    fn is_encrypted_fast(&self) -> Result<bool> {
+        for entry in self.entries()? {
+            let entry = entry?;
+            if entry.encryption != crate::format::EncryptionMethod::None {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
 }
 
 /// Context passed to a streaming extractor. The backend is responsible for
