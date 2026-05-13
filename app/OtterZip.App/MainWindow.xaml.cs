@@ -1132,6 +1132,7 @@ public sealed partial class MainWindow : Window
                 .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
+            TryFlattenRedundantWrapper(destination, destExistedBefore);
 
             string doneText = string.Format(CultureInfo.CurrentCulture,
                 _strings.GetString("Main_StatusBarDoneFormat/Text"),
@@ -1179,6 +1180,73 @@ public sealed partial class MainWindow : Window
         }
         catch (IOException) { /* best effort */ }
         catch (UnauthorizedAccessException) { /* best effort */ }
+    }
+
+    /// <summary>
+    /// Collapse the "wrapper folder of the same name" case after a
+    /// successful extract. If we created <paramref name="destination"/>
+    /// (i.e. <paramref name="destExistedBefore"/> is false) and the
+    /// extract dumped everything into a single inner folder whose name
+    /// matches <paramref name="destination"/>, hoist that inner folder's
+    /// children up one level and remove the redundant inner folder.
+    ///
+    /// Example — user drops <c>TEST.zip</c> whose root is also
+    /// <c>TEST/</c>:
+    ///   Before: <c>parent/TEST/TEST/file1, parent/TEST/TEST/file2 …</c>
+    ///   After:  <c>parent/TEST/file1, parent/TEST/file2 …</c>
+    ///
+    /// We deliberately stay conservative: we only flatten when the inner
+    /// folder name matches the wrapper exactly. Archives whose root has
+    /// a different meaningful name (e.g. <c>photo.zip</c> containing
+    /// <c>Photos2024/</c>) are left alone so we don't lose information
+    /// the archive author chose to encode.
+    /// </summary>
+    private static void TryFlattenRedundantWrapper(string destination, bool destExistedBefore)
+    {
+        if (destExistedBefore) return;            // user / existing folder — don't touch
+        if (!Directory.Exists(destination)) return;
+        try
+        {
+            var entries = Directory.GetFileSystemEntries(destination);
+            if (entries.Length != 1) return;       // either empty or multi-root — leave as-is
+            string inner = entries[0];
+            if (!Directory.Exists(inner)) return;  // single file, not a folder — leave as-is
+            if (!string.Equals(
+                    Path.GetFileName(inner),
+                    Path.GetFileName(destination),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return; // names differ — preserve the archive author's intent
+            }
+
+            // Two-step rename to dodge "inner shares parent's name" path
+            // collisions: move inner out to a scratch directory next to
+            // destination, hoist its children into destination, then
+            // delete scratch. The scratch path is a sibling (not a child)
+            // of destination so EnsureUniqueExtractDirectory's parent
+            // ownership stays clean.
+            string parent = Path.GetDirectoryName(destination) ?? destination;
+            string scratch = Path.Combine(
+                parent,
+                ".otterzip-flatten-" + Guid.NewGuid().ToString("N"));
+            Directory.Move(inner, scratch);
+            foreach (var subPath in Directory.GetFileSystemEntries(scratch))
+            {
+                string name = Path.GetFileName(subPath);
+                string target = Path.Combine(destination, name);
+                if (Directory.Exists(subPath))
+                {
+                    Directory.Move(subPath, target);
+                }
+                else
+                {
+                    File.Move(subPath, target);
+                }
+            }
+            Directory.Delete(scratch);
+        }
+        catch (IOException) { /* best effort — files already on disk */ }
+        catch (UnauthorizedAccessException) { /* ditto */ }
     }
 
     // ============================================================
@@ -1370,6 +1438,7 @@ public sealed partial class MainWindow : Window
                     .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
                         preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                     .ConfigureAwait(false);
+                TryFlattenRedundantWrapper(destination, destExistedBefore);
                 string doneText = string.Format(CultureInfo.CurrentCulture,
                     _strings.GetString("Main_StatusBarDoneFormat/Text"),
                     report.EntriesExtracted,
@@ -1462,6 +1531,7 @@ public sealed partial class MainWindow : Window
                 .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
+            TryFlattenRedundantWrapper(destination, destExistedBefore);
 
             string doneText = string.Format(CultureInfo.CurrentCulture,
                 _strings.GetString("Main_StatusBarDoneFormat/Text"),
@@ -1540,6 +1610,7 @@ public sealed partial class MainWindow : Window
                 .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
+            TryFlattenRedundantWrapper(destination, destExistedBefore);
 
             string doneText = string.Format(CultureInfo.CurrentCulture,
                 _strings.GetString("Main_StatusBarDoneFormat/Text"),
