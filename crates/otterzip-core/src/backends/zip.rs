@@ -321,10 +321,20 @@ impl ArchiveBackend for ZipBackend {
         };
         let large_enough_to_skip_avg_check =
             total_compressed >= PARALLEL_LARGE_ARCHIVE_BYTES;
-        if entries < PARALLEL_MIN_ENTRIES
+        let go_serial = entries < PARALLEL_MIN_ENTRIES
             || total_compressed < PARALLEL_MIN_BYTES
-            || (!large_enough_to_skip_avg_check && avg < PARALLEL_MIN_AVG_ENTRY_BYTES)
-        {
+            || (!large_enough_to_skip_avg_check && avg < PARALLEL_MIN_AVG_ENTRY_BYTES);
+        tracing::info!(
+            target: "otterzip::extract",
+            entries,
+            total_compressed,
+            avg_entry = avg,
+            large = large_enough_to_skip_avg_check,
+            is_multi = matches!(self.source, OpenSource::Multi(_)),
+            decision = if go_serial { "serial" } else { "parallel" },
+            "zip extract_all_streaming threshold decision"
+        );
+        if go_serial {
             return None;
         }
         Some(self.extract_all_parallel(ctx))
@@ -366,6 +376,13 @@ impl ZipBackend {
         }
         let total_bytes: u64 = metas.iter().map(|m| m.uncompressed_size).sum();
         let total_entries = u32::try_from(metas.len()).unwrap_or(u32::MAX);
+        tracing::info!(
+            target: "otterzip::extract",
+            entries = total_entries,
+            total_uncompressed = total_bytes,
+            cd_parse_ms = start.elapsed().as_millis() as u64,
+            "parallel extract metadata phase done"
+        );
 
         // Cancellation / progress / accounting is shared across workers.
         // We update the report atomically per-entry; progress fires on a
@@ -399,12 +416,19 @@ impl ZipBackend {
         // spot; per-entry CPU work (decompress) parallelises fine
         // within that envelope, and we stop fighting the OS.
         let source_for_init = source.clone();
+        let worker_count = std::cmp::min(rayon::current_num_threads(), 4);
         let worker_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(std::cmp::min(rayon::current_num_threads(), 4))
+            .num_threads(worker_count)
             .build()
             .map_err(|e| OtterzipError::BackendError(format!(
                 "rayon thread-pool build failed: {e}"
             )))?;
+        let dispatch_start = std::time::Instant::now();
+        tracing::info!(
+            target: "otterzip::extract",
+            workers = worker_count,
+            "parallel extract dispatching to rayon"
+        );
         worker_pool.install(|| {
         metas.par_iter().for_each_init(
             || open_local(&source_for_init).ok(),
@@ -598,8 +622,22 @@ impl ZipBackend {
             },
         );
         }); // worker_pool.install
+        tracing::info!(
+            target: "otterzip::extract",
+            dispatch_ms = dispatch_start.elapsed().as_millis() as u64,
+            entries_done = entries_done.load(std::sync::atomic::Ordering::Relaxed),
+            entries_skipped = entries_skipped.load(std::sync::atomic::Ordering::Relaxed),
+            bytes_done = bytes_done.load(std::sync::atomic::Ordering::Relaxed),
+            canceled = canceled.load(std::sync::atomic::Ordering::Relaxed),
+            "parallel extract rayon pool returned"
+        );
 
         if let Some(err) = first_err.into_inner().unwrap() {
+            tracing::warn!(
+                target: "otterzip::extract",
+                error = %err,
+                "parallel extract first_err set"
+            );
             return Err(err);
         }
         if canceled.load(std::sync::atomic::Ordering::Relaxed) {

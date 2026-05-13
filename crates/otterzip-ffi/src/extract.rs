@@ -181,6 +181,7 @@ pub extern "C" fn otterzip_archive_extract_all(
     out_report: *mut OtterzipExtractReport,
 ) -> i32 {
     catch_unwind_to_error(|| {
+        tracing::debug!(target: "otterzip::ffi", "otterzip_archive_extract_all entered");
         if opts.is_null() {
             return Err(OtterzipError::InvalidArgument("opts is null"));
         }
@@ -198,6 +199,13 @@ pub extern "C" fn otterzip_archive_extract_all(
             unsafe { read_optional_utf8(opts_c.password_utf8, opts_c.password_len)? };
         let filter_str =
             unsafe { read_optional_utf8(opts_c.entry_filter_utf8, opts_c.entry_filter_len)? };
+        tracing::info!(
+            target: "otterzip::ffi",
+            dest = %dest,
+            has_password = password.is_some(),
+            has_filter = filter_str.is_some(),
+            "FFI extract_all params parsed"
+        );
 
         let core_opts = ExtractOptions {
             destination: PathBuf::from(dest),

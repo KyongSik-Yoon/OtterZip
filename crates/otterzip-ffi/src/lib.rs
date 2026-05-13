@@ -84,10 +84,70 @@ pub extern "C" fn otterzip_abi_version() -> u32 {
 }
 
 /// Initialise the library. Idempotent. Returns 0 on success.
+///
+/// Side effect (Phase perf-diag, 2026-05-13): installs a global
+/// `tracing` subscriber writing to `%TEMP%\otterzip\otterzip.log`
+/// on Windows (and `/tmp/otterzip/otterzip.log` elsewhere). Filter
+/// honours the `OTTERZIP_LOG` env var when set, defaults to
+/// `info,otterzip_core=debug,otterzip_ffi=debug`. The guard is
+/// leaked so the file appender keeps flushing for the entire process
+/// lifetime — `otterzip_shutdown` already gets called only on
+/// graceful exit and we'd rather lose 64 bytes of WorkerGuard than
+/// truncate the last buffer.
 #[no_mangle]
 pub extern "C" fn otterzip_init() -> i32 {
-    // TODO(track-f): tracing_subscriber init (guarded by Once), rayon pool config
+    static INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    INIT.get_or_init(|| {
+        if let Err(e) = install_subscriber() {
+            // No subscriber yet; eprintln is the only signal channel.
+            eprintln!("otterzip: tracing subscriber install failed: {e}");
+        }
+    });
     0
+}
+
+fn install_subscriber() -> std::io::Result<()> {
+    use tracing_subscriber::{EnvFilter, fmt};
+    let dir = log_dir();
+    std::fs::create_dir_all(&dir)?;
+    let file_appender = tracing_appender::rolling::never(&dir, "otterzip.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    // Leak the guard so flush keeps running for the whole process.
+    std::mem::forget(guard);
+
+    let filter = EnvFilter::try_from_env("OTTERZIP_LOG").unwrap_or_else(|_| {
+        EnvFilter::new("info,otterzip_core=debug,otterzip_ffi=debug")
+    });
+    let subscriber = fmt::Subscriber::builder()
+        .with_env_filter(filter)
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_level(true)
+        .with_file(false)
+        .with_line_number(false)
+        .finish();
+    // Idempotent — if already set by tests, ignore.
+    let _ = tracing::subscriber::set_global_default(subscriber);
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        abi = ABI_VERSION,
+        dir = %dir.display(),
+        "otterzip tracing subscriber installed"
+    );
+    Ok(())
+}
+
+fn log_dir() -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        if let Ok(temp) = std::env::var("TEMP") {
+            return std::path::PathBuf::from(temp).join("otterzip");
+        }
+    }
+    std::path::PathBuf::from("/tmp/otterzip")
 }
 
 #[no_mangle]

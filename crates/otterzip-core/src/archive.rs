@@ -523,6 +523,14 @@ impl Archive {
     ) -> Result<ExtractReport> {
         let start = Instant::now();
         let dest_root = canonical_root(&opts.destination)?;
+        tracing::info!(
+            target: "otterzip::extract",
+            source = %self.path.display(),
+            destination = %dest_root.display(),
+            format = ?self.format,
+            volumes = self.volumes.as_ref().map_or(1, |v| v.len()),
+            "extract_all begin"
+        );
 
         let mut report = ExtractReport {
             entries_extracted: 0,
@@ -561,8 +569,19 @@ impl Archive {
         if let Some(streamed) = self.reader()?.extract_all_streaming(&mut ctx) {
             streamed?;
             report.elapsed = start.elapsed();
+            tracing::info!(
+                target: "otterzip::extract",
+                elapsed_ms = report.elapsed.as_millis() as u64,
+                entries = report.entries_extracted,
+                bytes = report.bytes_written,
+                "extract_all done (streaming path)"
+            );
             return Ok(report);
         }
+        tracing::debug!(
+            target: "otterzip::extract",
+            "extract_all_streaming returned None — falling back to serial per-entry loop"
+        );
 
         // Default per-entry path (random-access backends: ZIP / 7z).
         let mut entries = Vec::new();
@@ -717,6 +736,15 @@ impl Archive {
         }
 
         report.elapsed = start.elapsed();
+        tracing::info!(
+            target: "otterzip::extract",
+            elapsed_ms = report.elapsed.as_millis() as u64,
+            entries = report.entries_extracted,
+            skipped = report.entries_skipped,
+            bytes = report.bytes_written,
+            warnings = report.warnings.len(),
+            "extract_all done (serial path)"
+        );
         Ok(report)
     }
 }

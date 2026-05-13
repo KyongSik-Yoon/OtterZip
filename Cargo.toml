@@ -19,6 +19,8 @@ rust-version = "1.80"
 # --- error / logging ---
 thiserror = "2"
 tracing   = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender   = "0.2"
 zeroize   = { version = "1", features = ["derive"] }
 
 # --- parallel / IO ---
