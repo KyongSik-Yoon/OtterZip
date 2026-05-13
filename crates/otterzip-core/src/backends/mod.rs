@@ -120,6 +120,7 @@ pub(crate) fn is_recoverable(err: &OtterzipError) -> bool {
                 || r.contains("data descriptor")
                 || r.contains("malformed")
                 || r.contains("deadline exceeded")
+                || r.contains("sanity check failed")
         }
         // UnsupportedFormat with a message often means "format
         // variant we don't read but libarchive might" (older 7z, RAR
@@ -167,20 +168,76 @@ pub(crate) fn is_recoverable(_err: &OtterzipError) -> bool {
     false
 }
 
+/// Process-lifetime cache of paths that already needed the libarchive
+/// fallback once. The C# host opens every dropped archive twice
+/// (`ProbeIsEncrypted` then the work-delegate's `Archive.Open`); the
+/// second open used to also pay the deadline cost. After the cache
+/// hit we skip the strict ZIP attempt entirely and go straight to
+/// libarchive — saves ~1 s per duplicate open. Cache is paths-only
+/// (no inode / mtime guard) because the host only ever re-opens the
+/// same path in tight succession; cross-process state is in
+/// `%TEMP%\otterzip\otterzip.log` for audit.
+#[cfg(feature = "libarchive-fallback")]
+fn fallback_path_cache() -> &'static std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>> {
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>>> =
+        OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+#[cfg(feature = "libarchive-fallback")]
+fn fallback_cache_contains(path: &Path) -> bool {
+    fallback_path_cache()
+        .lock()
+        .map(|g| g.contains(path))
+        .unwrap_or(false)
+}
+
+#[cfg(feature = "libarchive-fallback")]
+fn fallback_cache_insert(path: &Path) {
+    if let Ok(mut g) = fallback_path_cache().lock() {
+        g.insert(path.to_path_buf());
+    }
+}
+
+#[cfg(not(feature = "libarchive-fallback"))]
+fn fallback_cache_contains(_path: &Path) -> bool {
+    false
+}
+
+#[cfg(not(feature = "libarchive-fallback"))]
+fn fallback_cache_insert(_path: &Path) {}
+
 /// Open the correct backend for the format detected at `path`. When
 /// the strict (fast-path) backend returns a recoverable error and
 /// the `libarchive-fallback` feature is on, retry once via libarchive
-/// so malformed-but-readable archives still extract.
+/// so malformed-but-readable archives still extract. Repeat opens of
+/// a path that previously needed fallback skip the strict attempt
+/// entirely (see [`fallback_path_cache`]).
 pub(crate) fn open_backend(
     path: &Path,
     format: crate::format::ArchiveFormat,
     password: Option<&Zeroizing<String>>,
 ) -> Result<Box<dyn ArchiveBackend + Send>> {
     use crate::format::ArchiveFormat as F;
+    // Cache hit → skip strict, go straight to libarchive. Saves ~1 s
+    // on the second open of a malformed archive (probe + work both
+    // come through this dispatcher with the same path).
+    if fallback_cache_contains(path) {
+        tracing::debug!(
+            target: "otterzip::backends",
+            path = %path.display(),
+            "fallback cache hit — skipping strict open"
+        );
+        return open_fallback_backend(path, format, password);
+    }
     match format {
         F::Zip | F::Zipx => match self::zip::ZipBackend::open(path, password) {
             Ok(b) => Ok(Box::new(b)),
-            Err(e) if is_recoverable(&e) => open_fallback_backend(path, format, password),
+            Err(e) if is_recoverable(&e) => {
+                fallback_cache_insert(path);
+                open_fallback_backend(path, format, password)
+            }
             Err(e) => Err(e),
         },
         F::SevenZ => Ok(Box::new(self::sevenz::SevenZBackend::open(path, password)?)),

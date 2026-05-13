@@ -39,6 +39,12 @@ fn main() {
     if !probe_raw {
         println!("(skipping raw zip-crate probe; pass --raw-zip to enable)");
         drop(file);
+
+        // Also tap the sanity check directly so we can see its
+        // verdict before Archive::open runs.
+        let dbg = otterzip_core::__probe_quick_eocd_sanity(std::path::Path::new(path));
+        println!("quick_eocd_sanity_check -> {:?}", dbg);
+
         let t_otter = Instant::now();
         match otterzip_core::Archive::open(path, otterzip_core::OpenMode::Read) {
             Ok(archive) => {

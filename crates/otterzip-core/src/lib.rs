@@ -45,3 +45,12 @@ pub use progress::{Progress, ProgressPhase, ProgressSink};
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
+
+/// Diagnostic-only re-export of the ZIP sanity-check helper so the
+/// `probe_archive` example can verify the pre-flight verdict on real
+/// user archives without going through the full Archive::open dance.
+/// Not part of the stable surface — gated under `__probe` doc-hidden.
+#[doc(hidden)]
+pub fn __probe_quick_eocd_sanity(path: &std::path::Path) -> std::result::Result<(), String> {
+    backends::zip::__probe_quick_eocd_sanity_check(path)
+}
