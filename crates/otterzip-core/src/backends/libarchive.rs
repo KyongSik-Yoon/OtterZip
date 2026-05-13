@@ -285,10 +285,23 @@ impl LibarchiveBackend {
         let dest_root = ctx.dest_root;
         let opts = ctx.opts;
         let start_inst = Instant::now();
+        // libarchive streams entries front-to-back with no
+        // up-front central-directory parse exposed to us, so we
+        // can't pre-compute the total uncompressed payload without
+        // walking the archive twice. Use the *source* file size as
+        // an estimate for the progress denominator: it under-counts
+        // for compressed archives (the JobCard then ticks toward
+        // 80 % and finishes with a final 100 % settle) but it's
+        // monotonic and never stalls at 0 % the way `bytes_total =
+        // 0` did. Matches what `bsdtar` reports when streaming.
+        let total_estimate = std::fs::metadata(&self.path)
+            .map(|m| m.len())
+            .unwrap_or(0);
         tracing::info!(
             target: "otterzip::libarchive",
             path = %self.path.display(),
             destination = %dest_root.display(),
+            total_estimate,
             "LibarchiveBackend::extract_all_streaming begin"
         );
 
@@ -300,6 +313,13 @@ impl LibarchiveBackend {
         let mut current_is_dir = false;
         let mut entries_done: u32 = 0;
         let mut bytes_done: u64 = 0;
+        // Throttle wall-clock based rather than entry-count based.
+        // libarchive entries can be wildly uneven (a single 1 GB
+        // entry produces zero throttle ticks under "every 8 entries"
+        // but plenty of "every 100 ms"), so 100 ms keeps the UI
+        // moving even on single-huge-entry archives.
+        let mut last_progress_tick = Instant::now();
+        let progress_interval = std::time::Duration::from_millis(100);
 
         for item in iter {
             match item {
@@ -352,6 +372,23 @@ impl LibarchiveBackend {
                         w.write_all(&buf).map_err(OtterzipError::Io)?;
                         bytes_done = bytes_done.saturating_add(buf.len() as u64);
                     }
+                    // Mid-entry progress: keep the JobCard moving
+                    // even while a single huge entry streams.
+                    if last_progress_tick.elapsed() >= progress_interval {
+                        last_progress_tick = Instant::now();
+                        let cont = ctx.progress.update(&Progress {
+                            bytes_processed: ctx.report.bytes_written + bytes_done,
+                            bytes_total: total_estimate,
+                            entries_processed: entries_done,
+                            entries_total: 0,
+                            current_entry: current_path.clone(),
+                            phase: ProgressPhase::Writing,
+                            elapsed: ctx.start.elapsed(),
+                        });
+                        if !cont {
+                            return Err(OtterzipError::Canceled);
+                        }
+                    }
                 }
 
                 ArchiveContents::EndOfEntry => {
@@ -378,12 +415,14 @@ impl LibarchiveBackend {
                     entries_done += 1;
                     ctx.report.entries_extracted += 1;
 
-                    // Throttled progress — every 8 entries plus on
-                    // final tick. Matches the `zip` parallel path.
-                    if entries_done % 8 == 0 {
+                    // Per-entry progress — also gated on wall clock
+                    // to avoid flooding a tens-of-thousands-entry
+                    // archive with UI dispatches.
+                    if last_progress_tick.elapsed() >= progress_interval {
+                        last_progress_tick = Instant::now();
                         let cont = ctx.progress.update(&Progress {
                             bytes_processed: ctx.report.bytes_written,
-                            bytes_total: 0,
+                            bytes_total: total_estimate,
                             entries_processed: entries_done,
                             entries_total: 0,
                             current_entry: current_path.clone(),
@@ -408,10 +447,13 @@ impl LibarchiveBackend {
             }
         }
 
-        // Final tick — guarantees the JobCard settles to 100%.
+        // Final tick — bytes_processed == bytes_total guarantees
+        // the JobCard settles to 100 % regardless of how off the
+        // mid-extract `total_estimate` was.
+        let final_total = ctx.report.bytes_written.max(total_estimate);
         let _ = ctx.progress.update(&Progress {
-            bytes_processed: ctx.report.bytes_written,
-            bytes_total: ctx.report.bytes_written,
+            bytes_processed: final_total,
+            bytes_total: final_total,
             entries_processed: entries_done,
             entries_total: entries_done,
             current_entry: None,
