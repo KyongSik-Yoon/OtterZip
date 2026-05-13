@@ -108,9 +108,16 @@ pub extern "C" fn otterzip_archive_is_encrypted(
         if out_bool.is_null() {
             return Err(OtterzipError::InvalidArgument("out_bool is null"));
         }
+        let t0 = std::time::Instant::now();
         // SAFETY: handle valid per open contract.
         let archive = unsafe { &*handle.cast::<Archive>() };
         let v = archive.is_encrypted()?;
+        tracing::info!(
+            target: "otterzip::ffi",
+            elapsed_ms = t0.elapsed().as_millis() as u64,
+            is_encrypted = v,
+            "FFI archive_is_encrypted done"
+        );
         // SAFETY: null-checked.
         unsafe { *out_bool = u8::from(v) };
         Ok(OK)
@@ -167,11 +174,27 @@ pub extern "C" fn otterzip_archive_open(
         let path = unsafe { read_utf8(path_utf8, path_len)? };
         let password = unsafe { read_optional_utf8(password_utf8, password_len)? };
         let mode = open_mode_from_u32(mode)?;
+        let t0 = std::time::Instant::now();
+        let file_size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        tracing::info!(
+            target: "otterzip::ffi",
+            path,
+            has_password = password.is_some(),
+            file_size_bytes,
+            "FFI archive_open begin"
+        );
 
         let archive = match password {
             Some(p) => Archive::open_with_password(path, mode, p.to_owned())?,
             None => Archive::open(path, mode)?,
         };
+        tracing::info!(
+            target: "otterzip::ffi",
+            path,
+            elapsed_ms = t0.elapsed().as_millis() as u64,
+            format = ?archive.format(),
+            "FFI archive_open done"
+        );
 
         let boxed = Box::new(archive);
         // SAFETY: out_handle null-checked above. The boxed Archive is now

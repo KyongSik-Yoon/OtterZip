@@ -550,7 +550,12 @@ public sealed partial class MainWindow : Window
     {
         // Two-phase drop handler. See HarvestDropAsync for the why.
         var harvest = await HarvestDropAsync(e).ConfigureAwait(true);
-        if (harvest.Paths is null) return;
+        if (harvest.Paths is null)
+        {
+            DebugLog.Info("OnDrop: harvest returned null paths");
+            return;
+        }
+        DebugLog.Info("OnDrop: classification=" + harvest.Classification + ", pathCount=" + harvest.Paths.Count + ", forceDialog=" + harvest.ForceDialog);
 
         try
         {
@@ -888,6 +893,7 @@ public sealed partial class MainWindow : Window
     // ============================================================
     private async Task ExtractAsync(string archivePath, bool forceDialog = false)
     {
+        DebugLog.Info("ExtractAsync begin: " + archivePath + " forceDialog=" + forceDialog);
         // Probe for split-archive layout before touching any archive
         // reader — the Rust core's `open()` on a partial volume returns
         // a "Could not find EOCD" / mid-stream error that confuses
@@ -896,6 +902,7 @@ public sealed partial class MainWindow : Window
         // 예정" card for spanning forms we don't read yet.
         if (TryHandleSplitArchive(archivePath))
         {
+            DebugLog.Info("ExtractAsync: handled as split archive, returning");
             return;
         }
 
@@ -903,11 +910,14 @@ public sealed partial class MainWindow : Window
         string suggestedDest;
         try
         {
+            var probeStart = System.Diagnostics.Stopwatch.StartNew();
             isEncrypted = ProbeIsEncrypted(archivePath);
+            DebugLog.Info("ExtractAsync: ProbeIsEncrypted took " + probeStart.ElapsedMilliseconds + "ms (encrypted=" + isEncrypted + ")");
             suggestedDest = ResolveExtractDestination(archivePath);
         }
         catch (Exception ex)
         {
+            DebugLog.Info("ExtractAsync: probe failed: " + ex.Message);
             _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
             return;
         }
@@ -959,6 +969,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task<bool> TrySilentExtractAsync(string archivePath, string destination, bool isEncrypted)
     {
+        DebugLog.Info("TrySilentExtractAsync: archivePath=" + archivePath + ", dest=" + destination + ", isEncrypted=" + isEncrypted);
         string? silentPw = null;
         if (isEncrypted)
         {
@@ -1123,15 +1134,21 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            DebugLog.Info("RunInlineExtractWorkAsync: starting Archive.Open: " + archivePath);
+            var openStart = System.Diagnostics.Stopwatch.StartNew();
             using var archive = string.IsNullOrEmpty(password)
                 ? Archive.Open(archivePath)
                 : Archive.OpenWithPassword(archivePath, password);
+            DebugLog.Info("RunInlineExtractWorkAsync: Archive.Open done in " + openStart.ElapsedMilliseconds + "ms");
             var progressBridge = new Progress<ProgressUpdate>(p =>
                 progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
+            DebugLog.Info("RunInlineExtractWorkAsync: calling ExtractAllAsync, destination=" + destination);
+            var extractStart = System.Diagnostics.Stopwatch.StartNew();
             var report = await archive
                 .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
+            DebugLog.Info("RunInlineExtractWorkAsync: ExtractAllAsync done in " + extractStart.ElapsedMilliseconds + "ms (entries=" + report.EntriesExtracted + ", bytes=" + report.BytesWritten + ")");
             TryFlattenRedundantWrapper(destination, destExistedBefore);
 
             string doneText = string.Format(CultureInfo.CurrentCulture,
