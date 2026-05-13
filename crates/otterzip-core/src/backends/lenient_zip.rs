@@ -1,50 +1,49 @@
 //! Lenient ZIP backend — custom EOCD / Central Directory parser that
 //! salvages malformed archives the strict `zip` crate refuses.
 //!
-//! ## Status — Day 2 (LFH parse + Store/Deflate dispatch)
+//! Replaces the libarchive (compress-tools) fallback retired at the
+//! v1.0 sprint. No C dependency, no vcpkg, all pure Rust over
+//! `flate2` (zlib-ng) — the read path lifts the actual byte
+//! decompression onto a decoder that's been fuzz-hardened by its
+//! upstream for 20+ years, so we never own deflate correctness
+//! ourselves. Parser bugs surface as `Err` (and Sentry catches them);
+//! decoder bugs would corrupt user data silently, which is exactly
+//! the failure mode we won't take.
 //!
-//! Day 1 wired the metadata path: locate EOCD (with ZIP64 escalation),
-//! walk the central directory, produce one [`Entry`] per CDFH. Day 2
-//! extends that with the per-entry payload read: seek to the LFH,
-//! skip its variable-length filename + extra fields, and dispatch
-//! on the CDFH-declared compression method.
+//! ## What this module owns
 //!
-//! Supported methods on the read path today:
+//!   * EOCD location, ZIP64 escalation via the locator → record chain.
+//!   * Central directory walk: one [`Entry`] per CDFH, lenient resync
+//!     to the next `PK\001\002` when an individual record's
+//!     filename / extra length is bogus.
+//!   * Per-entry LFH parse + decompression dispatch.
+//!
+//! Supported methods on the read path:
 //!
 //! | Method | Decoder | Notes |
 //! |---|---|---|
 //! | 0 (Stored) | direct copy via `std::io::copy` | `compressed_size == uncompressed_size`. |
 //! | 8 (Deflate) | `flate2::read::DeflateDecoder` | zlib-ng backed; streaming, no size hint needed. |
 //!
-//! Other CDFH methods (BZip2 / LZMA / Zstd / Deflate64 / PPMd) still
-//! surface [`OtterzipError::FeatureDisabled`] on the lenient surface
-//! — those land in a follow-up sprint once Store + Deflate parity is
-//! confirmed against the user's reproducer corpus. The strict
-//! `ZipBackend` covers the healthy-archive case for them today.
+//! Other CDFH methods (BZip2 / LZMA / Zstd / Deflate64 / PPMd / AES)
+//! surface [`OtterzipError::FeatureDisabled`] — those land in a v1.1
+//! sprint. The strict `ZipBackend` already covers the healthy
+//! archive case for the codec-side of those methods today.
 //!
-//! ## Why a custom parser
+//! ## Lenient policy
 //!
-//! Real-world archives drift from APPNOTE.TXT §4 in well-understood
-//! ways: ZIP64 cd_size off by a few hundred bytes, truncated tails,
-//! filename / extra lengths that don't sum to the next record. The
-//! strict `zip` crate (correctly) refuses these; we used to hand them
-//! off to `libarchive`, which works but costs us a vcpkg dependency
-//! and ~25 % vs Bandizip on a 7 GB malformed corpus
-//! (`docs/05-build/lenient-zip-parser-plan.md` §"What we measured").
+//! Mirrors what Bandizip / 7-Zip do on the same fixtures:
 //!
-//! The lenient path mirrors what Bandizip / 7-Zip do:
 //!   * Clamp CD bounds to the file size when the EOCD overshoots.
-//!   * Resync to the next `PK\001\002` signature when an individual
-//!     CDFH's filename / extra length is bogus.
-//!   * Skip entries whose `local_header_offset` lands past EOF, log
-//!     a warning, keep going.
-//!
-//! Day 2 will reuse `flate2` (zlib-ng backed) + `libdeflater` for the
-//! actual byte decompression, so we never own deflate / lzma /
-//! bzip2 codec correctness — those have been fuzz-hardened by their
-//! upstreams for 20+ years and any silent data corruption would slip
-//! past our Sentry hook. Parser bugs always surface as `Err` /
-//! panic, which Sentry does catch.
+//!   * Scan forward from offset 0 for `PK\001\002` when `cd_offset`
+//!     itself is past EOF or doesn't point at a CDFH.
+//!   * Resync to the next `PK\001\002` signature inside the CD when
+//!     a CDFH's filename / extra length doesn't sum to a sensible
+//!     next-record offset.
+//!   * Mark entries whose `local_header_offset` lands past EOF as
+//!     unreadable (`u64::MAX` sentinel) and surface them as per-entry
+//!     `Corrupted` at extract time — the rest of the archive still
+//!     comes through.
 
 use std::cell::RefCell;
 use std::fs::File;

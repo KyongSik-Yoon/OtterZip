@@ -2,8 +2,12 @@
 //!
 //! Each supported archive format implements [`ArchiveBackend`]. The
 //! [`Archive`](crate::Archive) handle owns a boxed backend and forwards
-//! read/extract calls through this trait. Sprint 3 adds `tar` family
-//! and `7z` backends in addition to the Sprint 1 ZIP backend.
+//! read/extract calls through this trait. ZIP / ZIPX paths also wear a
+//! lenient fallback: when the strict `zip`-crate-backed parser refuses
+//! a malformed archive (CD bounds overshoot, CDFH offset off-by-N, ZIP64
+//! sentinel without locator, etc.) the dispatcher retries through the
+//! in-tree [`lenient_zip::LenientZipBackend`] so users see "extracted"
+//! instead of "stared at a hang then got a structural error".
 
 use std::io::Read;
 use std::path::Path;
@@ -16,14 +20,12 @@ use crate::error::{Result, OtterzipError};
 pub(crate) mod cab;
 pub(crate) mod deb;
 pub(crate) mod iso;
-#[cfg(feature = "libarchive-fallback")]
-pub(crate) mod libarchive;
-// Day-1 lenient parser. Unconditionally compiled even when
-// `libarchive-fallback` is off so the regression test
-// (`tests/lenient_zip.rs`) can exercise it directly — the dispatcher
-// path stays gated until Day 4 renames the feature. Crate-internal
-// visibility; the test reaches in via the doc-hidden wrapper in
-// `lib.rs::__probe_lenient_entries`.
+/// Lenient ZIP parser — replaces the original libarchive C-FFI
+/// fallback (removed Day 4 of the v1.0 sprint). Unconditionally
+/// compiled; the dispatcher routes recoverable strict-path errors
+/// here, and the regression tests in `tests/lenient_zip.rs` exercise
+/// it directly via the doc-hidden `__probe_lenient_entries` /
+/// `__probe_lenient_extract` helpers in `lib.rs`.
 pub(crate) mod lenient_zip;
 pub(crate) mod msi;
 pub(crate) mod multi_volume_reader;
@@ -72,10 +74,8 @@ pub(crate) trait ArchiveBackend: Send {
 
     /// Cheap is-anything-encrypted probe. Default impl walks
     /// [`Self::entries`] until one reports encryption; backends with
-    /// a faster path (libarchive can't enumerate without a full
-    /// stream walk, so it short-circuits to "unknown" by returning
-    /// false here) override to avoid a multi-second probe on
-    /// big archives. Surfaced via [`crate::Archive::is_encrypted`].
+    /// a faster path override to avoid a multi-second probe on big
+    /// archives. Surfaced via [`crate::Archive::is_encrypted`].
     fn is_encrypted_fast(&self) -> Result<bool> {
         for entry in self.entries()? {
             let entry = entry?;
@@ -106,12 +106,12 @@ pub(crate) struct StreamingExtractCtx<'a> {
 }
 
 /// Returns true when an error from the strict backend warrants a
-/// lenient (libarchive) retry. We intentionally start tight — only
-/// errors whose root cause is "the archive bytes don't quite match
-/// the spec" qualify. WrongPassword / PathTraversal / Bomb /
-/// FeatureDisabled / Io don't trigger fallback because libarchive
-/// won't fix them either, just spend another N seconds rejecting.
-#[cfg(feature = "libarchive-fallback")]
+/// lenient retry. We intentionally start tight — only errors whose
+/// root cause is "the archive bytes don't quite match the spec"
+/// qualify. WrongPassword / PathTraversal / Bomb / FeatureDisabled /
+/// Io don't trigger fallback because the lenient parser won't fix
+/// them either, just burn another few ms before re-emitting the same
+/// signal.
 pub(crate) fn is_recoverable(err: &OtterzipError) -> bool {
     match err {
         OtterzipError::Corrupted { reason, .. } => {
@@ -129,29 +129,23 @@ pub(crate) fn is_recoverable(err: &OtterzipError) -> bool {
                 || r.contains("deadline exceeded")
                 || r.contains("sanity check failed")
         }
-        // UnsupportedFormat with a message often means "format
-        // variant we don't read but libarchive might" (older 7z, RAR
-        // read, some tar variants). Bare UnsupportedFormat(None) is
-        // detect-layer "no idea what this is" — don't retry.
+        // UnsupportedFormat with a message often means "format variant
+        // we don't read but the lenient parser might" (older 7z, RAR
+        // read, some tar variants — yes these aren't ZIP, but the
+        // dispatcher only routes through here for ZIP/ZIPX so the
+        // arm is defensive). Bare UnsupportedFormat(None) is detect-
+        // layer "no idea what this is" — don't retry.
         OtterzipError::UnsupportedFormat(Some(_)) => true,
         _ => false,
     }
 }
 
-/// Build the fallback backend for `path` / `format`. As of Day 1 of
-/// the v1.0 lenient-parser sprint this routes to the in-tree
-/// [`lenient_zip::LenientZipBackend`] rather than libarchive — the
-/// libarchive module is kept around for Day 4 cleanup so we can
-/// A/B compare during the rollout. Day 1 only wires the metadata
-/// surface; per-entry extract / stream still surface
-/// `FeatureDisabled` until Day 2 lands LFH parsing + decompression
-/// dispatch.
-///
-/// Returns `FeatureDisabled` when the `libarchive-fallback` Cargo
-/// feature is off so callers see a clean signal rather than
-/// mysterious "no backend" errors. The feature itself will be
-/// renamed `lenient-fallback` (and made default-on) on Day 4.
-#[cfg(feature = "libarchive-fallback")]
+/// Build the fallback backend for `path` / `format`. Routes to the
+/// in-tree [`lenient_zip::LenientZipBackend`] — Day 4 of the v1.0
+/// sprint removed the original libarchive C-FFI fallback. Only
+/// ZIP / ZIPX are wired today; the dispatcher matches on the format
+/// up the call chain so this defensive arm should never fire for
+/// other formats, but we surface a clear error if it does.
 pub(crate) fn open_fallback_backend(
     path: &Path,
     format: crate::format::ArchiveFormat,
@@ -164,48 +158,25 @@ pub(crate) fn open_fallback_backend(
         format = ?format,
         "strict backend rejected — retrying with lenient ZIP fallback"
     );
-    // The dispatcher only routes ZIP / ZIPX through the fallback arm
-    // today (see `open_backend`), but be defensive about it. The
-    // lenient parser is ZIP-specific; non-ZIP fallback work was the
-    // old libarchive code path and there's no replacement yet — surface
-    // a clear error instead of attempting an EOCD scan on a 7z / RAR /
-    // tar payload.
     match format {
         F::Zip | F::Zipx => Ok(Box::new(self::lenient_zip::LenientZipBackend::open(
             path, password,
         )?)),
         other => Err(OtterzipError::UnsupportedFormat(Some(format!(
-            "lenient fallback only handles ZIP today (got {other:?})"
+            "lenient fallback only handles ZIP (got {other:?})"
         )))),
     }
 }
 
-#[cfg(not(feature = "libarchive-fallback"))]
-pub(crate) fn open_fallback_backend(
-    _path: &Path,
-    _format: crate::format::ArchiveFormat,
-    _password: Option<&Zeroizing<String>>,
-) -> Result<Box<dyn ArchiveBackend + Send>> {
-    Err(OtterzipError::FeatureDisabled(
-        "libarchive-fallback feature is not enabled — recompile with --features libarchive-fallback",
-    ))
-}
-
-#[cfg(not(feature = "libarchive-fallback"))]
-pub(crate) fn is_recoverable(_err: &OtterzipError) -> bool {
-    false
-}
-
-/// Process-lifetime cache of paths that already needed the libarchive
+/// Process-lifetime cache of paths that already needed the lenient
 /// fallback once. The C# host opens every dropped archive twice
 /// (`ProbeIsEncrypted` then the work-delegate's `Archive.Open`); the
 /// second open used to also pay the deadline cost. After the cache
 /// hit we skip the strict ZIP attempt entirely and go straight to
-/// libarchive — saves ~1 s per duplicate open. Cache is paths-only
+/// lenient — saves ~1 s per duplicate open. Cache is paths-only
 /// (no inode / mtime guard) because the host only ever re-opens the
 /// same path in tight succession; cross-process state is in
 /// `%TEMP%\otterzip\otterzip.log` for audit.
-#[cfg(feature = "libarchive-fallback")]
 fn fallback_path_cache() -> &'static std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>> {
     use std::sync::OnceLock;
     static CACHE: OnceLock<std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>>> =
@@ -213,7 +184,6 @@ fn fallback_path_cache() -> &'static std::sync::Mutex<std::collections::HashSet<
     CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
-#[cfg(feature = "libarchive-fallback")]
 fn fallback_cache_contains(path: &Path) -> bool {
     fallback_path_cache()
         .lock()
@@ -221,36 +191,27 @@ fn fallback_cache_contains(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(feature = "libarchive-fallback")]
 fn fallback_cache_insert(path: &Path) {
     if let Ok(mut g) = fallback_path_cache().lock() {
         g.insert(path.to_path_buf());
     }
 }
 
-#[cfg(not(feature = "libarchive-fallback"))]
-fn fallback_cache_contains(_path: &Path) -> bool {
-    false
-}
-
-#[cfg(not(feature = "libarchive-fallback"))]
-fn fallback_cache_insert(_path: &Path) {}
-
 /// Open the correct backend for the format detected at `path`. When
-/// the strict (fast-path) backend returns a recoverable error and
-/// the `libarchive-fallback` feature is on, retry once via libarchive
-/// so malformed-but-readable archives still extract. Repeat opens of
-/// a path that previously needed fallback skip the strict attempt
-/// entirely (see [`fallback_path_cache`]).
+/// the strict (fast-path) backend returns a recoverable error retry
+/// once via the lenient parser so malformed-but-readable archives
+/// still extract. Repeat opens of a path that previously needed
+/// fallback skip the strict attempt entirely (see
+/// [`fallback_path_cache`]).
 pub(crate) fn open_backend(
     path: &Path,
     format: crate::format::ArchiveFormat,
     password: Option<&Zeroizing<String>>,
 ) -> Result<Box<dyn ArchiveBackend + Send>> {
     use crate::format::ArchiveFormat as F;
-    // Cache hit → skip strict, go straight to libarchive. Saves ~1 s
-    // on the second open of a malformed archive (probe + work both
-    // come through this dispatcher with the same path).
+    // Cache hit → skip strict, go straight to lenient. Saves ~1 s on
+    // the second open of a malformed archive (probe + work both come
+    // through this dispatcher with the same path).
     if fallback_cache_contains(path) {
         tracing::debug!(
             target: "otterzip::backends",

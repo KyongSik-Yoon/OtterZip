@@ -1,10 +1,10 @@
-//! Standalone diagnostic — opens a ZIP archive directly with zip crate
-//! and prints timing for each phase. Used to isolate whether a hang
-//! is in the upstream `zip` crate vs our wrapper logic.
-//!
-//! When built with `--features libarchive-fallback` (workspace default
-//! release config), also probes the OtterZip `Archive::open` path so
-//! the malformed-archive → fallback handoff is observable end-to-end.
+//! Standalone diagnostic — opens a ZIP archive directly with the
+//! upstream zip crate and prints timing for each phase. Used to
+//! isolate whether a hang is in the strict parser vs our wrapper
+//! logic. Also probes the OtterZip `Archive::open` path so the
+//! malformed-archive → lenient-fallback handoff is observable
+//! end-to-end (the lenient parser is always on as of the v1.0
+//! sprint; the old `libarchive-fallback` Cargo feature is gone).
 //!
 //! Usage:  cargo run --example probe_archive -- "C:\path\to\archive.zip"
 

@@ -56,12 +56,13 @@ gpt_disk_io = "0.16"
 cab         = "0.6"
 cfb         = "0.10"
 
-# --- lenient fallback (Phase perf-diag, 2026-05-13) ---
-# libarchive via compress-tools: catches malformed archives the `zip`
-# crate rejects (off-by-N CD, truncated EOCD, etc.). Active maintenance,
-# MIT/Apache, ArchiveIterator API streaming. See docs/05-build/
-# libarchive-fallback-plan.md for the routing & risk analysis.
-compress-tools = "0.16"
+# --- lenient fallback ---
+# The libarchive (compress-tools) fallback shipped through commit
+# 9777acd and was replaced by an in-tree EOCD/CD parser at the v1.0
+# sprint. The crate dependency, the vcpkg requirement, and the
+# `libarchive-fallback` Cargo feature are gone; the lenient ZIP path
+# lives in `crates/otterzip-core/src/backends/lenient_zip.rs`. See
+# `docs/05-build/lenient-zip-parser-plan.md` for the migration record.
 
 # --- Korean filename handling ---
 # chardetng = Firefox's fallback encoding detector (CJK-aware). Used in
