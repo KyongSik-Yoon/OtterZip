@@ -288,15 +288,19 @@ impl LibarchiveBackend {
         // libarchive streams entries front-to-back with no
         // up-front central-directory parse exposed to us, so we
         // can't pre-compute the total uncompressed payload without
-        // walking the archive twice. Use the *source* file size as
-        // an estimate for the progress denominator: it under-counts
-        // for compressed archives (the JobCard then ticks toward
-        // 80 % and finishes with a final 100 % settle) but it's
-        // monotonic and never stalls at 0 % the way `bytes_total =
-        // 0` did. Matches what `bsdtar` reports when streaming.
-        let total_estimate = std::fs::metadata(&self.path)
+        // walking the archive twice. We start the denominator at
+        // the source file size and bump it whenever live progress
+        // crosses 90 % of the current estimate. This keeps the
+        // fraction monotonic, never sticks at 0 %, and — critical
+        // for the user-visible "100 % then 10 s wait" symptom —
+        // never reaches 1.0 until the final tick. For typical
+        // deflate ratios (1.3-2×) the fraction climbs smoothly to
+        // ~85 % during extract and snaps to 100 % when the last
+        // entry's EndOfEntry fires.
+        let initial_estimate = std::fs::metadata(&self.path)
             .map(|m| m.len())
             .unwrap_or(0);
+        let mut total_estimate = initial_estimate.max(1);
         tracing::info!(
             target: "otterzip::libarchive",
             path = %self.path.display(),
@@ -376,8 +380,16 @@ impl LibarchiveBackend {
                     // even while a single huge entry streams.
                     if last_progress_tick.elapsed() >= progress_interval {
                         last_progress_tick = Instant::now();
+                        let processed = ctx.report.bytes_written + bytes_done;
+                        // Bump the denominator before reporting so
+                        // the fraction never reaches 1.0 mid-extract.
+                        // 10/9 = ~11 % headroom — visible progress
+                        // resumes after each bump.
+                        if processed >= total_estimate.saturating_mul(9) / 10 {
+                            total_estimate = processed.saturating_mul(10) / 9;
+                        }
                         let cont = ctx.progress.update(&Progress {
-                            bytes_processed: ctx.report.bytes_written + bytes_done,
+                            bytes_processed: processed,
                             bytes_total: total_estimate,
                             entries_processed: entries_done,
                             entries_total: 0,
@@ -420,8 +432,12 @@ impl LibarchiveBackend {
                     // archive with UI dispatches.
                     if last_progress_tick.elapsed() >= progress_interval {
                         last_progress_tick = Instant::now();
+                        let processed = ctx.report.bytes_written;
+                        if processed >= total_estimate.saturating_mul(9) / 10 {
+                            total_estimate = processed.saturating_mul(10) / 9;
+                        }
                         let cont = ctx.progress.update(&Progress {
-                            bytes_processed: ctx.report.bytes_written,
+                            bytes_processed: processed,
                             bytes_total: total_estimate,
                             entries_processed: entries_done,
                             entries_total: 0,

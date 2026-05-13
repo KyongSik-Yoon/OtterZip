@@ -1149,18 +1149,22 @@ public sealed partial class MainWindow : Window
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
             DebugLog.Info("RunInlineExtractWorkAsync: ExtractAllAsync done in " + extractStart.ElapsedMilliseconds + "ms (entries=" + report.EntriesExtracted + ", bytes=" + report.BytesWritten + ")");
+            var flattenStart = System.Diagnostics.Stopwatch.StartNew();
             TryFlattenRedundantWrapper(destination, destExistedBefore);
+            DebugLog.Info("RunInlineExtractWorkAsync: TryFlattenRedundantWrapper done in " + flattenStart.ElapsedMilliseconds + "ms");
 
             string doneText = string.Format(CultureInfo.CurrentCulture,
                 _strings.GetString("Main_StatusBarDoneFormat/Text"),
                 report.EntriesExtracted,
                 FormatByteSize(report.BytesWritten));
+            var dispatchStart = System.Diagnostics.Stopwatch.StartNew();
             await DispatchUiAndWaitAsync(() =>
             {
                 item.ResultPath = destination;
                 item.Progress = 1.0;     // tripwire for JobQueue's monotonic guard
                 item.StatusText = doneText;
             }).ConfigureAwait(false);
+            DebugLog.Info("RunInlineExtractWorkAsync: UI dispatch done in " + dispatchStart.ElapsedMilliseconds + "ms");
             done.TrySetResult(report);
         }
         catch (OtterzipException ex) when (ex.IsWrongPassword)
