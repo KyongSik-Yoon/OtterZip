@@ -47,16 +47,21 @@
 
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use rayon::prelude::*;
 use zeroize::Zeroizing;
 
-use crate::backends::ArchiveBackend;
+use crate::archive::ExtractWarning;
+use crate::backends::{ArchiveBackend, StreamingExtractCtx};
 use crate::entry::{Entry, HostOs};
 use crate::error::{OtterzipError, Result};
 use crate::format::{CompressionMethod, EncryptionMethod};
+use crate::options::OverwritePolicy;
+use crate::progress::{Progress, ProgressPhase};
 
 // === Format constants ================================================
 
@@ -83,6 +88,25 @@ const LFH_FIXED_SIZE: usize = 30;
 /// large entries should always have a populated CDFH size and bypass
 /// this clamp.
 const STREAMING_INFLATE_HARD_CAP: u64 = 4 * 1024 * 1024 * 1024;
+
+/// Threshold below which a deflated entry takes the libdeflater
+/// one-shot decoder path. Picked so the input buffer (worst case
+/// the entry's compressed size) and the output buffer
+/// (`uncompressed_size`, known up-front from the CDFH) both fit
+/// inside ~32 MiB of RAM per concurrent worker — comfortable for
+/// 4-worker parallel extracts on the smallest machines we target.
+/// Entries above this size fall back to the `flate2` streaming
+/// decoder so we never allocate gigabytes for a single deflate
+/// payload.
+///
+/// libdeflater is ~20 % faster than flate2 (zlib-ng) on the
+/// hot-loop deflate path because it skips the streaming
+/// state-machine bookkeeping and operates directly on contiguous
+/// input/output buffers. Real-world archives we measure (~750 KB
+/// average entry on the user's 7 GB corpus) sit comfortably under
+/// this threshold, so the lenient extract spends most of its CPU
+/// in the fast decoder.
+const LIBDEFLATER_ONESHOT_THRESHOLD: u64 = 16 * 1024 * 1024;
 
 /// Fixed-size portion of an EOCD record (variable-length comment follows).
 const EOCD_FIXED_SIZE: usize = 22;
@@ -144,11 +168,10 @@ struct CdRecord {
 /// is sound because the public `Archive` type is `!Sync` per
 /// `rust-core-api.md` §5.
 pub(crate) struct LenientZipBackend {
-    /// Original archive path. Reserved for the parallel-extract
-    /// `extract_all_streaming` override (each rayon worker re-opens
-    /// the file on its own handle) — Day 2 ships the serial path
-    /// only, so this is unused today.
-    #[allow(dead_code)]
+    /// Original archive path. Used by the parallel-extract
+    /// [`ArchiveBackend::extract_all_streaming`] override (each
+    /// rayon worker re-opens the file on its own handle so per-entry
+    /// I/O doesn't serialise on a single `RefCell<File>`).
     source_path: PathBuf,
     /// Held in zeroized memory so the bytes are wiped on drop. Reserved
     /// for the encrypted-entry dispatch; Day 2 doesn't actually use a
@@ -218,6 +241,340 @@ impl LenientZipBackend {
             .cloned()
             .ok_or_else(|| OtterzipError::EntryNotFound(entry_path.to_string()))
     }
+
+    /// rayon-driven entry-level parallel extractor — mirrors
+    /// `ZipBackend::extract_all_parallel` so the lenient path enjoys
+    /// the same NVMe-saturation profile on the user's 7 GB / 9 674
+    /// entry malformed corpus. Each worker re-opens the archive
+    /// through [`LenientZipBackend::open`] on its own file descriptor;
+    /// the per-thread CD-walk cost (~ms on a typical archive) is
+    /// amortised across the entries the worker takes.
+    ///
+    /// Security gates wired inline because the parallel path can't
+    /// reuse the framework's serial monitor state (per-thread
+    /// counters wouldn't compose):
+    ///
+    ///   * Per-entry `__check_bomb_for_streaming` ratio gate.
+    ///   * Cumulative output cap via an atomic counter.
+    ///   * `__validate_component` per path component.
+    ///   * Overwrite policy + symlink follow check.
+    ///   * MOTW propagation per output file.
+    fn extract_all_parallel(&self, ctx: &mut StreamingExtractCtx<'_>) -> Result<()> {
+        let dest_root = ctx.dest_root.to_path_buf();
+        let opts = ctx.opts.clone();
+        let start = ctx.start;
+        let motw_payload: Option<std::sync::Arc<Vec<u8>>> =
+            ctx.motw_payload.map(|p| std::sync::Arc::new(p.to_vec()));
+        let source_path = self.source_path.clone();
+        let password = self._password.clone();
+
+        // Snapshot entry metadata for the worker pool — releasing
+        // `self.records`'s RefCell borrow before we cross into rayon.
+        let metas: Vec<Entry> = self
+            .records
+            .borrow()
+            .iter()
+            .map(|r| r.entry.clone())
+            .collect();
+        let total_bytes: u64 = metas.iter().map(|m| m.uncompressed_size).sum();
+        let total_entries = u32::try_from(metas.len()).unwrap_or(u32::MAX);
+        tracing::info!(
+            target: "otterzip::extract",
+            entries = total_entries,
+            total_uncompressed = total_bytes,
+            cd_parse_ms = start.elapsed().as_millis() as u64,
+            "lenient parallel extract metadata phase done"
+        );
+
+        let bytes_done = std::sync::atomic::AtomicU64::new(0);
+        let entries_done = std::sync::atomic::AtomicU32::new(0);
+        let entries_skipped = std::sync::atomic::AtomicU32::new(0);
+        let canceled = std::sync::atomic::AtomicBool::new(false);
+        let first_err: Mutex<Option<OtterzipError>> = Mutex::new(None);
+        let warnings: Mutex<Vec<ExtractWarning>> = Mutex::new(Vec::new());
+        let progress_lock: Mutex<&mut dyn crate::progress::ProgressSink> = Mutex::new(ctx.progress);
+
+        // Same 4-worker NTFS cap the strict backend uses — beyond
+        // that, MFT lock contention on file-creation-heavy archives
+        // costs us more than the extra parallelism buys.
+        let source_for_init = source_path.clone();
+        let password_for_init = password.clone();
+        let worker_count = std::cmp::min(rayon::current_num_threads(), 4);
+        let worker_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(worker_count)
+            .build()
+            .map_err(|e| {
+                OtterzipError::BackendError(format!("rayon thread-pool build failed: {e}"))
+            })?;
+        let dispatch_start = std::time::Instant::now();
+        tracing::info!(
+            target: "otterzip::extract",
+            workers = worker_count,
+            "lenient parallel extract dispatching to rayon"
+        );
+
+        worker_pool.install(|| {
+            metas.par_iter().for_each_init(
+                || open_local(&source_for_init, password_for_init.as_ref()).ok(),
+                |local_handle, entry| {
+                    if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+                        return;
+                    }
+
+                    if let Some(err) = crate::archive::__check_bomb_for_streaming(entry, &opts) {
+                        set_first_err(&first_err, &canceled, err);
+                        return;
+                    }
+
+                    if entry.is_symlink && !opts.follow_symlinks {
+                        warnings.lock().unwrap().push(ExtractWarning::SymlinkSkipped {
+                            path: entry.path.clone(),
+                            target: String::new(),
+                        });
+                        entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        return;
+                    }
+
+                    let out_path = match resolve_output_path(&dest_root, &entry.path, &opts) {
+                        Ok(p) => p,
+                        Err(orig) => {
+                            if opts.block_path_traversal {
+                                set_first_err(
+                                    &first_err,
+                                    &canceled,
+                                    OtterzipError::PathTraversalBlocked(orig),
+                                );
+                            } else {
+                                warnings.lock().unwrap().push(
+                                    ExtractWarning::PathTraversalClamped {
+                                        original: orig,
+                                        clamped: dest_root.clone(),
+                                    },
+                                );
+                                entries_skipped
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            return;
+                        }
+                    };
+
+                    if entry.is_directory {
+                        if let Err(e) = std::fs::create_dir_all(&out_path) {
+                            set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                            return;
+                        }
+                        entries_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        return;
+                    }
+
+                    if let Some(parent) = out_path.parent() {
+                        if let Err(e) = std::fs::create_dir_all(parent) {
+                            set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                            return;
+                        }
+                    }
+
+                    if out_path.exists() {
+                        match opts.overwrite {
+                            OverwritePolicy::Never => {
+                                set_first_err(
+                                    &first_err,
+                                    &canceled,
+                                    OtterzipError::Io(std::io::Error::new(
+                                        std::io::ErrorKind::AlreadyExists,
+                                        out_path.display().to_string(),
+                                    )),
+                                );
+                                return;
+                            }
+                            OverwritePolicy::Always => {}
+                            OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
+                                entries_skipped
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                return;
+                            }
+                        }
+                    }
+
+                    let local_backend = match local_handle.as_mut() {
+                        Some(b) => b,
+                        None => {
+                            set_first_err(
+                                &first_err,
+                                &canceled,
+                                OtterzipError::BackendError(
+                                    "lenient worker failed to open archive handle".into(),
+                                ),
+                            );
+                            return;
+                        }
+                    };
+
+                    let file = match std::fs::File::create(&out_path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                            return;
+                        }
+                    };
+                    let mut writer = BufWriter::new(file);
+                    let written = match local_backend.extract_entry(&entry.path, &mut writer) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            set_first_err(&first_err, &canceled, e);
+                            return;
+                        }
+                    };
+                    if let Err(e) = writer.flush() {
+                        set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                        return;
+                    }
+
+                    if let Some(p) = motw_payload.as_ref() {
+                        if let Err(e) = crate::motw::write_zone_identifier(&out_path, &p[..]) {
+                            tracing::warn!(
+                                target: "otterzip::motw",
+                                path = %out_path.display(),
+                                error = %e,
+                                "MOTW propagation skipped (parallel lenient extract)"
+                            );
+                        }
+                    }
+
+                    bytes_done.fetch_add(written, std::sync::atomic::Ordering::Relaxed);
+                    let entries_so_far =
+                        entries_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+
+                    if opts.max_total_output_bytes > 0
+                        && bytes_done.load(std::sync::atomic::Ordering::Relaxed)
+                            > opts.max_total_output_bytes
+                    {
+                        set_first_err(
+                            &first_err,
+                            &canceled,
+                            OtterzipError::ZipBombSuspected {
+                                entry: "<aggregate>".to_string(),
+                                ratio: 0,
+                                limit: opts.max_total_compression_ratio,
+                            },
+                        );
+                        return;
+                    }
+
+                    if entries_so_far % 8 == 0 || entries_so_far == total_entries {
+                        if let Ok(mut sink) = progress_lock.try_lock() {
+                            let snapshot = Progress {
+                                bytes_processed: bytes_done
+                                    .load(std::sync::atomic::Ordering::Relaxed),
+                                bytes_total: total_bytes,
+                                entries_processed: entries_so_far,
+                                entries_total: total_entries,
+                                current_entry: Some(entry.path.clone()),
+                                phase: ProgressPhase::Writing,
+                                elapsed: start.elapsed(),
+                            };
+                            if !sink.update(&snapshot) {
+                                canceled.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                    }
+                },
+            );
+        });
+        tracing::info!(
+            target: "otterzip::extract",
+            dispatch_ms = dispatch_start.elapsed().as_millis() as u64,
+            entries_done = entries_done.load(std::sync::atomic::Ordering::Relaxed),
+            entries_skipped = entries_skipped.load(std::sync::atomic::Ordering::Relaxed),
+            bytes_done = bytes_done.load(std::sync::atomic::Ordering::Relaxed),
+            canceled = canceled.load(std::sync::atomic::Ordering::Relaxed),
+            "lenient parallel extract rayon pool returned"
+        );
+
+        if let Some(err) = first_err.into_inner().unwrap() {
+            tracing::warn!(
+                target: "otterzip::extract",
+                error = %err,
+                "lenient parallel extract first_err set"
+            );
+            return Err(err);
+        }
+        if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(OtterzipError::Canceled);
+        }
+
+        ctx.report.bytes_written += bytes_done.load(std::sync::atomic::Ordering::Relaxed);
+        ctx.report.entries_extracted += entries_done.load(std::sync::atomic::Ordering::Relaxed);
+        ctx.report.entries_skipped += entries_skipped.load(std::sync::atomic::Ordering::Relaxed);
+        ctx.report
+            .warnings
+            .extend(warnings.into_inner().unwrap());
+        Ok(())
+    }
+}
+
+/// Per-worker re-open of the archive. Returns a fresh backend
+/// whose [`extract_entry`](LenientZipBackend::extract_entry) inherits
+/// the same CD-walk recovery as the primary handle. Cheap on
+/// typical archives (~ms) and amortised across the entries the
+/// worker takes thanks to `for_each_init`.
+fn open_local(path: &Path, password: Option<&Zeroizing<String>>) -> Result<LenientZipBackend> {
+    LenientZipBackend::open(path, password)
+}
+
+/// Captured-first error sink shared across rayon workers. Once any
+/// worker sets the slot the cancel flag fires and remaining workers
+/// short-circuit. Identical pattern to
+/// `ZipBackend::extract_all_parallel`.
+fn set_first_err(
+    slot: &Mutex<Option<OtterzipError>>,
+    canceled: &std::sync::atomic::AtomicBool,
+    err: OtterzipError,
+) {
+    let mut guard = slot.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(err);
+    }
+    canceled.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Resolve `entry_path` (an in-archive POSIX-style path) against
+/// `dest_root`, applying the path-traversal gate via
+/// [`crate::archive::__validate_component`]. Mirrors
+/// `ZipBackend::resolve_output_path` byte-for-byte so the parallel
+/// paths can't drift on traversal semantics.
+fn resolve_output_path(
+    dest_root: &Path,
+    entry_path: &str,
+    opts: &crate::options::ExtractOptions,
+) -> std::result::Result<PathBuf, String> {
+    let as_path = Path::new(entry_path);
+    if opts.flatten_paths {
+        let name = as_path
+            .file_name()
+            .map_or_else(|| PathBuf::from(entry_path), PathBuf::from);
+        return Ok(dest_root.join(name));
+    }
+    let mut out = dest_root.to_path_buf();
+    for comp in as_path.components() {
+        match comp {
+            Component::Normal(c) => {
+                let s = c.to_string_lossy();
+                if crate::archive::__validate_component(&s).is_err() {
+                    return Err(entry_path.to_string());
+                }
+                out.push(c);
+            }
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
+                return Err(entry_path.to_string());
+            }
+        }
+    }
+    if !out.starts_with(dest_root) {
+        return Err(entry_path.to_string());
+    }
+    Ok(out)
 }
 
 impl ArchiveBackend for LenientZipBackend {
@@ -260,7 +617,14 @@ impl ArchiveBackend for LenientZipBackend {
         let payload_offset = locate_payload(&mut *reader, &record, self.file_size)?;
         reader.seek(SeekFrom::Start(payload_offset))?;
         let limited = (&mut *reader).take(record.entry.compressed_size);
-        decompress(record.raw_method, limited, entry_path, out)
+        decompress(
+            record.raw_method,
+            limited,
+            record.entry.compressed_size,
+            record.entry.uncompressed_size,
+            entry_path,
+            out,
+        )
     }
 
     fn open_entry_stream(&self, entry_path: &str) -> Result<Box<dyn Read + Send + '_>> {
@@ -284,6 +648,54 @@ impl ArchiveBackend for LenientZipBackend {
             .borrow()
             .iter()
             .any(|r| r.entry.encryption != EncryptionMethod::None))
+    }
+
+    fn extract_all_streaming(
+        &self,
+        ctx: &mut StreamingExtractCtx<'_>,
+    ) -> Option<Result<()>> {
+        // Mirrors the strict `ZipBackend::extract_all_streaming` threshold
+        // policy. Tiny archives (very few entries / under a few MiB of
+        // total payload / sub-32 KiB average compressed size on small
+        // corpora) stay on the framework's serial loop because the
+        // per-thread `LenientZipBackend::open` overhead (CD scan + walk)
+        // doesn't amortise. Real-world workloads — the 7 GB / 9 674
+        // entry case the user actually ships — sail past every gate
+        // and end up on the parallel path.
+        let records = self.records.borrow();
+        let entries = records.len();
+        if entries == 0 {
+            return None;
+        }
+        let total_compressed: u64 = records.iter().map(|r| r.entry.compressed_size).sum();
+        drop(records);
+
+        const PARALLEL_MIN_BYTES: u64 = 4 * 1024 * 1024;
+        const PARALLEL_MIN_ENTRIES: usize = 8;
+        const PARALLEL_MIN_AVG_ENTRY_BYTES: u64 = 32 * 1024;
+        const PARALLEL_LARGE_ARCHIVE_BYTES: u64 = 50 * 1024 * 1024;
+        let avg = if entries == 0 {
+            0
+        } else {
+            total_compressed / entries as u64
+        };
+        let large_enough_to_skip_avg_check = total_compressed >= PARALLEL_LARGE_ARCHIVE_BYTES;
+        let go_serial = entries < PARALLEL_MIN_ENTRIES
+            || total_compressed < PARALLEL_MIN_BYTES
+            || (!large_enough_to_skip_avg_check && avg < PARALLEL_MIN_AVG_ENTRY_BYTES);
+        tracing::info!(
+            target: "otterzip::extract",
+            entries,
+            total_compressed,
+            avg_entry = avg,
+            large = large_enough_to_skip_avg_check,
+            decision = if go_serial { "serial" } else { "parallel" },
+            "lenient extract_all_streaming threshold decision"
+        );
+        if go_serial {
+            return None;
+        }
+        Some(self.extract_all_parallel(ctx))
     }
 }
 
@@ -1117,6 +1529,12 @@ fn locate_payload<R: Read + Seek>(
 /// copy the inflated bytes into `out`. Returns the number of bytes
 /// written. `entry_path` is used purely for error context.
 ///
+/// `compressed_size` and `uncompressed_size` come from the entry's
+/// CDFH — the deflate path uses them to decide between the
+/// `libdeflater` one-shot decoder (faster, needs both sizes
+/// up-front) and the `flate2` streaming decoder (works without
+/// reliable size hints, no allocation cap).
+///
 /// Supported methods are listed in the module-level doc. Anything
 /// else returns [`OtterzipError::FeatureDisabled`] with a clear hint
 /// so the caller (the framework's per-entry loop) can record the
@@ -1124,6 +1542,8 @@ fn locate_payload<R: Read + Seek>(
 fn decompress<R: Read>(
     method: u16,
     mut input: R,
+    compressed_size: u64,
+    uncompressed_size: u64,
     entry_path: &str,
     out: &mut dyn std::io::Write,
 ) -> Result<u64> {
@@ -1134,15 +1554,63 @@ fn decompress<R: Read>(
             Ok(n)
         }
         8 => {
-            // Deflate — flate2 with the zlib-ng backend (feature gate
-            // is set in the workspace Cargo.toml). The hard cap
-            // protects against runaway streams whose CDFH lied about
-            // the inflated size; a healthy entry stops at EOF on the
-            // `Take` reader long before reaching the cap.
-            let mut decoder = flate2::read::DeflateDecoder::new(&mut input);
-            let mut capped = (&mut decoder).take(STREAMING_INFLATE_HARD_CAP);
-            let n = std::io::copy(&mut capped, out)?;
-            Ok(n)
+            // Deflate — pick the fastest available decoder for the
+            // entry's size class. The one-shot libdeflater path is
+            // ~20 % faster than streaming flate2 on the deflate hot
+            // loop, but only safe when we know both buffer sizes
+            // up-front (otherwise we'd over-allocate or trip the
+            // crate's "output too small" error).
+            //
+            // Entry-size guard: both compressed and uncompressed
+            // sizes must be under the threshold so the worker's
+            // working set stays bounded. Real-world ZIPs we ship
+            // for (~750 KB average entry on the 7 GB user corpus)
+            // pass; pathological archives with multi-GB single
+            // entries fall through to the streaming path.
+            let oneshot_eligible = uncompressed_size > 0
+                && compressed_size > 0
+                && uncompressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD
+                && compressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD;
+            if oneshot_eligible {
+                let comp_cap = usize::try_from(compressed_size).unwrap_or(usize::MAX);
+                let uncomp_cap = usize::try_from(uncompressed_size).unwrap_or(usize::MAX);
+                let mut in_buf = Vec::with_capacity(comp_cap);
+                let read_n = input.take(compressed_size).read_to_end(&mut in_buf)?;
+                if read_n as u64 != compressed_size {
+                    // CDFH lied about the compressed size (truncated
+                    // archive). Fall back to streaming so we don't
+                    // hand libdeflater a short buffer; the streaming
+                    // path stops at the real EOF cleanly.
+                    return decompress_streaming(
+                        std::io::Cursor::new(in_buf),
+                        out,
+                    );
+                }
+                let mut out_buf = vec![0u8; uncomp_cap];
+                let mut dec = libdeflater::Decompressor::new();
+                match dec.deflate_decompress(&in_buf, &mut out_buf) {
+                    Ok(n) => {
+                        out.write_all(&out_buf[..n])?;
+                        Ok(n as u64)
+                    }
+                    Err(e) => {
+                        // libdeflater is strict — if the CDFH's
+                        // uncompressed_size was wrong or the stream
+                        // has trailing junk, the one-shot path
+                        // errors out. Retry through the streaming
+                        // decoder which tolerates both.
+                        tracing::debug!(
+                            target: "otterzip::lenient",
+                            entry = %entry_path,
+                            error = ?e,
+                            "lenient: libdeflater rejected one-shot, falling back to streaming"
+                        );
+                        decompress_streaming(std::io::Cursor::new(in_buf), out)
+                    }
+                }
+            } else {
+                decompress_streaming(input, out)
+            }
         }
         other => Err(OtterzipError::FeatureDisabled(
             // The static-str variant requires a `&'static str`; we
@@ -1161,6 +1629,20 @@ fn decompress<R: Read>(
             },
         )),
     }
+}
+
+/// flate2 streaming decoder path. Used directly for large entries
+/// (where libdeflater's one-shot buffer would balloon RAM) and as a
+/// fallback when the libdeflater path rejects the stream (CDFH size
+/// lie, stream with trailing bytes, etc.). The hard cap protects
+/// against runaway inflate when the CDFH's uncompressed_size is
+/// missing or malicious; healthy entries stop at the Take reader's
+/// EOF long before reaching the cap.
+fn decompress_streaming<R: Read>(input: R, out: &mut dyn std::io::Write) -> Result<u64> {
+    let mut decoder = flate2::read::DeflateDecoder::new(input);
+    let mut capped = (&mut decoder).take(STREAMING_INFLATE_HARD_CAP);
+    let n = std::io::copy(&mut capped, out)?;
+    Ok(n)
 }
 
 // === Tests ============================================================

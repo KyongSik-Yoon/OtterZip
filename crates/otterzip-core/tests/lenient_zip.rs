@@ -723,3 +723,201 @@ fn walk_simple(root: &Path, sink: &mut impl FnMut(&Path)) {
         }
     }
 }
+
+// === Parallel extract + libdeflater path coverage ===================
+//
+// The lenient backend's `extract_all_streaming` override mirrors the
+// strict `ZipBackend`'s rayon worker pool — these tests verify the
+// happy path (bytes round-trip) and the security gates (path
+// traversal still fires) on the parallel route. They build archives
+// past every threshold gate (`PARALLEL_MIN_ENTRIES = 8`,
+// `PARALLEL_MIN_BYTES = 4 MiB`, `PARALLEL_MIN_AVG_ENTRY_BYTES = 32 KiB`)
+// so the dispatcher commits to parallel rather than falling back to
+// the framework's serial loop.
+
+/// Build a deflated archive deliberately oversized past every parallel
+/// threshold gate. Returns the canonical `(name, body)` pairs so
+/// callers can verify byte-for-byte round-trip.
+fn build_parallel_fixture(path: &Path, entry_count: usize, payload_size: usize) -> Vec<(String, Vec<u8>)> {
+    let mut entries: Vec<(String, Vec<u8>)> = Vec::with_capacity(entry_count);
+    let mut seed: u64 = 0xC0FFEE_F00DBEEF;
+    for i in 0..entry_count {
+        let mut payload = Vec::with_capacity(payload_size);
+        for _ in 0..payload_size {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            payload.push((seed >> 33) as u8);
+        }
+        entries.push((format!("parallel/payload_{i:02}.bin"), payload));
+    }
+    let f = fs::File::create(path).unwrap();
+    let mut w = zip::ZipWriter::new(f);
+    let opts = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, body) in &entries {
+        w.start_file(name.as_str(), opts).unwrap();
+        w.write_all(body).unwrap();
+    }
+    w.finish().unwrap();
+    entries
+}
+
+/// Force the dispatcher onto the lenient path by mutating the EOCD's
+/// `cd_offset` to a value past EOF. Both fixtures the parallel tests
+/// build use this trick — the strict `zip` crate rejects, the
+/// lenient parser's scan-recovery picks the entries back up.
+fn force_lenient_path(path: &Path) {
+    let mut bytes = fs::read(path).unwrap();
+    let eocd_at = locate_eocd(&bytes);
+    let cd_offset_off = eocd_at + 16;
+    let bogus = (bytes.len() as u32).saturating_add(256);
+    bytes[cd_offset_off..cd_offset_off + 4].copy_from_slice(&bogus.to_le_bytes());
+    fs::write(path, &bytes).unwrap();
+}
+
+#[test]
+fn parallel_extract_recovers_full_payload() {
+    // 16 × 256 KiB = 4 MiB total, comfortably past every threshold:
+    // ≥ 8 entries, ≥ 4 MiB total, ≥ 32 KiB avg entry. The
+    // dispatcher must commit to the rayon path; bytes must
+    // round-trip per entry.
+    let td = tempdir().unwrap();
+    let path = td.path().join("parallel.zip");
+    let originals = build_parallel_fixture(&path, 16, 256 * 1024);
+    force_lenient_path(&path);
+
+    let archive = Archive::open(&path, OpenMode::Read).unwrap();
+    let dest = td.path().join("out");
+    let opts = ExtractOptions {
+        destination: dest.clone(),
+        ..Default::default()
+    };
+    let report = archive
+        .extract_all::<fn(&otterzip_core::Progress) -> bool>(&opts, None)
+        .unwrap();
+    assert_eq!(
+        report.entries_extracted as usize, originals.len(),
+        "parallel extract must produce every entry"
+    );
+
+    for (name, expected) in &originals {
+        let mut got = Vec::new();
+        File::open(dest.join(name))
+            .unwrap()
+            .read_to_end(&mut got)
+            .unwrap();
+        assert_eq!(got, *expected, "parallel-extracted entry {name} corrupted");
+    }
+}
+
+#[test]
+fn parallel_path_blocks_traversal() {
+    // Same parallel-threshold fixture, but with a poisoned first
+    // entry whose CDFH name is `../escape.txt`. The dispatcher must
+    // route through the rayon path AND the path-traversal gate
+    // must still fire — that's the regression-blocker if a future
+    // refactor accidentally skips `__validate_component` in the
+    // parallel resolve loop.
+    let td = tempdir().unwrap();
+    let path = td.path().join("traversal-parallel.zip");
+    let mut entries = build_parallel_fixture(&path, 8, 512 * 1024);
+    // Rebuild the archive with the traversal entry prepended (we
+    // need its bytes through the writer's deflate path, not just a
+    // CDFH rename, so the parser actually sees a real LFH).
+    entries.insert(0, ("../escape.txt".to_string(), b"pwn".to_vec()));
+    {
+        let f = fs::File::create(&path).unwrap();
+        let mut w = zip::ZipWriter::new(f);
+        let opts = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (n, b) in &entries {
+            w.start_file(n.as_str(), opts).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.finish().unwrap();
+    }
+    force_lenient_path(&path);
+
+    let archive = Archive::open(&path, OpenMode::Read).unwrap();
+    let dest = td.path().join("out");
+    let opts = ExtractOptions {
+        destination: dest.clone(),
+        block_path_traversal: true,
+        ..Default::default()
+    };
+    match archive.extract_all::<fn(&otterzip_core::Progress) -> bool>(&opts, None) {
+        Err(OtterzipError::PathTraversalBlocked(_)) => {}
+        Ok(report) => panic!("traversal entry must block, got {report:?}"),
+        Err(other) => panic!("expected PathTraversalBlocked, got {other:?}"),
+    }
+    // Most importantly: nothing escaped the destination root.
+    let escape = td.path().join("escape.txt");
+    assert!(
+        !escape.exists(),
+        "traversal entry materialised at {}",
+        escape.display()
+    );
+}
+
+#[test]
+fn libdeflater_path_handles_threshold_boundary() {
+    // Verify both sides of the LIBDEFLATER_ONESHOT_THRESHOLD (16 MiB)
+    // split produce byte-identical output. Small entry hits the
+    // one-shot decoder; large entry crosses the threshold and falls
+    // through to the streaming flate2 path. Both must round-trip.
+    let td = tempdir().unwrap();
+    let path = td.path().join("threshold.zip");
+
+    let small = {
+        let mut v = Vec::with_capacity(4096);
+        let mut seed: u64 = 0xABCD;
+        for _ in 0..4096 {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            v.push((seed >> 33) as u8);
+        }
+        v
+    };
+    // 17 MiB so we comfortably cross the 16 MiB threshold even
+    // after libdeflater's threshold check rejects on equal-to.
+    let large_size = 17 * 1024 * 1024;
+    let mut large = Vec::with_capacity(large_size);
+    // Half pseudo-random, half a repeating pattern — so deflate
+    // produces compressed output well under 17 MiB (otherwise the
+    // ZIP writer balloons disk usage during test run).
+    let mut seed: u64 = 0x1234;
+    for i in 0..large_size {
+        if i % 8 == 0 {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            large.push((seed >> 33) as u8);
+        } else {
+            large.push(0xCA);
+        }
+    }
+
+    {
+        let f = fs::File::create(&path).unwrap();
+        let mut w = zip::ZipWriter::new(f);
+        let opts = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        w.start_file("small.bin", opts).unwrap();
+        w.write_all(&small).unwrap();
+        w.start_file("large.bin", opts).unwrap();
+        w.write_all(&large).unwrap();
+        w.finish().unwrap();
+    }
+
+    let got_small = __probe_lenient_extract(&path, "small.bin").unwrap();
+    assert_eq!(got_small, small, "libdeflater one-shot corrupted small entry");
+    let got_large = __probe_lenient_extract(&path, "large.bin").unwrap();
+    assert_eq!(
+        got_large.len(),
+        large.len(),
+        "streaming path produced wrong byte count for large entry"
+    );
+    assert_eq!(got_large, large, "streaming path corrupted large entry");
+}
