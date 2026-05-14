@@ -188,6 +188,8 @@ impl TarBackend {
                 current_entry: Some(path_str.clone()),
                 phase: ProgressPhase::Writing,
                 elapsed: ctx.start.elapsed(),
+                current_entry_bytes_processed: 0,
+                current_entry_bytes_total: 0,
             };
             if !ctx.progress.update(&snapshot) {
                 return Err(OtterzipError::Canceled);

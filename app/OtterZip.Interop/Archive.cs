@@ -457,6 +457,8 @@ public sealed class Archive : IDisposable
                     CurrentEntry = entry,
                     Phase = (ProgressPhase)view.Phase,
                     ElapsedMs = view.ElapsedMs,
+                    CurrentEntryBytesProcessed = view.CurrentEntryBytesProcessed,
+                    CurrentEntryBytesTotal = view.CurrentEntryBytesTotal,
                 });
             }
             return 0;

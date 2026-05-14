@@ -81,6 +81,33 @@ public sealed class JobItem : INotifyPropertyChanged
         set => SetProp(ref _progress, value);
     }
 
+    private double _currentEntryProgress;          // 0.0 .. 1.0
+    /// <summary>
+    /// Per-entry progress fraction for the currently in-flight file
+    /// — populated by the large-file streaming compress path (ABI v9)
+    /// and bound to the second progress bar in <c>JobCard.xaml</c>.
+    /// Stays at 0 outside that path so the bar collapses when there
+    /// isn't useful per-file motion to show.
+    /// </summary>
+    public double CurrentEntryProgress
+    {
+        get => _currentEntryProgress;
+        set => SetProp(ref _currentEntryProgress, value);
+    }
+
+    private bool _currentEntryProgressVisible;
+    /// <summary>
+    /// Drives the "show / collapse" toggle for the per-entry bar. We
+    /// want it hidden when there's no streaming context (small-file
+    /// chunk path) so the JobCard doesn't show a permanently-zero
+    /// second bar.
+    /// </summary>
+    public bool CurrentEntryProgressVisible
+    {
+        get => _currentEntryProgressVisible;
+        set => SetProp(ref _currentEntryProgressVisible, value);
+    }
+
     private bool _isIndeterminate = true;
     /// <summary>
     /// True until the worker reports its first concrete progress fraction.

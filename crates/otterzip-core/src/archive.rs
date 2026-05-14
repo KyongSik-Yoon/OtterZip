@@ -455,6 +455,8 @@ impl Archive {
                     current_entry: Some(entry.path.clone()),
                     phase: ProgressPhase::Reading,
                     elapsed: start.elapsed(),
+                    current_entry_bytes_processed: 0,
+                    current_entry_bytes_total: 0,
                 };
                 if !sink.update(&snapshot) {
                     return Err(OtterzipError::Canceled);
@@ -605,6 +607,8 @@ impl Archive {
                     current_entry: Some(entry.path.clone()),
                     phase: ProgressPhase::Writing,
                     elapsed: start.elapsed(),
+                    current_entry_bytes_processed: 0,
+                    current_entry_bytes_total: 0,
                 };
                 if !sink.update(&snapshot) {
                     return Err(OtterzipError::Canceled);

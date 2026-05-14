@@ -38,7 +38,7 @@
 //! in parallel.
 
 use std::fs::File;
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -272,6 +272,194 @@ impl ZipFileWriter {
             mdate: prepared.mdate,
             used_zip64_extra,
         });
+        Ok(())
+    }
+
+    /// Streaming file entry — read `source_path` chunk-by-chunk and
+    /// deflate straight into the output without ever holding the
+    /// whole payload in memory. Used by the bulk dispatcher for
+    /// "large entry" files (typically > 64 MiB) where:
+    ///
+    ///   * a worker can't safely buffer the whole input
+    ///     (the user's reproducer carries a 3.58 GB single file —
+    ///     four workers × 3.58 GB blows past 32 GB RAM and
+    ///     triggers swap), and
+    ///   * a single worker is going to occupy itself for tens of
+    ///     seconds anyway, so we'd rather have the main thread
+    ///     drive this serially and free the worker pool for the
+    ///     long tail of small entries.
+    ///
+    /// LFH is written with crc/sizes zeroed; after the deflate
+    /// stream finishes we seek the underlying file back to the LFH
+    /// and patch the fields in-place. The cursor is then restored
+    /// to the end of the payload so the next entry resumes on
+    /// the right byte. `progress` is called periodically with
+    /// `bytes_read` (bytes inflated so far) as the streaming
+    /// loop turns; pass `|_| Ok(())` to skip.
+    pub(crate) fn add_entry_streaming(
+        &mut self,
+        name: &str,
+        source_path: &Path,
+        progress: &mut dyn FnMut(u64) -> std::result::Result<(), OtterzipError>,
+    ) -> Result<()> {
+        let name_bytes = name.as_bytes().to_vec();
+        let (mtime, mdate) = current_dos_datetime();
+        let file_size = std::fs::metadata(source_path)?.len();
+        let lfh_offset = self.cursor;
+        // ZIP64 escalation policy: any single dimension overflowing
+        // its 32-bit slot escalates. compressed_size is unknown at
+        // LFH-write time; we conservatively escalate when
+        // uncompressed > u32::MAX (which makes compressed > u32::MAX
+        // overwhelmingly likely too) OR the LFH offset itself is
+        // past 4 GiB. Doing the decision once up-front keeps the
+        // patch arithmetic simple.
+        let used_zip64_extra =
+            file_size > u32::MAX as u64 || lfh_offset > u32::MAX as u64;
+        let version_needed = if used_zip64_extra {
+            VERSION_NEEDED_ZIP64
+        } else {
+            VERSION_NEEDED_BASE
+        };
+        let method = match self.options.compression {
+            Compression::Stored => 0u16,
+            Compression::Deflate { .. } => 8u16,
+        };
+
+        // Write LFH with placeholder crc + compressed_size; the
+        // uncompressed_size field carries the real value already so
+        // a strict reader that doesn't trust the data descriptor bit
+        // still sees something coherent if it happens to peek
+        // mid-encode (we never set GP bit 3 — readers always trust
+        // the LFH after we patch it).
+        write_lfh(
+            &mut self.inner,
+            &name_bytes,
+            version_needed,
+            GP_FLAG_UTF8_NAMES,
+            method,
+            mtime,
+            mdate,
+            0, // crc placeholder
+            0, // compressed_size placeholder
+            file_size, // uncompressed_size known
+            used_zip64_extra,
+        )?;
+        let extra_len = if used_zip64_extra { 20u64 } else { 0 };
+        let lfh_total = LFH_FIXED_SIZE + name_bytes.len() as u64 + extra_len;
+        self.cursor += lfh_total;
+        let payload_offset = self.cursor;
+
+        // Stage 2 — stream the deflate / store body. Two paths:
+        //
+        //  * Stored: count CRC while we copy raw bytes. Output bytes
+        //    == input bytes.
+        //  * Deflate: feed bytes into flate2's streaming encoder
+        //    writing onto our CountingWriter, which forwards to the
+        //    BufWriter while it counts compressed bytes written.
+        //
+        // Both report `bytes_read` to the progress callback every
+        // 1 MiB so the UI sees mid-entry motion (the whole point of
+        // the streaming path).
+        let mut input = BufReader::with_capacity(64 * 1024, File::open(source_path)?);
+        let mut crc = crc32fast::Hasher::new();
+        let mut bytes_read: u64 = 0;
+        let mut last_tick_at: u64 = 0;
+        const PROGRESS_TICK_BYTES: u64 = 1 << 20; // 1 MiB
+        let mut buf = vec![0u8; 64 * 1024];
+
+        let compressed_size = match self.options.compression {
+            Compression::Stored => {
+                let mut counter = CountingWriter::new(&mut self.inner);
+                loop {
+                    let n = input.read(&mut buf)?;
+                    if n == 0 {
+                        break;
+                    }
+                    crc.update(&buf[..n]);
+                    counter.write_all(&buf[..n])?;
+                    bytes_read += n as u64;
+                    if bytes_read - last_tick_at >= PROGRESS_TICK_BYTES {
+                        progress(bytes_read)?;
+                        last_tick_at = bytes_read;
+                    }
+                }
+                counter.count
+            }
+            Compression::Deflate { level } => {
+                let lvl = flate2::Compression::new(u32::from(level.clamp(1, 9)));
+                let mut counter = CountingWriter::new(&mut self.inner);
+                {
+                    let mut encoder = flate2::write::DeflateEncoder::new(&mut counter, lvl);
+                    loop {
+                        let n = input.read(&mut buf)?;
+                        if n == 0 {
+                            break;
+                        }
+                        crc.update(&buf[..n]);
+                        encoder.write_all(&buf[..n])?;
+                        bytes_read += n as u64;
+                        if bytes_read - last_tick_at >= PROGRESS_TICK_BYTES {
+                            progress(bytes_read)?;
+                            last_tick_at = bytes_read;
+                        }
+                    }
+                    encoder.finish()?;
+                }
+                counter.count
+            }
+        };
+        let crc32 = crc.finalize();
+        self.cursor += compressed_size;
+
+        // Stage 3 — patch the LFH. Flush BufWriter so the underlying
+        // File's cursor matches `self.cursor`, then seek back to
+        // `lfh_offset + 14` (the crc32 field) and overwrite crc +
+        // compressed_size. For ZIP64 entries we additionally patch
+        // the 8-byte sizes inside the LFH extra (the field offsets
+        // are deterministic — see `write_lfh`'s ZIP64 branch).
+        self.inner.flush()?;
+        {
+            let raw = self.inner.get_mut();
+            raw.seek(SeekFrom::Start(lfh_offset + 14))?;
+            raw.write_all(&crc32.to_le_bytes())?;
+            let cs_field = if used_zip64_extra {
+                u32::MAX
+            } else {
+                compressed_size as u32
+            };
+            raw.write_all(&cs_field.to_le_bytes())?;
+            if used_zip64_extra {
+                // ZIP64 extra body starts at LFH + 30 + name_len + 4
+                // (tag(2) + size(2) header), then carries
+                // uncomp(8) + comp(8). uncomp was correct from the
+                // first pass but we re-write both for clarity.
+                let extra_body =
+                    lfh_offset + LFH_FIXED_SIZE + name_bytes.len() as u64 + 4;
+                raw.seek(SeekFrom::Start(extra_body))?;
+                raw.write_all(&file_size.to_le_bytes())?;
+                raw.write_all(&compressed_size.to_le_bytes())?;
+            }
+            // Restore cursor to end-of-payload for the next entry.
+            raw.seek(SeekFrom::Start(self.cursor))?;
+        }
+        let _ = payload_offset;
+
+        self.cd.push(CdRecord {
+            name: name_bytes,
+            method,
+            crc32,
+            compressed_size,
+            uncompressed_size: file_size,
+            lfh_offset,
+            is_directory: false,
+            external_attr: UNIX_MODE_FILE << 16,
+            mtime,
+            mdate,
+            used_zip64_extra,
+        });
+        // Final progress flush — the loop's tick guard may have
+        // skipped the trailing partial MiB.
+        progress(bytes_read)?;
         Ok(())
     }
 
@@ -611,6 +799,32 @@ fn needs_zip64_for_entry(uncompressed: u64, compressed: u64, lfh_offset: u64) ->
     uncompressed > u32::MAX as u64
         || compressed > u32::MAX as u64
         || lfh_offset > u32::MAX as u64
+}
+
+/// `Write` wrapper that forwards every byte to its inner writer and
+/// keeps a running count. Used by [`ZipFileWriter::add_entry_streaming`]
+/// to learn the compressed payload size when the deflate encoder is
+/// the only thing that knows it.
+struct CountingWriter<'a, W: Write> {
+    inner: &'a mut W,
+    count: u64,
+}
+
+impl<'a, W: Write> CountingWriter<'a, W> {
+    fn new(inner: &'a mut W) -> Self {
+        Self { inner, count: 0 }
+    }
+}
+
+impl<'a, W: Write> Write for CountingWriter<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.count += n as u64;
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 // === Parallel pipeline — worker drop-off ============================

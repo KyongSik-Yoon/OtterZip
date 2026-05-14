@@ -66,7 +66,15 @@ use std::os::raw::c_char;
 /// / spanned ZIP given an explicit ordered list of volume paths. Backed
 /// by `Archive::open_multi` and the new `MultiVolumeReader` virtual
 /// stream. Single-volume read path is unchanged.
-const ABI_VERSION: u32 = 8;
+///
+/// v9 (2026-05-14): `OtterzipProgressView` trailing append
+/// `current_entry_bytes_processed` + `current_entry_bytes_total`
+/// (both `u64`). Fills with the per-file streaming progress the
+/// compress sprint's `add_entry_streaming` path emits ~1× per MiB.
+/// v8 consumers that read only the leading fields stay binary-
+/// compatible — the additional bytes are zero on every non-streaming
+/// tick and ignored by callers that don't look for them.
+const ABI_VERSION: u32 = 9;
 
 /// Returns a pointer to a null-terminated static version string.
 ///

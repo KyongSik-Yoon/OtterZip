@@ -57,6 +57,8 @@ impl ProgressSink for CallbackSink {
             current_entry_len: name_len,
             phase: p.phase as u32,
             elapsed_ms: u64::try_from(p.elapsed.as_millis()).unwrap_or(u64::MAX),
+            current_entry_bytes_processed: p.current_entry_bytes_processed,
+            current_entry_bytes_total: p.current_entry_bytes_total,
         };
         (self.cb)(&view, self.user) == 0
     }

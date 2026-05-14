@@ -153,6 +153,8 @@ impl SevenZBackend {
                     current_entry: Some(path_str.clone()),
                     phase: ProgressPhase::Writing,
                     elapsed: start.elapsed(),
+                    current_entry_bytes_processed: 0,
+                    current_entry_bytes_total: 0,
                 };
                 if !progress_cell.borrow_mut().update(&snapshot) {
                     canceled = true;

@@ -50,6 +50,15 @@ pub struct OtterzipExtractOptions {
 
 /// Mirror of `OtterzipProgressView` from `ffi-api.md` §8.2. Passed by const
 /// pointer to the C callback.
+///
+/// ABI v9 (compress sprint follow-up) appends
+/// `current_entry_bytes_processed` + `current_entry_bytes_total`
+/// — trailing-append, so v8 consumers that only read the leading
+/// fields stay binary-compatible. New fields surface the
+/// per-file streaming progress so the host can render a second
+/// "current file" progress bar separate from the archive-wide one.
+/// Older consumers ignoring the trailing fields see no behavioural
+/// change.
 #[repr(C)]
 pub struct OtterzipProgressView {
     pub bytes_processed: u64,
@@ -60,6 +69,12 @@ pub struct OtterzipProgressView {
     pub current_entry_len: usize,
     pub phase: u32,
     pub elapsed_ms: u64,
+    /// ABI v9 — bytes processed within the currently in-flight entry
+    /// (large-file streaming path only; 0 elsewhere).
+    pub current_entry_bytes_processed: u64,
+    /// ABI v9 — total bytes the in-flight entry will occupy when
+    /// finished (large-file streaming path only; 0 elsewhere).
+    pub current_entry_bytes_total: u64,
 }
 
 /// Mirror of `OtterzipExtractReport`.
@@ -159,6 +174,8 @@ impl ProgressSink for CallbackSink {
             current_entry_len: name_len,
             phase: p.phase as u32,
             elapsed_ms: u64::try_from(p.elapsed.as_millis()).unwrap_or(u64::MAX),
+            current_entry_bytes_processed: p.current_entry_bytes_processed,
+            current_entry_bytes_total: p.current_entry_bytes_total,
         };
 
         // Per `ffi-api.md` §8.2: 0 = continue, anything else = cancel.

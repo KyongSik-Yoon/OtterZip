@@ -173,19 +173,21 @@ impl ZipWriterBackend {
         })
     }
 
-    /// Walk `src` and return two ordered lists: directory entries
-    /// (their entry-prefixed names) and file entries (source path +
-    /// entry name pairs). The directory list keeps the same alphabetic
-    /// pop order the generic walker uses so cross-backend round-trip
-    /// tests see the same CDFH ordering.
+    /// Walk `src` and return three ordered lists: directory entries
+    /// (their entry-prefixed names), *small* file entries (suitable
+    /// for the rayon worker pool), and *large* file entries (routed
+    /// through the main-thread streaming path so they don't balloon
+    /// per-worker memory or block a chunk-collect). The split policy
+    /// is "file size ≥ `LARGE_ENTRY_THRESHOLD_BYTES` → large".
     fn collect_entries(
         src: &Path,
         entry_prefix: &str,
         follow_symlinks: bool,
         exclude_system_metadata: bool,
-    ) -> Result<(Vec<String>, Vec<(PathBuf, String)>)> {
+    ) -> Result<(Vec<String>, Vec<(PathBuf, String)>, Vec<(PathBuf, String, u64)>)> {
         let mut dirs: Vec<String> = Vec::new();
-        let mut files: Vec<(PathBuf, String)> = Vec::new();
+        let mut small_files: Vec<(PathBuf, String)> = Vec::new();
+        let mut large_files: Vec<(PathBuf, String, u64)> = Vec::new();
         let mut stack: Vec<PathBuf> = vec![src.to_path_buf()];
         while let Some(current) = stack.pop() {
             if exclude_system_metadata
@@ -219,21 +221,27 @@ impl ZipWriterBackend {
                 continue;
             }
             let name = compose_entry_name(src, &current, entry_prefix);
-            files.push((current, name));
+            let size = meta.len();
+            if size >= LARGE_ENTRY_THRESHOLD_BYTES {
+                large_files.push((current, name, size));
+            } else {
+                small_files.push((current, name));
+            }
         }
-        Ok((dirs, files))
+        Ok((dirs, small_files, large_files))
     }
 }
 
 /// Chunk size for the rayon parallel encode. Each chunk is `par_iter`-
 /// processed off-thread and the results collected in input order
-/// before the main thread plays them onto the writer. Sized so the
-/// memory footprint per chunk stays bounded: 1024 entries × ~1 MiB
-/// average compressed size ≈ 1 GiB, which is comfortable on 16 GB
-/// machines. Smaller archives never split into multiple chunks; very
-/// large archives (the user's 9 674-entry / 7 GB corpus) take ~10
-/// passes.
-const PARALLEL_CHUNK_SIZE: usize = 1024;
+/// before the main thread plays them onto the writer. 64 entries
+/// keeps the chunk-collect latency low (so the progress sink ticks
+/// at least once per ~second on real-world archives) while still
+/// amortising the rayon dispatch cost across enough work. Smaller
+/// archives never split into multiple chunks; the user's 9 674-
+/// entry corpus takes ~150 passes, each ~50 MiB of in-memory
+/// deflated bytes worst case — well under 1 GiB.
+const PARALLEL_CHUNK_SIZE: usize = 64;
 
 /// Minimum file count for the parallel pipeline to be worth spinning
 /// up. Below this we fall back to the serial walker — the rayon
@@ -245,6 +253,24 @@ const PARALLEL_MIN_ENTRIES: usize = 16;
 /// workers on the same volume even on 16-core machines, mirroring
 /// the read-side `LenientZipBackend::extract_all_parallel` finding.
 const PARALLEL_WORKER_CAP: usize = 4;
+
+/// Per-entry uncompressed size above which the bulk dispatcher
+/// stops sending the file through the rayon worker pool and instead
+/// drives it through the main-thread serial path. Two reasons:
+///   1. **Memory**: a worker that reads a 1 GiB file into its
+///      Vec-of-bytes buffer can spike per-worker working memory
+///      into the multi-GB range, and four of those running at
+///      once on a 32 GiB machine pushes the system into swap.
+///   2. **Parallel efficiency**: a single multi-GB file occupies
+///      one worker for the entire chunk while the other three sit
+///      idle. Routing it to the main thread frees those workers
+///      to chew through the long tail of small entries.
+///
+/// 64 MiB picked so the threshold sits well above the libdeflater
+/// one-shot limit (16 MiB) — small entries still take the fast
+/// libdeflater path, mid-sized entries still hit flate2 streaming
+/// in parallel, only the genuinely-large outliers get serialised.
+const LARGE_ENTRY_THRESHOLD_BYTES: u64 = 64 * 1024 * 1024;
 
 impl ArchiveWriter for ZipWriterBackend {
     fn add_entry(
@@ -302,23 +328,28 @@ impl ArchiveWriter for ZipWriterBackend {
         exclude_system_metadata: bool,
         progress: &mut Option<&mut dyn crate::progress::ProgressSink>,
     ) -> Option<Result<()>> {
-        let (dirs, files) =
+        let (dirs, small_files, large_files) =
             match Self::collect_entries(src, entry_prefix, follow_symlinks, exclude_system_metadata)
             {
                 Ok(p) => p,
                 Err(e) => return Some(Err(e)),
             };
-        let total_entries = dirs.len() + files.len();
+        let total_files = small_files.len() + large_files.len();
+        let total_entries = dirs.len() + total_files;
 
-        if files.len() < PARALLEL_MIN_ENTRIES {
+        if total_files < PARALLEL_MIN_ENTRIES && large_files.is_empty() {
             // Below the threshold the generic per-entry walker is
             // already fast enough; declining `bulk` lets the caller's
             // fallback path take over (carrying its own progress sink
             // through the regular `add_entry` plumbing). No archive
             // bytes have been written yet so this is side-effect-free.
+            // We still take over when there's at least one large
+            // entry, though — the generic walker would block on it
+            // in memory and the streaming path is strictly better.
             tracing::info!(
                 target: "otterzip::compress",
-                files = files.len(),
+                small = small_files.len(),
+                large = large_files.len(),
                 dirs = dirs.len(),
                 "parallel compress declined — below threshold, falling back to serial"
             );
@@ -326,13 +357,18 @@ impl ArchiveWriter for ZipWriterBackend {
         }
 
         let started = std::time::Instant::now();
-        let bytes_total: u64 = files
+        let small_bytes: u64 = small_files
             .iter()
             .filter_map(|(p, _)| std::fs::metadata(p).ok().map(|m| m.len()))
             .sum();
+        let large_bytes: u64 = large_files.iter().map(|(_, _, s)| *s).sum();
+        let bytes_total = small_bytes + large_bytes;
         tracing::info!(
             target: "otterzip::compress",
-            files = files.len(),
+            small = small_files.len(),
+            small_bytes,
+            large = large_files.len(),
+            large_bytes,
             dirs = dirs.len(),
             bytes_total,
             "parallel compress dispatch begin"
@@ -369,6 +405,8 @@ impl ArchiveWriter for ZipWriterBackend {
                 current_entry: None,
                 phase: crate::progress::ProgressPhase::Scanning,
                 elapsed: started.elapsed(),
+                current_entry_bytes_processed: 0,
+                current_entry_bytes_total: 0,
             };
             if !sink.update(&snapshot) {
                 return Some(Err(OtterzipError::Canceled));
@@ -398,13 +436,18 @@ impl ArchiveWriter for ZipWriterBackend {
         let mut entries_done: u32 = dirs.len() as u32;
         let mut bytes_done: u64 = 0;
 
-        // Chunked iteration — par_iter on each chunk collects the
-        // results in input order, then the main thread plays them
-        // onto the writer serially. Bounds the peak in-flight
-        // deflated bytes to chunk_size × per-entry size; for the
-        // 7 GB / 9 674-entry user corpus that's well under 1 GiB
-        // of working memory.
-        for chunk in files.chunks(PARALLEL_CHUNK_SIZE) {
+        // ── Small entries — chunked rayon ─────────────────────────
+        //
+        // Each chunk is `par_iter`-deflated off-thread and collected
+        // in input order, then the main thread plays the results
+        // onto the writer serially so LFH byte offsets stay strictly
+        // monotonic. Peak in-flight deflated bytes ≈ chunk_size ×
+        // worst-case per-entry size; with the 64-entry chunk and
+        // ≤64 MiB-per-entry guarantee the bound is ~4 GiB worst
+        // case (in practice <100 MiB on the user's corpus). Progress
+        // ticks after each chunk so the UI sees motion at least
+        // every ~1 second on real workloads.
+        for chunk in small_files.chunks(PARALLEL_CHUNK_SIZE) {
             let prepared: Vec<Result<PreparedEntry>> = pool.install(|| {
                 chunk
                     .par_iter()
@@ -432,12 +475,82 @@ impl ArchiveWriter for ZipWriterBackend {
                         current_entry: Some(entry_name),
                         phase: crate::progress::ProgressPhase::Writing,
                         elapsed: started.elapsed(),
+                        // Small-chunk path: entire entry is finished
+                        // by the time we get here, so per-entry byte
+                        // progress is moot. Large entries route
+                        // through the streaming path which does fill
+                        // these fields.
+                        current_entry_bytes_processed: 0,
+                        current_entry_bytes_total: 0,
                     };
                     if !sink.update(&snapshot) {
                         return Some(Err(OtterzipError::Canceled));
                     }
                 }
             }
+        }
+
+        // ── Large entries — main-thread streaming ────────────────
+        //
+        // Files past LARGE_ENTRY_THRESHOLD_BYTES (64 MiB) go through
+        // ZipFileWriter::add_entry_streaming which deflates straight
+        // from disk to disk with a 64 KiB buffer — no GB-sized
+        // intermediate `Vec<u8>` per worker, and no chunk-collect
+        // block. The streaming encoder calls back here every ~1 MiB
+        // so the UI sees mid-entry byte progress (the whole point
+        // of the second progress bar in the host).
+        //
+        // Order: directories first, then small entries' CDFH records
+        // already pushed above, then large entries' CDFH records
+        // appended here. External readers ignore CDFH order anyway;
+        // what matters is the byte-cursor monotonicity for the
+        // local_header_offset field, and the writer's `cursor`
+        // bookkeeping guarantees that.
+        for (path, name, size) in &large_files {
+            let entry_name_owned = name.clone();
+            let entry_bytes_total = *size;
+            let entry_start_bytes_done = bytes_done;
+            let started_local = started;
+            // Cancellation + progress hooks are accessed through the
+            // borrowed `progress` Option. We can't move it through
+            // the FnMut, so the closure re-fetches each tick.
+            let progress_ref: *mut Option<&mut dyn crate::progress::ProgressSink> = &mut *progress;
+            let total_entries_u32 = total_entries as u32;
+            let bytes_total_local = bytes_total;
+            let entries_done_at_start = entries_done;
+
+            let mut on_tick = |bytes_in_entry: u64| -> Result<()> {
+                // SAFETY: the streaming encoder runs synchronously on
+                // this thread inside add_entry_streaming, so the
+                // closure can't outlive the borrow. We use a raw
+                // pointer because moving `progress` through the
+                // closure would conflict with the &mut self on
+                // `writer` directly above (which holds a borrow on
+                // `self`, and `self` also holds the rayon `pool`).
+                let progress_opt = unsafe { &mut *progress_ref };
+                if let Some(sink) = progress_opt.as_deref_mut() {
+                    let snapshot = crate::progress::Progress {
+                        bytes_processed: entry_start_bytes_done + bytes_in_entry,
+                        bytes_total: bytes_total_local,
+                        entries_processed: entries_done_at_start,
+                        entries_total: total_entries_u32,
+                        current_entry: Some(entry_name_owned.clone()),
+                        phase: crate::progress::ProgressPhase::Writing,
+                        elapsed: started_local.elapsed(),
+                        current_entry_bytes_processed: bytes_in_entry,
+                        current_entry_bytes_total: entry_bytes_total,
+                    };
+                    if !sink.update(&snapshot) {
+                        return Err(OtterzipError::Canceled);
+                    }
+                }
+                Ok(())
+            };
+            if let Err(e) = writer.add_entry_streaming(name, path, &mut on_tick) {
+                return Some(Err(e));
+            }
+            entries_done += 1;
+            bytes_done += *size;
         }
 
         let elapsed = started.elapsed();
@@ -883,6 +996,8 @@ impl WalkState {
             bytes_total: self.bytes_total,
             entries_processed: self.entries_processed,
             entries_total: self.entries_total,
+            current_entry_bytes_processed: 0,
+            current_entry_bytes_total: 0,
             current_entry: current_entry.map(str::to_owned),
             phase,
             elapsed: self.start.elapsed(),

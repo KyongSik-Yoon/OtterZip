@@ -52,6 +52,15 @@ typedef struct {
 /**
  * Mirror of `OtterzipProgressView` from `ffi-api.md` §8.2. Passed by const
  * pointer to the C callback.
+ *
+ * ABI v9 (compress sprint follow-up) appends
+ * `current_entry_bytes_processed` + `current_entry_bytes_total`
+ * — trailing-append, so v8 consumers that only read the leading
+ * fields stay binary-compatible. New fields surface the
+ * per-file streaming progress so the host can render a second
+ * "current file" progress bar separate from the archive-wide one.
+ * Older consumers ignoring the trailing fields see no behavioural
+ * change.
  */
 typedef struct {
   uint64_t bytes_processed;
@@ -62,6 +71,16 @@ typedef struct {
   size_t current_entry_len;
   uint32_t phase;
   uint64_t elapsed_ms;
+  /**
+   * ABI v9 — bytes processed within the currently in-flight entry
+   * (large-file streaming path only; 0 elsewhere).
+   */
+  uint64_t current_entry_bytes_processed;
+  /**
+   * ABI v9 — total bytes the in-flight entry will occupy when
+   * finished (large-file streaming path only; 0 elsewhere).
+   */
+  uint64_t current_entry_bytes_total;
 } OtterzipProgressView;
 
 /**

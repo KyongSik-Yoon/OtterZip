@@ -87,12 +87,25 @@
                 </Button>
             </Grid>
 
-            <!-- Row 2: progress -->
+            <!-- Row 2: archive-wide progress -->
             <ProgressBar x:Name="ProgressEl"
                          Minimum="0" Maximum="1.0"
                          Height="3"
                          CornerRadius="2"
                          IsIndeterminate="True" />
+
+            <!-- Row 2b: per-entry progress (streaming compress path).
+                 ABI v9 surfaces `CurrentEntryBytesProcessed/Total`
+                 from the native side; collapsing here when there's
+                 nothing useful to show keeps the JobCard's vertical
+                 height stable on chunked-rayon paths that don't fill
+                 the field. -->
+            <ProgressBar x:Name="CurrentEntryProgressEl"
+                         Minimum="0" Maximum="1.0"
+                         Height="2"
+                         CornerRadius="1"
+                         Opacity="0.7"
+                         Visibility="Collapsed" />
 
             <!-- Row 3a: error message (Error state only). Indented to
                  match the filename column; wraps so long messages stay

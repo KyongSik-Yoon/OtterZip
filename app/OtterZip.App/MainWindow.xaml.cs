@@ -1805,6 +1805,48 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Build the rich-progress reporter the compress work delegate
+    /// hands to <c>RunCompressAsync</c>. Extracted from the body so
+    /// the caller stays under the analyzer's 60-line cap and so the
+    /// per-entry byte-progress wiring (ABI v9, second progress bar
+    /// for the streaming compress path) sits in one place.
+    /// </summary>
+    private Progress<ProgressUpdate> BuildCompressRichProgress(
+        JobItem item, IProgress<double> overallProgress, string compressingText)
+    {
+        return new Progress<ProgressUpdate>(p =>
+        {
+            double frac = p.FractionComplete;
+            if (frac > 0)
+            {
+                overallProgress.Report(Math.Clamp(frac, 0.0, 1.0));
+            }
+            if (p.Phase == ProgressPhase.Writing)
+            {
+                // Phase label only — JobQueue's progress reporter
+                // glues the percent suffix on. Writing StatusText
+                // directly here used to race with that reporter and
+                // flicker 30 Hz between "압축 중…" and "42%".
+                DispatcherQueue.TryEnqueue(() => item.StatusLabel = compressingText);
+            }
+            // ABI v9 — per-entry byte progress (streaming compress
+            // path only). When the native side fills these fields we
+            // surface them as a second progress bar so the user can
+            // tell a 3 GB single-file deflate from a genuinely stuck
+            // worker. Outside the streaming path the totals stay 0;
+            // we then collapse the bar so the JobCard's vertical
+            // height stays stable on chunked-rayon workloads.
+            bool hasEntryProgress = p.CurrentEntryBytesTotal > 0;
+            double entryFrac = p.CurrentEntryFraction;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                item.CurrentEntryProgress = entryFrac;
+                item.CurrentEntryProgressVisible = hasEntryProgress;
+            });
+        });
+    }
+
+    /// <summary>
     /// Compress work delegate body. Extracted from EnqueueCompressJob so
     /// the public method stays under the analyzer's 60-line cap.
     /// </summary>
@@ -1812,28 +1854,11 @@ public sealed partial class MainWindow : Window
         JobItem item, CompressPlan plan, IReadOnlyList<string> sources,
         string? password, CancellationToken ct, IProgress<double> progress)
     {
-        // ABI v7: the native side reports byte/entry counts per file.
-        // Convert that to a 0..1 fraction for the JobCard's progress
-        // bar and swap the "Starting…" caption for "Compressing…" once
-        // the first Writing tick lands.
+        // ABI v7/v9: the native side reports byte/entry counts per
+        // file and (since v9) per-entry byte progress for the
+        // streaming compress path. Helper composes the callback.
         string compressingText = _strings.GetString("Job_StatusCompressing/Text");
-        var richProgress = new Progress<ProgressUpdate>(p =>
-        {
-            double frac = p.FractionComplete;
-            if (frac > 0)
-            {
-                progress.Report(Math.Clamp(frac, 0.0, 1.0));
-            }
-            if (p.Phase == ProgressPhase.Writing)
-            {
-                // Phase label only — JobQueue's progress reporter
-                // glues the percent suffix on. This used to write
-                // StatusText directly and produced a 30 Hz
-                // "압축 중…" ↔ "42%" flicker against the reporter's
-                // own StatusText writes.
-                DispatcherQueue.TryEnqueue(() => item.StatusLabel = compressingText);
-            }
-        });
+        var richProgress = BuildCompressRichProgress(item, progress, compressingText);
 
         // Cancel feedback: caption flips to "취소 중…" the moment the
         // user clicks X. Native side observes the CT on the next entry

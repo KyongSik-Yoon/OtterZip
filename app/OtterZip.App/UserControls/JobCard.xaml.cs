@@ -132,6 +132,14 @@ public sealed partial class JobCard : UserControl
                 case nameof(JobItem.StatusText):
                     StatusTextEl.Text = _item!.StatusText ?? string.Empty;
                     break;
+                case nameof(JobItem.CurrentEntryProgress):
+                    CurrentEntryProgressEl.Value = _item!.CurrentEntryProgress;
+                    break;
+                case nameof(JobItem.CurrentEntryProgressVisible):
+                    CurrentEntryProgressEl.Visibility = _item!.CurrentEntryProgressVisible
+                        ? Microsoft.UI.Xaml.Visibility.Visible
+                        : Microsoft.UI.Xaml.Visibility.Collapsed;
+                    break;
             }
         }
         catch (InvalidOperationException)
@@ -147,6 +155,10 @@ public sealed partial class JobCard : UserControl
         ProgressEl.Value = _item.Progress;
         ProgressEl.IsIndeterminate = _item.IsIndeterminate;
         StatusTextEl.Text = _item.StatusText ?? string.Empty;
+        CurrentEntryProgressEl.Value = _item.CurrentEntryProgress;
+        CurrentEntryProgressEl.Visibility = _item.CurrentEntryProgressVisible
+            ? Microsoft.UI.Xaml.Visibility.Visible
+            : Microsoft.UI.Xaml.Visibility.Collapsed;
         ApplyState();
     }
 

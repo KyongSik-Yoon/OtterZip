@@ -1,5 +1,7 @@
 // OtterZip.Interop — managed enum mirroring otterzip_core::ArchiveFormat.
 
+using System;
+
 namespace OtterZip.Interop;
 
 // CA1027 / CA1008 wants FlagsAttribute or a `None = 0` member once the
@@ -67,9 +69,37 @@ public sealed class ProgressUpdate
     public ProgressPhase Phase { get; init; }
     public ulong ElapsedMs { get; init; }
 
+    /// <summary>
+    /// Bytes processed inside the currently in-flight entry. ABI v9 —
+    /// only populated by the large-file streaming compress path; zero
+    /// for chunked/small entries and on the read side. Pair with
+    /// <see cref="CurrentEntryBytesTotal"/> to render a per-file
+    /// progress fraction separately from the archive-wide
+    /// <see cref="FractionComplete"/>.
+    /// </summary>
+    public ulong CurrentEntryBytesProcessed { get; init; }
+
+    /// <summary>
+    /// Total bytes the in-flight entry will occupy when finished. ABI
+    /// v9. Zero outside the streaming path.
+    /// </summary>
+    public ulong CurrentEntryBytesTotal { get; init; }
+
     public double FractionComplete => BytesTotal == 0
         ? 0.0
         : (double)BytesProcessed / BytesTotal;
+
+    /// <summary>
+    /// Per-entry progress fraction for the currently streaming file,
+    /// clamped to 0.0..=1.0. Returns 0 when the tick isn't from the
+    /// streaming path (CurrentEntryBytesTotal == 0).
+    /// </summary>
+    public double CurrentEntryFraction => CurrentEntryBytesTotal == 0
+        ? 0.0
+        : Math.Clamp(
+            (double)CurrentEntryBytesProcessed / CurrentEntryBytesTotal,
+            0.0,
+            1.0);
 }
 
 public sealed class ExtractReport

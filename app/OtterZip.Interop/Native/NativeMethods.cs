@@ -48,7 +48,10 @@ internal struct OtterzipExtractReport
     public ulong ElapsedMs;
 }
 
-/// <summary>POD mirror of <c>OtterzipProgressView</c> from ffi-api.md §8.2.</summary>
+/// <summary>POD mirror of <c>OtterzipProgressView</c> from ffi-api.md §8.2.
+/// ABI v9 appends per-entry byte progress (current_entry_bytes_*) for the
+/// streaming compress path. Layout is sequential trailing-append so v8
+/// consumers reading only the leading fields stay binary-compatible.</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct OtterzipProgressView
 {
@@ -60,6 +63,8 @@ internal unsafe struct OtterzipProgressView
     public nuint CurrentEntryLen;
     public uint Phase;
     public ulong ElapsedMs;
+    public ulong CurrentEntryBytesProcessed;
+    public ulong CurrentEntryBytesTotal;
 }
 
 /// <summary>POD mirror of <c>OtterzipTestReport</c> (ffi-api.md §10).</summary>
