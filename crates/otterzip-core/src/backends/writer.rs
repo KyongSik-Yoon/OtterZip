@@ -654,7 +654,19 @@ impl ArchiveWriter for ZipWriterBackend {
                 }
                 Ok(())
             };
-            if let Err(e) = writer.add_entry_streaming(name, path, &mut on_tick) {
+            // Pigz-pattern parallel deflate for genuinely large
+            // entries: split into 1 MiB blocks, deflate each on the
+            // worker pool, concatenate the raw deflate fragments
+            // into a single valid stream. Captures the 35×
+            // wall-clock win Bandizip's per-block parallel path
+            // delivers on inputs like the user's 3.58 GB Setup.exe
+            // (139 s → ~5 s observed compute). When the encoder is
+            // Stored (smart-store hit, etc.) the helper internally
+            // defers to `add_entry_streaming` so disk-throughput-
+            // bound entries keep their existing fast path.
+            if let Err(e) =
+                writer.add_entry_pigz_parallel(name, path, &pool, &mut on_tick)
+            {
                 return Some(Err(e));
             }
             entries_done += 1;

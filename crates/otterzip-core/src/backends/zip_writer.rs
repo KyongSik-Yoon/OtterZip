@@ -1079,6 +1079,219 @@ impl<'a, W: Write> Write for CountingWriter<'a, W> {
     }
 }
 
+// === Per-block parallel deflate (pigz pattern) ======================
+//
+// Replaces the main-thread single-core streaming deflate on very
+// large entries with the pigz algorithm: split the input into
+// fixed-size blocks, deflate each block independently with
+// `Z_SYNC_FLUSH` so every output is byte-aligned, concatenate the
+// results, and cap the stream with a final `Z_FINISH` block. The
+// result is a single valid deflate stream that a standard zlib
+// inflater consumes without knowing the encoder went wide.
+//
+// User reproducer measurement: Setup.exe (3.58 GB) took 139 s on
+// the previous single-thread streaming path; Bandizip handles the
+// same file in ~4 s. The 35× gap is the parallel-encode win this
+// path captures — 8 workers × ~80 MB/s aggregate ≈ 640 MB/s, so
+// 3.58 GB ÷ 640 MB/s ≈ 5.7 s of compute, plus disk I/O.
+
+/// Block size for the per-block parallel deflate path. 1 MiB
+/// strikes the balance: small enough that worker scheduling
+/// granularity is fine (a Setup.exe spawns 3500+ blocks across
+/// 8 workers), large enough that the deflate state-machine
+/// fixed-cost-per-flush is amortised over a meaningful amount of
+/// payload. Smaller blocks (e.g. 64 KiB) would cap aggregate
+/// throughput because the per-call libdeflater/zlib overhead
+/// dominates; larger blocks reduce worker-count utilisation on
+/// borderline-sized files.
+const PIGZ_BLOCK_SIZE: usize = 1024 * 1024;
+
+/// Compress a single block as raw deflate (no zlib wrapper) with
+/// the requested flush mode. `Sync` flush emits a `00 00 ff ff`
+/// empty stored block that byte-aligns the stream so the next
+/// block can concatenate without bit-shuffling; `Finish` emits a
+/// final block with BFINAL=1 that terminates the stream.
+fn deflate_block_raw(
+    input: &[u8],
+    level: u8,
+    is_final: bool,
+) -> Result<Vec<u8>> {
+    let lvl = flate2::Compression::new(u32::from(level.clamp(1, 9)));
+    // `Compress::new(level, false)` — raw deflate, no zlib (1f 8b
+    // …) wrapper. ZIP method 8 is raw deflate; the LFH/CDFH already
+    // carry the size + CRC32, so the zlib wrapper would be wasted
+    // bytes the strict reader would refuse.
+    let mut compressor = flate2::Compress::new(lvl, false);
+    // Worst-case output bound: a deflate encoder can't grow the
+    // input by more than a small constant per block (5 bytes per
+    // 16 KiB plus 5 bytes flush header). Reserve generously so we
+    // don't realloc mid-encode.
+    let mut output = Vec::with_capacity(input.len() + 64);
+
+    let flush_mode = if is_final {
+        flate2::FlushCompress::Finish
+    } else {
+        flate2::FlushCompress::Sync
+    };
+
+    let mut in_consumed: usize = 0;
+    loop {
+        let prev_out = output.len();
+        let status = compressor
+            .compress_vec(&input[in_consumed..], &mut output, flush_mode)
+            .map_err(|e| {
+                OtterzipError::BackendError(format!("deflate compress: {e:?}"))
+            })?;
+        in_consumed = compressor.total_in() as usize;
+        match status {
+            flate2::Status::StreamEnd => break,
+            flate2::Status::Ok => {
+                if in_consumed >= input.len() {
+                    if is_final {
+                        // Need another iteration to drain the Finish
+                        // tail; the encoder hasn't seen StreamEnd yet.
+                        if output.len() == prev_out {
+                            // Output buffer needs growing for the
+                            // trailing block — bump capacity.
+                            output.reserve(64);
+                        }
+                    } else {
+                        // Sync flush done; input fully consumed.
+                        break;
+                    }
+                }
+            }
+            flate2::Status::BufError => {
+                // No forward progress — extend output buffer.
+                output.reserve(64 + input.len() / 4);
+            }
+        }
+    }
+    Ok(output)
+}
+
+impl ZipFileWriter {
+    /// Per-block parallel deflate path for very large entries
+    /// (≥ `PIGZ_PARALLEL_THRESHOLD`). Reads the file fully into
+    /// memory, splits into [`PIGZ_BLOCK_SIZE`] chunks, deflates
+    /// every block in parallel on `pool`'s rayon workers, then
+    /// concatenates the raw deflate fragments into a single valid
+    /// ZIP method-8 stream. Falls back to the serial
+    /// [`add_entry_streaming`] when the configured compression is
+    /// `Stored`, since stored bytes don't gain from parallelism.
+    ///
+    /// Memory cost: O(uncompressed_size + Σ deflated chunks) — the
+    /// full input plus the deflated output have to coexist briefly.
+    /// On the user's 32 GB machine with a 3.58 GB Setup.exe that's
+    /// ~6 GB peak — comfortable, and the alternative (main-thread
+    /// serial streaming) was costing 139 s of wall-clock anyway.
+    pub(crate) fn add_entry_pigz_parallel(
+        &mut self,
+        name: &str,
+        source_path: &Path,
+        pool: &rayon::ThreadPool,
+        progress: &mut dyn FnMut(u64) -> Result<()>,
+    ) -> Result<()> {
+        let level = match self.options.compression {
+            Compression::Stored => {
+                // Stored doesn't benefit from parallel — defer to
+                // the existing streaming path which already runs at
+                // disk speed.
+                return self.add_entry_streaming(name, source_path, progress);
+            }
+            Compression::Deflate { level } => level,
+        };
+
+        let name_bytes = name.as_bytes().to_vec();
+        let (mtime, mdate) = current_dos_datetime();
+        let lfh_offset = self.cursor;
+
+        // Stage 1 — read the whole file into memory. Cheap on NVMe
+        // (multi-GB/s sustained read) and we need random-access to
+        // all bytes for the parallel block split anyway.
+        let input = std::fs::read(source_path)?;
+        let uncompressed_size = input.len() as u64;
+        let crc32 = crc32fast::hash(&input);
+        progress(uncompressed_size / 4)?; // 25 % tick: read done
+
+        // Stage 2 — split + parallel deflate every block.
+        let blocks: Vec<&[u8]> = input.chunks(PIGZ_BLOCK_SIZE).collect();
+        let last_idx = blocks.len().saturating_sub(1);
+        let deflated_blocks: Vec<Result<Vec<u8>>> = pool.install(|| {
+            use rayon::prelude::*;
+            blocks
+                .par_iter()
+                .enumerate()
+                .map(|(idx, block)| {
+                    let is_final = idx == last_idx;
+                    deflate_block_raw(block, level, is_final)
+                })
+                .collect()
+        });
+        progress((uncompressed_size * 3) / 4)?; // 75 % tick
+
+        // Stage 3 — concat. Allocate the exact size up-front; raw
+        // deflate's worst case is input.len() + small constant per
+        // block, but the real-world average is much smaller.
+        let total_compressed: usize = deflated_blocks
+            .iter()
+            .filter_map(|r| r.as_ref().ok().map(|v| v.len()))
+            .sum();
+        let mut compressed_buf = Vec::with_capacity(total_compressed);
+        for block in deflated_blocks {
+            let block = block?;
+            compressed_buf.extend_from_slice(&block);
+        }
+        let compressed_size = compressed_buf.len() as u64;
+
+        // Stage 4 — write LFH + payload + bookkeeping.
+        let used_zip64_extra = needs_zip64_for_entry(
+            uncompressed_size,
+            compressed_size,
+            lfh_offset,
+        );
+        let version_needed = if used_zip64_extra {
+            VERSION_NEEDED_ZIP64
+        } else {
+            VERSION_NEEDED_BASE
+        };
+        write_lfh(
+            &mut self.inner,
+            &name_bytes,
+            version_needed,
+            GP_FLAG_UTF8_NAMES,
+            8, // Deflate
+            mtime,
+            mdate,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            used_zip64_extra,
+        )?;
+        let lfh_extra_len = if used_zip64_extra { 20u64 } else { 0 };
+        self.cursor += LFH_FIXED_SIZE + name_bytes.len() as u64 + lfh_extra_len;
+        self.inner.write_all(&compressed_buf)?;
+        self.cursor += compressed_size;
+
+        self.cd.push(CdRecord {
+            name: name_bytes,
+            method: 8,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            lfh_offset,
+            is_directory: false,
+            external_attr: UNIX_MODE_FILE << 16,
+            mtime,
+            mdate,
+            used_zip64_extra,
+        });
+
+        progress(uncompressed_size)?;
+        Ok(())
+    }
+}
+
 // === Parallel pipeline — worker drop-off ============================
 
 /// Result of off-thread `prepare_entry`: everything the serial
@@ -1332,5 +1545,109 @@ mod tests {
         let year_part = (dos_date >> 9) as u32 + 1980;
         assert!((1980..=2107).contains(&year_part));
         assert!(((dos_time >> 11) as u32) < 24);
+    }
+
+    #[test]
+    fn pigz_parallel_round_trips_through_strict_reader() {
+        // 10 MiB compressible payload across 10 PIGZ_BLOCK_SIZE
+        // blocks. Tests:
+        //   * Z_SYNC_FLUSH on every non-final block produces a
+        //     byte-aligned suffix that the next block concatenates
+        //     onto without bit-shuffling.
+        //   * Z_FINISH on the last block emits BFINAL=1 so a
+        //     standard zlib inflater (the upstream `zip` crate)
+        //     recognises stream end.
+        //   * CRC32 + sizes recorded match what a single-stream
+        //     deflate would produce — strict zip-rs verifies both
+        //     when calling `ZipFile::read_to_end`.
+        let td = tempdir().unwrap();
+        let src = td.path().join("pigz_input.bin");
+        let mut payload = Vec::with_capacity(10 * 1024 * 1024);
+        let mut seed: u64 = 0xCAFE_BABE_DEAD_FEED;
+        for i in 0..10 * 1024 * 1024 {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            // Mostly-repeating pattern so deflate has something to
+            // chew on but the ratio stays realistic (not so
+            // pathological that the per-block path collapses to
+            // 1-byte outputs).
+            payload.push(if i % 64 < 16 {
+                (seed >> 33) as u8
+            } else {
+                0x55
+            });
+        }
+        fs::write(&src, &payload).unwrap();
+
+        let archive_path = td.path().join("pigz.zip");
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap();
+
+        {
+            let mut w = ZipFileWriter::create(
+                &archive_path,
+                WriterOptions {
+                    compression: Compression::Deflate { level: 5 },
+                },
+            )
+            .unwrap();
+            w.add_entry_pigz_parallel("pigz_input.bin", &src, &pool, &mut |_| Ok(()))
+                .unwrap();
+            w.finish().unwrap();
+        }
+
+        // Strict zip-rs cross-validate. If the pigz output isn't a
+        // valid single deflate stream this will explode on
+        // `read_to_end` with a zlib error.
+        let f = fs::File::open(&archive_path).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::BufReader::new(f)).unwrap();
+        assert_eq!(zip.len(), 1);
+        let mut zf = zip.by_index(0).unwrap();
+        assert_eq!(zf.name(), "pigz_input.bin");
+        let mut got = Vec::new();
+        use std::io::Read as _;
+        zf.read_to_end(&mut got).unwrap();
+        assert_eq!(got.len(), payload.len(), "size mismatch");
+        assert_eq!(got, payload, "pigz path corrupted bytes");
+    }
+
+    #[test]
+    fn pigz_parallel_single_block_round_trips() {
+        // < 1 MiB payload — only one block, only `Z_FINISH` ever
+        // runs. Catches the edge case where the loop's
+        // `last_idx == 0` path differs from the multi-block path.
+        let td = tempdir().unwrap();
+        let src = td.path().join("tiny.bin");
+        let payload = b"otterzip pigz single block path\n".repeat(32);
+        fs::write(&src, &payload).unwrap();
+
+        let archive_path = td.path().join("tiny.zip");
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .unwrap();
+        {
+            let mut w = ZipFileWriter::create(
+                &archive_path,
+                WriterOptions {
+                    compression: Compression::Deflate { level: 5 },
+                },
+            )
+            .unwrap();
+            w.add_entry_pigz_parallel("tiny.bin", &src, &pool, &mut |_| Ok(()))
+                .unwrap();
+            w.finish().unwrap();
+        }
+
+        let f = fs::File::open(&archive_path).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::BufReader::new(f)).unwrap();
+        let mut zf = zip.by_index(0).unwrap();
+        let mut got = Vec::new();
+        use std::io::Read as _;
+        zf.read_to_end(&mut got).unwrap();
+        assert_eq!(got, payload);
     }
 }
