@@ -1690,7 +1690,11 @@ public sealed partial class MainWindow : Window
                 ct.ThrowIfCancellationRequested();
                 string caption = string.Format(CultureInfo.CurrentCulture,
                     joiningFormat, i + 1, volumes.Count);
-                DispatcherQueue.TryEnqueue(() => item.StatusText = caption);
+                // Phase label only — JobQueue's progress reporter
+                // glues the percent suffix on. Writing to StatusText
+                // directly here used to race with that reporter and
+                // produced a 30 Hz "1/3 병합 중" ↔ "42%" flicker.
+                DispatcherQueue.TryEnqueue(() => item.StatusLabel = caption);
 
                 using var inStream = new FileStream(volumes[i], FileMode.Open, FileAccess.Read,
                     FileShare.Read, bufferSize, FileOptions.SequentialScan);
@@ -1822,7 +1826,12 @@ public sealed partial class MainWindow : Window
             }
             if (p.Phase == ProgressPhase.Writing)
             {
-                DispatcherQueue.TryEnqueue(() => item.StatusText = compressingText);
+                // Phase label only — JobQueue's progress reporter
+                // glues the percent suffix on. This used to write
+                // StatusText directly and produced a 30 Hz
+                // "압축 중…" ↔ "42%" flicker against the reporter's
+                // own StatusText writes.
+                DispatcherQueue.TryEnqueue(() => item.StatusLabel = compressingText);
             }
         });
 
@@ -1832,7 +1841,12 @@ public sealed partial class MainWindow : Window
         // below cleans up the partial archive.
         string cancellingText = _strings.GetString("Job_StatusCancelling/Text");
         using var cancellingReg = ct.Register(() =>
-            DispatcherQueue.TryEnqueue(() => item.StatusText = cancellingText));
+            // Phase label only. After this fires no further percent
+            // ticks arrive (the work delegate races against cancel),
+            // so the user sees the last "압축 중… 42%" composed line
+            // for a moment until MarkCancelled flips StatusText to
+            // the final "취소됨" terminal message.
+            DispatcherQueue.TryEnqueue(() => item.StatusLabel = cancellingText));
 
         try
         {

@@ -167,8 +167,34 @@ public sealed class JobQueue : IDisposable
     {
         item.State = JobState.Running;
         item.IsIndeterminate = true;
-        item.StatusText = Localize("Job_StatusStarting");
+        // Seed the phase label so the first percent tick from
+        // BuildProgressReporter renders as "시작 중… 0%" rather than
+        // bare "0%". Work delegates flip this label to phase-specific
+        // text ("압축 중…", "1/3 병합 중", …) as they reach each
+        // phase.
+        string starting = Localize("Job_StatusStarting");
+        item.StatusLabel = starting;
+        item.StatusText = starting;
     });
+
+    /// <summary>
+    /// Compose "<phase label> <percent>" so a single writer owns
+    /// <see cref="JobItem.StatusText"/> in the Running state. Work
+    /// delegates only mutate <see cref="JobItem.StatusLabel"/> for
+    /// phase changes; this reporter is the sole StatusText author
+    /// until a terminal state hands over to a final summary. Without
+    /// the single-writer discipline the user sees "압축 중…" and
+    /// "42%" alternating 30 Hz as the two handlers race for the same
+    /// slot — the bug this code fixes.
+    /// </summary>
+    private static string ComposeRunningStatusText(
+        JobItem item, double clamped, string percentFormat)
+    {
+        string percentStr = string.Format(CultureInfo.CurrentCulture,
+            percentFormat, Math.Round(clamped * 100));
+        string? label = item.StatusLabel;
+        return string.IsNullOrEmpty(label) ? percentStr : $"{label} {percentStr}";
+    }
 
     private Progress<double> BuildProgressReporter(JobItem item)
     {
@@ -217,8 +243,7 @@ public sealed class JobQueue : IDisposable
                     if (clamped < item.Progress) return;
                     item.IsIndeterminate = false;
                     item.Progress = clamped;
-                    item.StatusText = string.Format(CultureInfo.CurrentCulture,
-                        percentFormat, Math.Round(clamped * 100));
+                    item.StatusText = ComposeRunningStatusText(item, clamped, percentFormat);
                 }
                 catch (InvalidOperationException)
                 {

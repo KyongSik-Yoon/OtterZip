@@ -95,13 +95,32 @@ public sealed class JobItem : INotifyPropertyChanged
 
     private string? _statusText;
     /// <summary>
-    /// Sub-label under the file name. Free-form: "42% · 12.3 MB/s",
-    /// "대기 중", "완료 · 8.2 MB", "오류: 권한 거부", …
+    /// Sub-label under the file name. Free-form: "압축 중… 42%",
+    /// "완료 · 8.2 MB", "오류: 권한 거부", … In the running state this
+    /// is composed by <c>JobQueue.BuildProgressReporter</c> from
+    /// <see cref="StatusLabel"/> + the percent fraction; in terminal
+    /// states (Done / Cancelled / Error) the work delegate / queue
+    /// writes a final summary directly.
     /// </summary>
     public string? StatusText
     {
         get => _statusText;
         set => SetProp(ref _statusText, value);
+    }
+
+    private string? _statusLabel;
+    /// <summary>
+    /// Phase label without the percent suffix — e.g. "압축 중…",
+    /// "1/3 병합 중", "취소 중…". Set by work delegates when the phase
+    /// changes; the JobQueue progress reporter combines this with
+    /// the current percent on every tick into <see cref="StatusText"/>.
+    /// Leaving it <c>null</c> falls back to "percent-only" (matches
+    /// the extract path which doesn't carry phase labels today).
+    /// </summary>
+    public string? StatusLabel
+    {
+        get => _statusLabel;
+        set => SetProp(ref _statusLabel, value);
     }
 
     public void RequestCancel() => Cts?.Cancel();
