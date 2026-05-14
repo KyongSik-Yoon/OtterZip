@@ -930,11 +930,26 @@ fn is_incompressible_extension(entry_name: &str) -> bool {
 /// probe overhead would dominate).
 fn probe_is_incompressible(file_path: &Path, level: u8) -> bool {
     const PROBE_BYTES: u64 = 1 << 20; // 1 MiB per sample
-    const PROBE_INCOMPRESSIBLE_RATIO: f64 = 0.85;
+    // Size-tiered thresholds: the larger the file, the higher the
+    // prior probability it's already a compressed container
+    // (installer payloads, archives renamed to `.exe`/`.bin`, media
+    // bundles). Setup.exe in the user's reproducer is 3.58 GB and
+    // failed the original 0.85 cut-off — its leading PE wrapper +
+    // resource section drag the average down below 0.85 even with
+    // a fully-incompressible payload at the file middle. Lowering
+    // the bar for files ≥ 256 MiB catches that class of input.
+    const PROBE_INCOMPRESSIBLE_RATIO_DEFAULT: f64 = 0.85;
+    const PROBE_INCOMPRESSIBLE_RATIO_LARGE: f64 = 0.75;
+    const LARGE_FILE_PROBE_BYTES: u64 = 256 * 1024 * 1024;
 
     let file_size = match std::fs::metadata(file_path).map(|m| m.len()) {
         Ok(n) if n >= 4096 => n,
         _ => return false,
+    };
+    let threshold = if file_size >= LARGE_FILE_PROBE_BYTES {
+        PROBE_INCOMPRESSIBLE_RATIO_LARGE
+    } else {
+        PROBE_INCOMPRESSIBLE_RATIO_DEFAULT
     };
     let mut input = match File::open(file_path) {
         Ok(f) => f,
@@ -981,15 +996,23 @@ fn probe_is_incompressible(file_path: &Path, level: u8) -> bool {
         return false;
     }
     let avg = ratios.iter().sum::<f64>() / ratios.len() as f64;
-    tracing::debug!(
+    let decision = avg >= threshold;
+    // INFO (not debug) — the user's wall-clock investigation needs
+    // the probe ratio visible in the production log without a
+    // tracing-level override. The line fires once per large entry
+    // (≥ 64 MiB by `LARGE_ENTRY_THRESHOLD_BYTES`), so volume stays
+    // low.
+    tracing::info!(
         target: "otterzip::compress",
         path = %file_path.display(),
+        size_bytes = file_size,
         samples = ratios.len(),
         avg_ratio = format!("{avg:.3}"),
-        threshold = PROBE_INCOMPRESSIBLE_RATIO,
+        threshold = format!("{threshold:.2}"),
+        decision = if decision { "stored" } else { "deflate" },
         "smart store probe result"
     );
-    avg >= PROBE_INCOMPRESSIBLE_RATIO
+    decision
 }
 
 /// `Write` wrapper that forwards every byte to its inner writer and
