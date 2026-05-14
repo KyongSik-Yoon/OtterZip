@@ -536,7 +536,7 @@ pub(crate) fn add_dir_recursive_through(
         return Err(OtterzipError::Canceled);
     }
 
-    walk(
+    let walk_result = walk(
         writer,
         src,
         entry_prefix,
@@ -544,7 +544,34 @@ pub(crate) fn add_dir_recursive_through(
         exclude_system_metadata,
         &mut state,
         sink,
-    )
+    );
+
+    // Throughput summary — diagnostic for the compress-speed-vs-Bandizip
+    // investigation (the lenient ZIP sprint shipped read-side parallel
+    // extract; write side is still single-threaded deflate). MB/s here
+    // is uncompressed input throughput, the figure that directly maps
+    // to "how saturated is the deflate worker"; a single-core zlib-ng
+    // encoder typically tops out around 60–120 MB/s on modern x86 —
+    // anything in that band confirms the CPU-bound serial deflate
+    // diagnosis. Below ~40 MB/s usually means I/O or NTFS metadata
+    // contention is overlapping the deflate cost.
+    let elapsed = start.elapsed();
+    let elapsed_ms = elapsed.as_millis() as u64;
+    let mb_per_sec = if elapsed_ms > 0 {
+        (state.bytes_processed as f64) / (elapsed.as_secs_f64() * 1_048_576.0)
+    } else {
+        0.0
+    };
+    tracing::info!(
+        target: "otterzip::compress",
+        elapsed_ms,
+        entries = state.entries_processed,
+        bytes_uncompressed = state.bytes_processed,
+        mb_per_sec = format!("{mb_per_sec:.1}"),
+        canceled = walk_result.is_err(),
+        "compress walk done — throughput summary"
+    );
+    walk_result
 }
 
 /// No-op sink used when the caller didn't supply one. Lets the rest of
