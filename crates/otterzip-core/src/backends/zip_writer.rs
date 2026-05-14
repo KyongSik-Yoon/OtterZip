@@ -40,6 +40,7 @@
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{OtterzipError, Result};
@@ -1367,10 +1368,39 @@ pub(crate) fn prepare_entry(
     compression: Compression,
     mtime: u16,
     mdate: u16,
+    bytes_in_flight: &AtomicU64,
 ) -> Result<PreparedEntry> {
-    let mut input = Vec::new();
+    // Chunked 1 MiB read with per-chunk atomic increment so the
+    // outer `add_directory_bulk` pipeline can show fine-grained
+    // mid-entry progress. The old code used `read_to_end` which
+    // pulled the whole file in one syscall burst and never let
+    // the main thread emit a tick until the worker finished the
+    // entire entry — the root cause of the 30~40 % progress-bar
+    // jumps the user reported on 200+ MiB files in the small
+    // phase.
+    //
+    // We still buffer the entire file in memory (the deflate
+    // branch needs a contiguous slice for both libdeflater
+    // one-shot and the negative-compression fallback). Reserving
+    // by `metadata().len()` up front means `extend_from_slice`
+    // never reallocates, so this is byte-for-byte equivalent in
+    // memory cost to the previous `read_to_end` path.
+    const READ_CHUNK: usize = 1 << 20; // 1 MiB
+    let cap = std::fs::metadata(file_path)
+        .ok()
+        .and_then(|m| usize::try_from(m.len()).ok())
+        .unwrap_or(0);
+    let mut input = Vec::with_capacity(cap);
     let mut f = File::open(file_path)?;
-    f.read_to_end(&mut input)?;
+    let mut buf = vec![0u8; READ_CHUNK];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        input.extend_from_slice(&buf[..n]);
+        bytes_in_flight.fetch_add(n as u64, Ordering::Relaxed);
+    }
     let uncompressed_size = input.len() as u64;
     let crc32 = crc32fast::hash(&input);
 
@@ -1397,10 +1427,22 @@ pub(crate) fn prepare_entry(
                 // the Stored bytes back — cheap relative to the
                 // deflate we already burned, and a hostile payload
                 // that would trigger this path is rare (extension
-                // whitelist catches most of them anyway).
+                // whitelist catches most of them anyway). We use the
+                // same chunked-read + atomic-increment pattern so the
+                // re-read also surfaces in the progress UI rather
+                // than appearing as a multi-second freeze.
                 if bytes.len() as u64 >= uncompressed_size {
                     let mut raw = Vec::with_capacity(uncompressed_size as usize);
-                    File::open(file_path)?.read_to_end(&mut raw)?;
+                    let mut rf = File::open(file_path)?;
+                    let mut rbuf = vec![0u8; READ_CHUNK];
+                    loop {
+                        let n = rf.read(&mut rbuf)?;
+                        if n == 0 {
+                            break;
+                        }
+                        raw.extend_from_slice(&rbuf[..n]);
+                        bytes_in_flight.fetch_add(n as u64, Ordering::Relaxed);
+                    }
                     (0u16, raw)
                 } else {
                     (8u16, bytes)

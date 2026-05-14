@@ -503,9 +503,20 @@ impl ArchiveWriter for ZipWriterBackend {
         // and the large-streaming phase takes over.
         if !small_files.is_empty() {
             use std::collections::BTreeMap;
-            use std::sync::mpsc;
+            use std::sync::atomic::{AtomicU64, Ordering};
+            use std::sync::mpsc::{self, RecvTimeoutError};
+            use std::sync::Arc;
+            use std::time::Duration;
 
             const CHANNEL_DEPTH: usize = 16;
+            // recv_timeout cadence — 33 ms matches one compositor
+            // frame at 30 Hz, the same wall-clock the host-side
+            // `JobQueue.BuildProgressReporter` throttle uses. Going
+            // tighter wastes CPU on atomic loads with no visible
+            // benefit; going wider lets a 200+ MiB worker finish
+            // an entry before any in-flight tick fires, which is
+            // exactly the bug this refactor exists to fix.
+            const INFLIGHT_TICK_INTERVAL: Duration = Duration::from_millis(33);
             let (tx, rx) = mpsc::sync_channel::<(usize, Result<PreparedEntry>)>(CHANNEL_DEPTH);
 
             let small_total: u64 = small_files
@@ -514,6 +525,17 @@ impl ArchiveWriter for ZipWriterBackend {
                 .sum();
             let mut phase1_bytes_done: u64 = 0;
             let mut pipeline_error: Option<OtterzipError> = None;
+
+            // Cumulative count of uncompressed bytes the worker pool
+            // has read from disk so far. Each `prepare_entry` ticks
+            // this atomic in 1 MiB increments. The main thread polls
+            // it on `recv_timeout` wake-ups to surface mid-entry
+            // progress without ever touching the archive write path
+            // — so byte-identical archive output is structurally
+            // guaranteed (the only `add_entry_prepared` calls still
+            // sit inside the ordered drain below).
+            let bytes_in_flight = Arc::new(AtomicU64::new(0));
+            let bytes_in_flight_worker = Arc::clone(&bytes_in_flight);
 
             std::thread::scope(|s| {
                 // Worker dispatcher — runs the rayon par_iter on
@@ -526,6 +548,7 @@ impl ArchiveWriter for ZipWriterBackend {
                 // CPU budget).
                 let small_files_ref = &small_files;
                 let pool_ref = &pool;
+                let bytes_in_flight_ref = bytes_in_flight_worker;
                 s.spawn(move || {
                     pool_ref.install(|| {
                         small_files_ref
@@ -534,6 +557,7 @@ impl ArchiveWriter for ZipWriterBackend {
                             .for_each_with(tx, |tx, (idx, (path, name))| {
                                 let result = zip_writer::prepare_entry(
                                     path, name, compression, mtime, mdate,
+                                    &bytes_in_flight_ref,
                                 );
                                 let _ = tx.send((idx, result));
                             });
@@ -542,18 +566,62 @@ impl ArchiveWriter for ZipWriterBackend {
 
                 // Main thread: ordered receive + splice. Pending
                 // BTreeMap holds out-of-order results until the
-                // next contiguous index arrives.
+                // next contiguous index arrives. We switched from
+                // `for (idx, result) in rx.iter()` to a
+                // `recv_timeout` loop so the timeout branch can
+                // poll `bytes_in_flight` and emit a fine-grained
+                // progress tick even when no entry has completed.
+                //
+                // Invariants:
+                //   * `spliced_bytes` ≡ `bytes_done` for this phase
+                //     (kept separate from the archive-wide
+                //     `bytes_done` in case future phases interleave).
+                //   * `bytes_in_flight - spliced_bytes` is the worker
+                //     pool's in-memory backlog — bytes that have
+                //     been read from disk but not yet committed to
+                //     the archive. Always ≥ 0; saturating_sub
+                //     defends against the freak case where the
+                //     atomic load races slightly behind splice.
+                //   * Visible top-bar = `bytes_done + in_flight`
+                //     clamped by `bytes_total` — an in-flight
+                //     forecast that converges exactly on entry
+                //     completion.
                 let mut pending: BTreeMap<usize, PreparedEntry> = BTreeMap::new();
                 let mut next_idx: usize = 0;
-                for (idx, result) in rx.iter() {
+                let mut spliced_bytes: u64 = 0;
+                let mut last_inflight_emit: u64 = 0;
+                // Monotonic guards. The in-flight tick uses
+                // `bytes_done + in_flight` as a *forecast*, but
+                // `in_flight` is the sum of every worker's read
+                // progress — with 8 workers each reading 50 MiB
+                // entries, the forecast can outrun the actual
+                // `bytes_done` of any single entry that completes
+                // afterwards. Without these guards the emit
+                // sequence would visibly regress, breaking the
+                // host's "progress only goes up" contract.
+                //
+                // We never lower the emitted value: any
+                // entry-complete or in-flight tick is `max`'d
+                // against the last emit. Forecast over-estimates
+                // simply hold the bar slightly ahead of reality
+                // until enough entries complete to catch up —
+                // which is the visually smooth outcome the user
+                // wants.
+                let mut last_emitted_top: u64 = 0;
+                let mut last_emitted_entry: u64 = 0;
+                loop {
+                    let recv = rx.recv_timeout(INFLIGHT_TICK_INTERVAL);
                     if pipeline_error.is_some() {
                         // Drain remaining messages so workers don't
                         // block on a full channel; we'll surface the
                         // first error captured below.
-                        continue;
+                        match recv {
+                            Err(RecvTimeoutError::Disconnected) => break,
+                            _ => continue,
+                        }
                     }
-                    match result {
-                        Ok(entry) => {
+                    match recv {
+                        Ok((idx, Ok(entry))) => {
                             pending.insert(idx, entry);
                             while let Some(entry) = pending.remove(&next_idx) {
                                 let entry_bytes = entry.uncompressed_size;
@@ -565,18 +633,26 @@ impl ArchiveWriter for ZipWriterBackend {
                                 }
                                 entries_done += 1;
                                 bytes_done += entry_bytes;
+                                spliced_bytes = spliced_bytes.saturating_add(entry_bytes);
                                 phase1_bytes_done = phase1_bytes_done.saturating_add(entry_bytes);
                                 next_idx += 1;
+                                // Monotonic guard — clamp the
+                                // visible values up to the actual
+                                // committed bytes, but never below
+                                // the prior in-flight forecast.
+                                last_emitted_top = last_emitted_top.max(bytes_done);
+                                last_emitted_entry =
+                                    last_emitted_entry.max(phase1_bytes_done);
                                 if let Some(sink) = progress.as_deref_mut() {
                                     let snapshot = crate::progress::Progress {
-                                        bytes_processed: bytes_done,
+                                        bytes_processed: last_emitted_top,
                                         bytes_total,
                                         entries_processed: entries_done,
                                         entries_total: total_entries as u32,
                                         current_entry: Some(entry_name),
                                         phase: crate::progress::ProgressPhase::Writing,
                                         elapsed: started.elapsed(),
-                                        current_entry_bytes_processed: phase1_bytes_done,
+                                        current_entry_bytes_processed: last_emitted_entry,
                                         current_entry_bytes_total: small_total,
                                     };
                                     if !sink.update(&snapshot) {
@@ -586,9 +662,68 @@ impl ArchiveWriter for ZipWriterBackend {
                                 }
                             }
                         }
-                        Err(err) => {
+                        Ok((_, Err(err))) => {
                             pipeline_error = Some(err);
                         }
+                        Err(RecvTimeoutError::Timeout) => {
+                            // In-flight tick — surfaces the worker
+                            // pool's mid-entry read progress before
+                            // any entry completes. We only tick
+                            // when the atomic actually moved
+                            // (otherwise idle waits would spam the
+                            // sink with duplicates) and clamp the
+                            // visible values to the per-phase /
+                            // archive-wide totals so a transient
+                            // over-estimate can't make the bar
+                            // overshoot 100 %.
+                            let read = bytes_in_flight.load(Ordering::Relaxed);
+                            if read == last_inflight_emit {
+                                continue;
+                            }
+                            last_inflight_emit = read;
+                            let in_flight = read.saturating_sub(spliced_bytes);
+                            let forecast_top =
+                                (bytes_done.saturating_add(in_flight)).min(bytes_total);
+                            let forecast_entry = phase1_bytes_done
+                                .saturating_add(in_flight)
+                                .min(small_total);
+                            // Monotonic guard. `read` is the sum of
+                            // every worker's in-progress disk read,
+                            // so the forecast can momentarily run
+                            // ahead of any single entry that completes
+                            // afterward. We `max` against the last
+                            // emit so the visible value never moves
+                            // backwards.
+                            last_emitted_top = last_emitted_top.max(forecast_top);
+                            last_emitted_entry =
+                                last_emitted_entry.max(forecast_entry);
+                            #[cfg(debug_assertions)]
+                            tracing::trace!(
+                                target: "otterzip::progress::flight",
+                                read,
+                                spliced = spliced_bytes,
+                                visible_top = last_emitted_top,
+                                visible_entry = last_emitted_entry,
+                                "in-flight tick"
+                            );
+                            if let Some(sink) = progress.as_deref_mut() {
+                                let snapshot = crate::progress::Progress {
+                                    bytes_processed: last_emitted_top,
+                                    bytes_total,
+                                    entries_processed: entries_done,
+                                    entries_total: total_entries as u32,
+                                    current_entry: None,
+                                    phase: crate::progress::ProgressPhase::Writing,
+                                    elapsed: started.elapsed(),
+                                    current_entry_bytes_processed: last_emitted_entry,
+                                    current_entry_bytes_total: small_total,
+                                };
+                                if !sink.update(&snapshot) {
+                                    pipeline_error = Some(OtterzipError::Canceled);
+                                }
+                            }
+                        }
+                        Err(RecvTimeoutError::Disconnected) => break,
                     }
                 }
             });
