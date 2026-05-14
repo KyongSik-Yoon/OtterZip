@@ -35,6 +35,9 @@ chardetng   = { workspace = true }
 encoding_rs = { workspace = true }
 sys-locale  = { workspace = true }
 
+# CRC-32 (SIMD) — feed by the in-tree ZIP writer.
+crc32fast   = { workspace = true }
+
 # Note: the libarchive fallback (compress-tools, `libarchive-fallback`
 # feature) was retired at the v1.0 sprint. The lenient route now lives
 # in-tree at `src/backends/lenient_zip.rs` — pure Rust, no system deps.

@@ -73,6 +73,11 @@ chardetng    = "0.1"
 encoding_rs  = "0.8"
 sys-locale   = "0.3"
 
+# --- CRC ---
+# crc32fast — SIMD-accelerated CRC-32 (SSE4.2/NEON), used by the
+# self-contained ZIP writer to populate LFH/CDFH per-entry CRC.
+crc32fast    = "1"
+
 # --- dev ---
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest  = "1"

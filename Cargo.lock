@@ -1052,6 +1052,7 @@ dependencies = [
  "cab",
  "cfb",
  "chardetng",
+ "crc32fast",
  "criterion",
  "encoding_rs",
  "flate2",

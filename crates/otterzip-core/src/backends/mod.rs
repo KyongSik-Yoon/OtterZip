@@ -35,6 +35,11 @@ pub(crate) mod spanned_zip;
 pub(crate) mod tar_family;
 pub(crate) mod writer;
 pub(crate) mod zip;
+/// Path B compress sprint — in-tree ZIP writer that replaces the
+/// zip-rs encode side, giving us control over the deflate dispatch
+/// (libdeflater one-shot / flate2 streaming) and over the future
+/// rayon worker pool. Symmetric to `lenient_zip` on the read side.
+pub(crate) mod zip_writer;
 
 pub(crate) use writer::{add_dir_recursive_through, open_writer, ArchiveWriter};
 

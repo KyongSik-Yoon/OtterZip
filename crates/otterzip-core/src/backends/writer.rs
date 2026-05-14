@@ -13,6 +13,9 @@ use std::path::{Path, PathBuf};
 
 use zeroize::Zeroizing;
 
+use crate::backends::zip_writer::{
+    Compression as ZipCompression, WriterOptions as ZipWriterOptions, ZipFileWriter,
+};
 use crate::error::{Result, OtterzipError};
 use crate::format::{ArchiveFormat, CompressionMethod};
 use crate::options::CreateOptions;
@@ -110,16 +113,18 @@ pub(crate) fn open_writer(
 // ZIP writer
 // ---------------------------------------------------------------------------
 
+/// ZIP writer backend — wraps the in-tree [`ZipFileWriter`] so the
+/// outer `Archive` create / add / commit flow gets the libdeflater
+/// dispatch + future rayon pool without the upstream `zip` crate's
+/// serial encoder in the way.
 pub(crate) struct ZipWriterBackend {
-    inner: Option<zip::ZipWriter<BufWriter<File>>>,
-    options: zip::write::SimpleFileOptions,
-    /// Names queued for removal via `Archive::remove_entry`. The `zip`
-    /// 2.x crate exposes `abort_file` on the *current* in-progress entry
-    /// only; for already-finalised entries we filter at commit time by
-    /// re-reading the partial archive — Phase 8 settles for the simpler
-    /// behaviour: removals only take effect against entries that were
-    /// added through the same writer instance, and we splice them out
-    /// of the central directory before finishing.
+    inner: Option<ZipFileWriter>,
+    /// Names queued for removal via `Archive::remove_entry`. Path B
+    /// commit 1 keeps the existing "drop the queue if user re-adds
+    /// the name" semantics — entries that were added through the
+    /// same writer survive only if the most recent action on that
+    /// name was `add_entry`. Phase 8 G7's full remove-after-commit
+    /// path is still on the backlog.
     pending_removals: Vec<String>,
 }
 
@@ -129,32 +134,12 @@ impl ZipWriterBackend {
         opts: &CreateOptions,
         _password: Option<&Zeroizing<String>>,
     ) -> Result<Self> {
-        let file = File::create(path)?;
-        let writer = zip::ZipWriter::new(BufWriter::new(file));
-
-        let method = match opts.compression {
-            CompressionMethod::Store => zip::CompressionMethod::Stored,
-            // Sprint 4 ZIP creation supports Stored + Deflated only —
-            // matches the read-side feature flags in workspace Cargo.toml.
-            // Other methods fall back to Deflated which the zip crate
-            // accepts under our default features.
-            _ => zip::CompressionMethod::Deflated,
+        let writer_opts = ZipWriterOptions {
+            compression: map_compression_method(opts.compression, opts.compression_level),
         };
-
-        // Map our 0..=9 level to the zip crate's per-method scale. The
-        // crate accepts `Option<i64>`; `None` lets it pick a sensible
-        // default. We keep `0..=9` as the public input and let the crate
-        // clamp internally.
-        let level = i64::from(opts.compression_level.clamp(0, 9));
-
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(method)
-            .compression_level(Some(level))
-            .unix_permissions(0o644);
-
+        let inner = ZipFileWriter::create(path, writer_opts)?;
         Ok(Self {
-            inner: Some(writer),
-            options,
+            inner: Some(inner),
             pending_removals: Vec::new(),
         })
     }
@@ -178,15 +163,10 @@ impl ArchiveWriter for ZipWriterBackend {
             .as_mut()
             .ok_or(OtterzipError::InvalidArgument("zip writer already committed"))?;
         if is_directory {
-            writer
-                .add_directory(entry_path, self.options)
-                .map_err(map_zip_err)?;
+            writer.add_directory(entry_path)?;
             return Ok(());
         }
-        writer
-            .start_file(entry_path, self.options)
-            .map_err(map_zip_err)?;
-        std::io::copy(data, writer)?;
+        writer.add_entry(entry_path, data)?;
         Ok(())
     }
 
@@ -197,25 +177,37 @@ impl ArchiveWriter for ZipWriterBackend {
 
     fn commit(mut self: Box<Self>) -> Result<()> {
         if let Some(writer) = self.inner.take() {
-            writer.finish().map_err(map_zip_err)?;
+            writer.finish()?;
         }
-        // Phase 8 G7 — apply queued removals by re-writing the archive
-        // through `zip-rs`'s `merge_archive` with a name filter. Without
-        // a `path` field on the writer we can't do this in the current
-        // implementation; we surface a warning by ignoring removals
-        // silently when the writer doesn't expose the path. ZIP-specific
-        // optimisation tracked in the gap report — for now, removals
-        // applied to entries added via the same writer DO take effect
-        // because we never wrote them: `add_entry` removes the name
-        // from `pending_removals` only if the user later re-adds it.
-        // The remaining pending names refer to entries that were never
-        // written → already absent. So commit is a no-op for those.
+        // Phase 8 G7 — same caveat as the prior zip-rs implementation:
+        // removals through this surface only affect entries that were
+        // never actually committed by this writer. Re-applying name
+        // filters against a pre-existing archive on disk is post-commit
+        // backlog work.
         Ok(())
     }
 }
 
-fn map_zip_err(e: zip::result::ZipError) -> OtterzipError {
-    OtterzipError::BackendError(e.to_string())
+/// Map the public [`CompressionMethod`] + level to the in-tree
+/// writer's enum. We only ship two encoder paths (Stored, Deflate);
+/// other methods through the regular ZIP backend collapse onto
+/// Deflate so old fixtures keep working. The level is clamped to
+/// `1..=9` for Deflate and ignored for Stored.
+fn map_compression_method(
+    method: CompressionMethod,
+    level: u8,
+) -> ZipCompression {
+    match method {
+        CompressionMethod::Store => ZipCompression::Stored,
+        _ => ZipCompression::Deflate {
+            // Level 0 historically meant "default" in our public API
+            // even though it semantically clashes with method 0
+            // (Stored). Map 0 → 5 (the Default impl in CreateOptions
+            // and zip-rs's own default) so we don't accidentally
+            // hand libdeflater an invalid level.
+            level: if level == 0 { 5 } else { level.min(9) },
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1025,4 +1017,12 @@ impl ArchiveWriter for ZipxWriterBackend {
         }
         Ok(())
     }
+}
+
+/// Maps zip-rs errors onto our taxonomy. Kept narrowly scoped to the
+/// `ZipxWriterBackend` (still leans on zip-rs because the BZip2 /
+/// LZMA method extensions live there); the regular ZIP writer goes
+/// through the in-tree `ZipFileWriter` and never sees this.
+fn map_zip_err(e: zip::result::ZipError) -> OtterzipError {
+    OtterzipError::BackendError(e.to_string())
 }
