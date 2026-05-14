@@ -249,10 +249,31 @@ const PARALLEL_CHUNK_SIZE: usize = 64;
 /// of entries.
 const PARALLEL_MIN_ENTRIES: usize = 16;
 
-/// Worker-count cap — NTFS write contention dominates beyond 4
-/// workers on the same volume even on 16-core machines, mirroring
-/// the read-side `LenientZipBackend::extract_all_parallel` finding.
-const PARALLEL_WORKER_CAP: usize = 4;
+/// Worker-count cap. The read-side `LenientZipBackend` extract path
+/// caps at 4 because NTFS *file-create* serialisation under the
+/// destination directory's MFT lock dominated once we went past
+/// that on extracts — every output file is a fresh `File::create`
+/// against the same parent dir.
+///
+/// The write side is a *different* contention profile, though:
+///
+///   * **Only one output file is being written** (the archive). Per-
+///     worker file-create serialisation doesn't apply — workers
+///     never touch the destination volume directly. They `File::open`
+///     against the *source* tree (sibling reads, MFT-cache hot) and
+///     hand deflated bytes back to the main thread which serialises
+///     the single archive write.
+///   * **Disk usage measured at 5 %** on the user's 16-core / 32 GB
+///     reproducer with 4 workers active — kernel I/O queue has
+///     massive headroom. We're CPU-bound on deflate, not I/O-bound.
+///
+/// 8 strikes the practical balance: doubles the compress throughput
+/// vs the 4-cap, exploits more of the 16-core Ultra 7 the user
+/// runs without overshooting the dev / mid-tier machines we still
+/// need to run cleanly on (8-core Ryzen / i7 with hyperthreads).
+/// Above 8 the rayon dispatch overhead per chunk starts costing
+/// more than the per-worker gain on chunks of 64 entries.
+const PARALLEL_WORKER_CAP: usize = 8;
 
 /// Per-entry uncompressed size above which the bulk dispatcher
 /// stops sending the file through the rayon worker pool and instead
