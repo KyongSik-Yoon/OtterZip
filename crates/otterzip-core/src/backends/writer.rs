@@ -654,19 +654,28 @@ impl ArchiveWriter for ZipWriterBackend {
                 }
                 Ok(())
             };
-            // Pigz-pattern parallel deflate for genuinely large
-            // entries: split into 1 MiB blocks, deflate each on the
-            // worker pool, concatenate the raw deflate fragments
-            // into a single valid stream. Captures the 35×
-            // wall-clock win Bandizip's per-block parallel path
-            // delivers on inputs like the user's 3.58 GB Setup.exe
-            // (139 s → ~5 s observed compute). When the encoder is
-            // Stored (smart-store hit, etc.) the helper internally
-            // defers to `add_entry_streaming` so disk-throughput-
-            // bound entries keep their existing fast path.
-            if let Err(e) =
-                writer.add_entry_pigz_parallel(name, path, &pool, &mut on_tick)
-            {
+            // Pigz-pattern per-block parallel deflate path is
+            // currently DISABLED — the in-memory implementation
+            // shipped in `ea224bf` was producing archives that
+            // Bandizip / strict zip-rs flagged as "압축 데이터가
+            // 손상되었습니다" on every large entry, both the
+            // deflate path (Setup.exe / MYGRAM Setup.exe) and the
+            // smart-stored fallback (MUP3.zip / SetupME.exe). The
+            // smart-stored fallback's separate corruption was
+            // root-caused to a method-vs-encoder dispatch bug in
+            // `add_entry_streaming` (now fixed); the pigz path's
+            // own corruption needs a dedicated reproducer + fix
+            // sprint (suspects: Z_SYNC_FLUSH stream-concat
+            // semantics across new Compress instances, BufWriter
+            // get_mut() + seek interaction, or rayon par_iter()
+            // ordering invariants at large block counts).
+            //
+            // Until that sprint lands, large entries flow through
+            // the proven serial-streaming path. Wall-clock regresses
+            // from ~1 min 23 s back toward ~3-4 min on the user's
+            // 9.5 GB corpus, but archives stay byte-correct — a
+            // hard prerequisite for any speed claim.
+            if let Err(e) = writer.add_entry_streaming(name, path, &mut on_tick) {
                 return Some(Err(e));
             }
             entries_done += 1;

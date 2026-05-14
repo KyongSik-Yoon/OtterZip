@@ -425,8 +425,21 @@ impl ZipFileWriter {
         // cache.
         let mut buf = vec![0u8; 1024 * 1024];
 
-        let compressed_size = match self.options.compression {
-            Compression::Stored => {
+        // CRITICAL: dispatch on the smart-store-resolved `method`,
+        // NOT on `self.options.compression`. The previous code
+        // matched on the writer's configured compression and ran
+        // the deflate encoder even when smart-store had decided to
+        // store the entry — the LFH said method 0 (Stored) but the
+        // payload was actually deflated bytes. Bandizip / strict
+        // zip-rs both surfaced this as "압축 데이터가 손상되었습니다"
+        // on every smart-store-stored entry in the user's
+        // reproducer (`MUP3.zip` extension hit, `SetupME.exe` probe
+        // hit). Bug landed in commit 6f3fa95 (smart store
+        // introduction) and went unnoticed because the small-entry
+        // `add_entry` path uses a separate match that already
+        // gated on the same `method` variable.
+        let compressed_size = match method {
+            0 => {
                 let mut counter = CountingWriter::new(&mut self.inner);
                 loop {
                     let n = input.read(&mut buf)?;
@@ -443,7 +456,18 @@ impl ZipFileWriter {
                 }
                 counter.count
             }
-            Compression::Deflate { level } => {
+            8 => {
+                // Method 8 only reachable when writer config is
+                // Deflate (smart-store never upgrades Stored to
+                // Deflate; it only downgrades).
+                let level = match self.options.compression {
+                    Compression::Deflate { level } => level,
+                    Compression::Stored => {
+                        return Err(OtterzipError::BackendError(
+                            "method=8 with Compression::Stored options — invariant violated".into(),
+                        ));
+                    }
+                };
                 let lvl = flate2::Compression::new(u32::from(level.clamp(1, 9)));
                 let mut counter = CountingWriter::new(&mut self.inner);
                 {
@@ -464,6 +488,11 @@ impl ZipFileWriter {
                     encoder.finish()?;
                 }
                 counter.count
+            }
+            other => {
+                return Err(OtterzipError::BackendError(format!(
+                    "add_entry_streaming: unexpected method {other}"
+                )));
             }
         };
         let crc32 = crc.finalize();
