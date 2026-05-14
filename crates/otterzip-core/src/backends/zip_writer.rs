@@ -171,7 +171,15 @@ impl ZipFileWriter {
     /// created with default permissions.
     pub(crate) fn create(path: &Path, options: WriterOptions) -> Result<Self> {
         let file = File::create(path)?;
-        let inner = BufWriter::with_capacity(64 * 1024, file);
+        // 4 MiB BufWriter — NVMe write queues much more efficient
+        // at this batch size than at the previous 64 KiB. On the
+        // user's reproducer the kernel disk-queue showed 1 % usage
+        // even when the pipeline was nominally write-bound; the
+        // small batch was the reason. Real impact is most visible
+        // on the streaming-stored large entry path (Setup.exe et
+        // al.) where the writer drives multi-GB of raw bytes
+        // through the same BufWriter back-to-back.
+        let inner = BufWriter::with_capacity(4 * 1024 * 1024, file);
         Ok(Self {
             inner,
             cursor: 0,
@@ -396,12 +404,26 @@ impl ZipFileWriter {
         // Both report `bytes_read` to the progress callback every
         // 1 MiB so the UI sees mid-entry motion (the whole point of
         // the streaming path).
-        let mut input = BufReader::with_capacity(64 * 1024, File::open(source_path)?);
+        // 4 MiB BufReader + 1 MiB read chunk below: NVMe reads at
+        // 4 MiB granularity hit the kernel readahead sweet spot
+        // (matches the typical NVMe queue-depth optimisation
+        // window). The smaller 64 KiB the previous version used
+        // left the queue mostly empty on the user's 16-core Ultra 7
+        // — disk D: only crossed 5 % usage even under sustained
+        // streaming, while Bandizip pegged the same disk at
+        // 70–100 % bursts because it issued large reads.
+        let mut input = BufReader::with_capacity(4 * 1024 * 1024, File::open(source_path)?);
         let mut crc = crc32fast::Hasher::new();
         let mut bytes_read: u64 = 0;
         let mut last_tick_at: u64 = 0;
         const PROGRESS_TICK_BYTES: u64 = 1 << 20; // 1 MiB
-        let mut buf = vec![0u8; 64 * 1024];
+        // 1 MiB read chunks — matches the BufReader capacity / 4
+        // so each loop iteration drains one fourth of the buffered
+        // window. Combined with the 4 MiB BufWriter on the output
+        // side and the 1-MiB-per-tick progress cadence, this
+        // saturates a modern NVMe queue without overshooting CPU
+        // cache.
+        let mut buf = vec![0u8; 1024 * 1024];
 
         let compressed_size = match self.options.compression {
             Compression::Stored => {

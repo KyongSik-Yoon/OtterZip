@@ -232,16 +232,13 @@ impl ZipWriterBackend {
     }
 }
 
-/// Chunk size for the rayon parallel encode. Each chunk is `par_iter`-
-/// processed off-thread and the results collected in input order
-/// before the main thread plays them onto the writer. 64 entries
-/// keeps the chunk-collect latency low (so the progress sink ticks
-/// at least once per ~second on real-world archives) while still
-/// amortising the rayon dispatch cost across enough work. Smaller
-/// archives never split into multiple chunks; the user's 9 674-
-/// entry corpus takes ~150 passes, each ~50 MiB of in-memory
-/// deflated bytes worst case — well under 1 GiB.
-const PARALLEL_CHUNK_SIZE: usize = 64;
+// `PARALLEL_CHUNK_SIZE` (previously 64) was the chunk size for the
+// `par_iter().collect()` chunked-rayon path. The single-ordered-
+// pipeline overhaul replaced that path with an mpsc-channel
+// streaming pipeline, so the chunk size is no longer a tunable
+// parameter — the channel depth (`CHANNEL_DEPTH`, defined locally
+// in `add_directory_bulk`) plays the analogous role of bounding
+// in-flight memory.
 
 /// Minimum file count for the parallel pipeline to be worth spinning
 /// up. Below this we fall back to the serial walker — the rayon
@@ -457,75 +454,137 @@ impl ArchiveWriter for ZipWriterBackend {
         let mut entries_done: u32 = dirs.len() as u32;
         let mut bytes_done: u64 = 0;
 
-        // ── Small entries — chunked rayon ─────────────────────────
+        // ── Small entries — ordered streaming pipeline ───────────
         //
-        // Each chunk is `par_iter`-deflated off-thread and collected
-        // in input order, then the main thread plays the results
-        // onto the writer serially so LFH byte offsets stay strictly
-        // monotonic. Peak in-flight deflated bytes ≈ chunk_size ×
-        // worst-case per-entry size; with the 64-entry chunk and
-        // ≤64 MiB-per-entry guarantee the bound is ~4 GiB worst
-        // case (in practice <100 MiB on the user's corpus). Progress
-        // ticks after each chunk so the UI sees motion at least
-        // every ~1 second on real workloads.
+        // Replaces the previous chunked `par_iter().collect()` sync
+        // barrier with an mpsc-channel pipeline. The barrier was
+        // the single biggest serialisation point — every 64-entry
+        // chunk forced the main thread to wait until every worker
+        // in the chunk finished before any splice started, and
+        // then forced every worker to wait while the main thread
+        // spliced the chunk's worth of results onto the writer.
+        // CPU graph showed the symptom directly: 9–28 % usage
+        // (4–5 cores) instead of the 70 %+ Bandizip pegs at on the
+        // same hardware.
         //
-        // The secondary progress bar (ABI v9 `current_entry_bytes_*`)
-        // is filled with the *current chunk*'s byte progress —
-        // chunk_bytes_done / chunk_total_bytes. The bar cycles 0 →
-        // 100 % once per chunk; combined with the archive-wide bar
-        // above it, the UI never collapses to "single bar mode" so
-        // there's no jarring layout shift when the dispatcher
-        // transitions between small-chunk and large-streaming.
-        for chunk in small_files.chunks(PARALLEL_CHUNK_SIZE) {
-            // Chunk-wide byte total — used to drive the secondary
-            // bar's "current chunk" fraction. Cheap stat() per
-            // chunk-entry; the kernel almost certainly has the
-            // metadata cached from the walk pass anyway.
-            let chunk_total_bytes: u64 = chunk
+        // The pipeline pattern:
+        //
+        //   * Worker dispatcher (one std::thread, spawned via
+        //     thread::scope) runs `par_iter` on the rayon pool
+        //     and `for_each_with`-sends each deflated result to
+        //     the bounded sync_channel. The channel's bound caps
+        //     in-flight memory at ~CHANNEL_DEPTH × max-small-
+        //     entry-bytes (16 × 64 MiB worst-case ≈ 1 GiB, in
+        //     practice <100 MiB on the user's corpus).
+        //   * Main thread receives `(idx, Result<PreparedEntry>)`
+        //     pairs out-of-order, buffers them in a BTreeMap, and
+        //     drains contiguous prefixes onto the writer so LFH
+        //     byte offsets stay strictly monotonic (the CDFH
+        //     `local_header_offset` field has to match).
+        //   * Workers never idle waiting for the splice; the main
+        //     thread never idles waiting for the next batch.
+        //
+        // Secondary progress bar (ABI v9
+        // `current_entry_bytes_*`) reports per-entry byte progress
+        // within the small-entries phase via a sliding window —
+        // we don't have per-chunk semantics any more, so the bar
+        // simply tracks `phase1_bytes_done / phase1_bytes_total`
+        // and ticks every splice. Resets when the phase finishes
+        // and the large-streaming phase takes over.
+        if !small_files.is_empty() {
+            use std::collections::BTreeMap;
+            use std::sync::mpsc;
+
+            const CHANNEL_DEPTH: usize = 16;
+            let (tx, rx) = mpsc::sync_channel::<(usize, Result<PreparedEntry>)>(CHANNEL_DEPTH);
+
+            let small_total: u64 = small_files
                 .iter()
                 .filter_map(|(p, _)| std::fs::metadata(p).ok().map(|m| m.len()))
                 .sum();
-            let mut chunk_bytes_done: u64 = 0;
+            let mut phase1_bytes_done: u64 = 0;
+            let mut pipeline_error: Option<OtterzipError> = None;
 
-            let prepared: Vec<Result<PreparedEntry>> = pool.install(|| {
-                chunk
-                    .par_iter()
-                    .map(|(path, name)| zip_writer::prepare_entry(path, name, compression, mtime, mdate))
-                    .collect()
-            });
-            for result in prepared {
-                let entry = match result {
-                    Ok(e) => e,
-                    Err(e) => return Some(Err(e)),
-                };
-                let entry_bytes = entry.uncompressed_size;
-                let entry_name = String::from_utf8_lossy(&entry.name).into_owned();
-                if let Err(e) = writer.add_entry_prepared(entry) {
-                    return Some(Err(e));
-                }
-                entries_done += 1;
-                bytes_done += entry_bytes;
-                chunk_bytes_done = chunk_bytes_done.saturating_add(entry_bytes);
-                if let Some(sink) = progress.as_deref_mut() {
-                    let snapshot = crate::progress::Progress {
-                        bytes_processed: bytes_done,
-                        bytes_total,
-                        entries_processed: entries_done,
-                        entries_total: total_entries as u32,
-                        current_entry: Some(entry_name),
-                        phase: crate::progress::ProgressPhase::Writing,
-                        elapsed: started.elapsed(),
-                        // Small-chunk secondary bar — chunk byte
-                        // progress so the UI sees the bar move every
-                        // splice tick. Resets implicitly on the next
-                        // chunk because chunk_total_bytes changes.
-                        current_entry_bytes_processed: chunk_bytes_done,
-                        current_entry_bytes_total: chunk_total_bytes,
-                    };
-                    if !sink.update(&snapshot) {
-                        return Some(Err(OtterzipError::Canceled));
+            std::thread::scope(|s| {
+                // Worker dispatcher — runs the rayon par_iter on
+                // the prebuilt pool and streams deflated results
+                // into the channel as they finish. The pool's
+                // install() ensures every par_iter task lands on
+                // *our* 8-worker pool instead of the global rayon
+                // default (which would spawn 16 threads on the
+                // user's Ultra 7 and double-saturate the deflate
+                // CPU budget).
+                let small_files_ref = &small_files;
+                let pool_ref = &pool;
+                s.spawn(move || {
+                    pool_ref.install(|| {
+                        small_files_ref
+                            .par_iter()
+                            .enumerate()
+                            .for_each_with(tx, |tx, (idx, (path, name))| {
+                                let result = zip_writer::prepare_entry(
+                                    path, name, compression, mtime, mdate,
+                                );
+                                let _ = tx.send((idx, result));
+                            });
+                    });
+                });
+
+                // Main thread: ordered receive + splice. Pending
+                // BTreeMap holds out-of-order results until the
+                // next contiguous index arrives.
+                let mut pending: BTreeMap<usize, PreparedEntry> = BTreeMap::new();
+                let mut next_idx: usize = 0;
+                for (idx, result) in rx.iter() {
+                    if pipeline_error.is_some() {
+                        // Drain remaining messages so workers don't
+                        // block on a full channel; we'll surface the
+                        // first error captured below.
+                        continue;
+                    }
+                    match result {
+                        Ok(entry) => {
+                            pending.insert(idx, entry);
+                            while let Some(entry) = pending.remove(&next_idx) {
+                                let entry_bytes = entry.uncompressed_size;
+                                let entry_name =
+                                    String::from_utf8_lossy(&entry.name).into_owned();
+                                if let Err(err) = writer.add_entry_prepared(entry) {
+                                    pipeline_error = Some(err);
+                                    break;
+                                }
+                                entries_done += 1;
+                                bytes_done += entry_bytes;
+                                phase1_bytes_done = phase1_bytes_done.saturating_add(entry_bytes);
+                                next_idx += 1;
+                                if let Some(sink) = progress.as_deref_mut() {
+                                    let snapshot = crate::progress::Progress {
+                                        bytes_processed: bytes_done,
+                                        bytes_total,
+                                        entries_processed: entries_done,
+                                        entries_total: total_entries as u32,
+                                        current_entry: Some(entry_name),
+                                        phase: crate::progress::ProgressPhase::Writing,
+                                        elapsed: started.elapsed(),
+                                        current_entry_bytes_processed: phase1_bytes_done,
+                                        current_entry_bytes_total: small_total,
+                                    };
+                                    if !sink.update(&snapshot) {
+                                        pipeline_error = Some(OtterzipError::Canceled);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            pipeline_error = Some(err);
+                        }
                     }
                 }
+            });
+
+            if let Some(err) = pipeline_error {
+                return Some(Err(err));
             }
         }
 
