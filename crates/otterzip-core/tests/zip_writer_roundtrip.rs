@@ -445,6 +445,106 @@ fn parallel_path_handles_mixed_size_chunk_boundary() {
 }
 
 #[test]
+fn smart_store_keeps_already_compressed_extensions_as_stored() {
+    // Stage a source tree with one each of: a .jpg (incompressible
+    // extension), a .zip (archive — definitely incompressible),
+    // a .txt (compressible). The writer should pick method 0 for
+    // the first two and method 8 for the .txt — and round-trip
+    // every byte. We probe the on-disk archive via strict zip-rs's
+    // `compression()` getter for the assertion.
+    let td = tempdir().unwrap();
+    let archive_path = td.path().join("smart-store.zip");
+    let source = td.path().join("source");
+    fs::create_dir_all(&source).unwrap();
+
+    // Random-ish 64 KiB payload — pseudo-random so deflate has
+    // nothing to compress against, but the file still has a meaningful
+    // size for the strict-reader assertion. The same buffer goes
+    // into all three files so any compression difference shows up
+    // as a method difference, not a byte difference.
+    let mut seed: u64 = 0xFEED_FACE_C0FFEE;
+    let mut payload = Vec::with_capacity(64 * 1024);
+    for _ in 0..64 * 1024 {
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        payload.push((seed >> 33) as u8);
+    }
+    fs::write(source.join("photo.jpg"), &payload).unwrap();
+    fs::write(source.join("inner.zip"), &payload).unwrap();
+    // The .txt gets a *compressible* payload so we can verify the
+    // happy-path deflate still fires for entries that aren't on the
+    // smart-store list.
+    let compressible: Vec<u8> = b"aaaaaaaaaaaaaaaa".repeat(4096);
+    fs::write(source.join("notes.txt"), &compressible).unwrap();
+
+    let opts = CreateOptions {
+        format: ArchiveFormat::Zip,
+        compression: CompressionMethod::Deflate,
+        compression_level: 5,
+        ..Default::default()
+    };
+    let mut archive = Archive::create(&archive_path, opts).unwrap();
+    archive
+        .add_dir_recursive::<fn(&otterzip_core::Progress) -> bool>(&source, "", None)
+        .unwrap();
+    archive.commit().unwrap();
+
+    // Inspect each entry's method through the upstream zip crate.
+    let f = File::open(&archive_path).unwrap();
+    let mut zip = zip::ZipArchive::new(BufReader::new(f)).unwrap();
+    let mut seen_jpg = false;
+    let mut seen_innerzip = false;
+    let mut seen_txt = false;
+    for i in 0..zip.len() {
+        let entry = zip.by_index(i).unwrap();
+        match entry.name() {
+            "photo.jpg" => {
+                assert_eq!(
+                    entry.compression(),
+                    zip::CompressionMethod::Stored,
+                    "smart-store should keep .jpg as method 0",
+                );
+                seen_jpg = true;
+            }
+            "inner.zip" => {
+                assert_eq!(
+                    entry.compression(),
+                    zip::CompressionMethod::Stored,
+                    "smart-store should keep .zip as method 0",
+                );
+                seen_innerzip = true;
+            }
+            "notes.txt" => {
+                assert_eq!(
+                    entry.compression(),
+                    zip::CompressionMethod::Deflated,
+                    "compressible .txt should still hit the deflate path",
+                );
+                seen_txt = true;
+            }
+            other => panic!("unexpected entry name: {other}"),
+        }
+    }
+    assert!(seen_jpg && seen_innerzip && seen_txt, "missing entries");
+
+    // And the bytes must still round-trip — Stored is just a method
+    // choice, not a corruption path.
+    let mut got_jpg = Vec::new();
+    zip.by_name("photo.jpg")
+        .unwrap()
+        .read_to_end(&mut got_jpg)
+        .unwrap();
+    assert_eq!(got_jpg, payload);
+    let mut got_innerzip = Vec::new();
+    zip.by_name("inner.zip")
+        .unwrap()
+        .read_to_end(&mut got_innerzip)
+        .unwrap();
+    assert_eq!(got_innerzip, payload);
+}
+
+#[test]
 fn random_seed_payload_size_distribution_roundtrip() {
     // Mix of small (~1 KB), medium (~64 KB) and one larger (~512 KB)
     // entry within a single archive. Exercises libdeflater one-shot

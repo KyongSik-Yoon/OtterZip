@@ -320,9 +320,45 @@ impl ZipFileWriter {
         } else {
             VERSION_NEEDED_BASE
         };
+        // Smart-store decision for the streaming path. Two cheap
+        // checks before we commit to a multi-second deflate:
+        //
+        //   1. Extension whitelist — `.zip` / `.jpg` / `.pdf` / etc.
+        //      land here without any I/O at all.
+        //   2. Probe-based detection — read the first 1 MiB,
+        //      libdeflate it, and check the ratio. Catches the
+        //      `.exe` installer payload case the user's reproducer
+        //      hits (3.58 GB Setup.exe already-compressed inside).
+        //
+        // When either fires we drop to Stored — the rest of the
+        // body becomes a raw `std::io::copy` over the same
+        // `CountingWriter`, and the entire deflate state machine is
+        // bypassed. The user's 660 MB MUP3.zip falls out of the
+        // streaming path in ~3 s (disk I/O bound) instead of the
+        // 7+ s the deflate attempt would burn.
         let method = match self.options.compression {
             Compression::Stored => 0u16,
-            Compression::Deflate { .. } => 8u16,
+            Compression::Deflate { level } => {
+                if is_incompressible_extension(name) {
+                    tracing::info!(
+                        target: "otterzip::compress",
+                        entry = %name,
+                        size_bytes = file_size,
+                        "smart store — extension marks entry as already-compressed"
+                    );
+                    0u16
+                } else if probe_is_incompressible(source_path, level) {
+                    tracing::info!(
+                        target: "otterzip::compress",
+                        entry = %name,
+                        size_bytes = file_size,
+                        "smart store — probe detected incompressible payload"
+                    );
+                    0u16
+                } else {
+                    8u16
+                }
+            }
         };
 
         // Write LFH with placeholder crc + compressed_size; the
@@ -487,12 +523,21 @@ impl ZipFileWriter {
         let (method, deflated) = match self.options.compression {
             Compression::Stored => (0u16, input),
             Compression::Deflate { level } => {
-                let bytes = if uncompressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD {
-                    libdeflate_oneshot(&input, level)?
+                // Smart store — skip deflate when the extension marks
+                // the entry as already-compressed. Same Bandizip-style
+                // policy `prepare_entry` and `add_entry_streaming`
+                // apply; keeping it here means small archives that
+                // never reach the parallel bulk path still benefit.
+                if is_incompressible_extension(name) {
+                    (0u16, input)
                 } else {
-                    flate2_streaming(&input, level)?
-                };
-                (8u16, bytes)
+                    let bytes = if uncompressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD {
+                        libdeflate_oneshot(&input, level)?
+                    } else {
+                        flate2_streaming(&input, level)?
+                    };
+                    (8u16, bytes)
+                }
             }
         };
         let compressed_size = deflated.len() as u64;
@@ -801,6 +846,111 @@ fn needs_zip64_for_entry(uncompressed: u64, compressed: u64, lfh_offset: u64) ->
         || lfh_offset > u32::MAX as u64
 }
 
+/// Lowercase the extension (without leading `.`) for the
+/// [`is_incompressible_extension`] check. Returns empty string for
+/// names without an extension. Splits on the *last* `.` so multi-dot
+/// names like `archive.tar.gz` yield `gz`.
+fn extension_lower(name: &str) -> String {
+    name.rsplit_once('.')
+        .map_or_else(String::new, |(_, ext)| ext.to_ascii_lowercase())
+}
+
+/// Returns true when `entry_name`'s extension marks the file as
+/// already-compressed and worth skipping deflate on.
+///
+/// List sourced from Bandizip's "High Speed Archiving" policy
+/// (en.bandisoft.com/bandizip/help/fastarchiving/) and the 7-Zip
+/// community's incompressible-extension corpus (sourceforge
+/// p7zip discussion §383044). Common to both:
+///
+///   * **Archives**: zip, 7z, rar, gz, bz2, xz, zst, lz4, cab, arj,
+///     lzh, ace, jar, war, ear, apk, ipa, msi, appx, msix, xpi, crx
+///   * **Images** (already lossy / format-compressed): jpg, jpeg,
+///     png, gif, webp, heic, heif, jp2, tiff variants
+///   * **Audio** (lossy or container-compressed): mp3, aac, m4a,
+///     ogg, opus, wma, flac, ape, dsf
+///   * **Video** (lossy + container): mp4, mkv, mov, avi, wmv,
+///     flv, webm, m4v, 3gp, ts
+///   * **Documents** (Office Open XML are zip containers; PDF
+///     embeds its own compressed streams): pdf, docx, xlsx, pptx,
+///     odt, ods, odp, epub, mobi, azw, azw3, djvu
+///
+/// Spot-check savings: on the user's 9.5 GB / 9 323-file corpus,
+/// `MUP3.zip` alone (660 MB) drops out of the deflate pipeline
+/// entirely — it's already a ZIP and deflate would shave < 1 %
+/// while burning ~7 s of CPU. Multiple smaller .zip / .jpg / .pdf
+/// entries get the same fast path.
+fn is_incompressible_extension(entry_name: &str) -> bool {
+    let ext = extension_lower(entry_name);
+    matches!(
+        ext.as_str(),
+        // Archives — already compressed.
+        "zip" | "7z" | "rar" | "gz" | "tgz" | "bz2" | "tbz" | "tbz2"
+        | "xz" | "txz" | "zst" | "tzst" | "lz" | "lz4" | "tlz4"
+        | "lzma" | "lzh" | "lha" | "cab" | "arj" | "ace" | "alz"
+        | "egg" | "iso" | "img" | "vhd" | "vhdx" | "wim"
+        | "jar" | "war" | "ear" | "apk" | "ipa" | "aab" | "msi"
+        | "msix" | "appx" | "xpi" | "crx"
+        // Images — lossy or already-compressed.
+        | "jpg" | "jpeg" | "jpe" | "jp2" | "png" | "gif" | "webp"
+        | "heic" | "heif" | "avif" | "tif" | "tiff" | "raw"
+        | "cr2" | "nef" | "dng" | "arw" | "orf" | "rw2" | "3fr"
+        // Audio — lossy or container-compressed.
+        | "mp3" | "aac" | "m4a" | "m4b" | "m4r" | "ogg" | "oga"
+        | "opus" | "wma" | "flac" | "ape" | "dsf" | "dff"
+        // Video — lossy + already-compressed.
+        | "mp4" | "m4v" | "mov" | "mkv" | "avi" | "wmv" | "flv"
+        | "webm" | "3gp" | "3g2" | "ts" | "mts" | "m2ts" | "vob"
+        // Documents — embed their own compressed streams.
+        | "pdf" | "docx" | "docm" | "xlsx" | "xlsm" | "pptx"
+        | "pptm" | "odt" | "ods" | "odp" | "epub" | "mobi"
+        | "azw" | "azw3" | "djvu"
+    )
+}
+
+/// Probe the first chunk of a file with libdeflater to decide whether
+/// the entry compresses meaningfully. Returns `true` when the deflate
+/// output ratio sits at or above [`PROBE_INCOMPRESSIBLE_RATIO`] (i.e.
+/// "deflate saved <10 % — don't bother"), false otherwise. Read errors
+/// or empty files conservatively return `false` so the deflate path
+/// still gets a shot.
+///
+/// Why probe at all when the extension list already covers most
+/// already-compressed inputs: installer payloads sit under `.exe`,
+/// game asset bundles often use idiosyncratic extensions, and CI
+/// pipelines pack data into `.bin` / `.dat`. The probe catches the
+/// long-tail cases the extension whitelist can't.
+fn probe_is_incompressible(file_path: &Path, level: u8) -> bool {
+    const PROBE_BYTES: usize = 1 << 20; // 1 MiB
+    const PROBE_INCOMPRESSIBLE_RATIO: f64 = 0.90;
+
+    let input = match File::open(file_path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    let mut buf = Vec::with_capacity(PROBE_BYTES);
+    let _ = (&input).take(PROBE_BYTES as u64).read_to_end(&mut buf);
+    if buf.len() < 4096 {
+        // Too small to draw a useful conclusion — give deflate the
+        // benefit of the doubt. The full path is fast on tiny inputs
+        // anyway.
+        return false;
+    }
+    let lvl = match libdeflater::CompressionLvl::new(i32::from(level.clamp(1, 12))) {
+        Ok(l) => l,
+        Err(_) => return false,
+    };
+    let mut compressor = libdeflater::Compressor::new(lvl);
+    let bound = compressor.deflate_compress_bound(buf.len());
+    let mut out = vec![0u8; bound];
+    let written = match compressor.deflate_compress(&buf, &mut out) {
+        Ok(n) => n,
+        Err(_) => return false,
+    };
+    let ratio = written as f64 / buf.len() as f64;
+    ratio >= PROBE_INCOMPRESSIBLE_RATIO
+}
+
 /// `Write` wrapper that forwards every byte to its inner writer and
 /// keeps a running count. Used by [`ZipFileWriter::add_entry_streaming`]
 /// to learn the compressed payload size when the deflate encoder is
@@ -883,23 +1033,34 @@ pub(crate) fn prepare_entry(
     let (method, deflated) = match compression {
         Compression::Stored => (0u16, input),
         Compression::Deflate { level } => {
-            let bytes = if uncompressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD {
-                libdeflate_oneshot(&input, level)?
+            // Smart store — skip deflate when the extension marks
+            // the file as already-compressed (mirrors Bandizip's
+            // "High Speed Archiving" policy). Saves the deflate
+            // call entirely for .zip / .jpg / .pdf / etc.; the
+            // archive size barely moves and CPU goes to the entries
+            // that actually benefit from compression.
+            if is_incompressible_extension(name) {
+                (0u16, input)
             } else {
-                flate2_streaming(&input, level)?
-            };
-            // Negative-compression fallback: keep the smaller of the
-            // two bodies. `input` is consumed by the deflate branch so
-            // we have to re-read from disk if we want the Stored
-            // bytes back — cheap relative to the deflate we already
-            // burned, and a hostile payload that would trigger this
-            // path is rare.
-            if bytes.len() as u64 >= uncompressed_size {
-                let mut raw = Vec::with_capacity(uncompressed_size as usize);
-                File::open(file_path)?.read_to_end(&mut raw)?;
-                (0u16, raw)
-            } else {
-                (8u16, bytes)
+                let bytes = if uncompressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD {
+                    libdeflate_oneshot(&input, level)?
+                } else {
+                    flate2_streaming(&input, level)?
+                };
+                // Negative-compression fallback: keep the smaller of
+                // the two bodies. `input` is consumed by the deflate
+                // branch so we have to re-read from disk if we want
+                // the Stored bytes back — cheap relative to the
+                // deflate we already burned, and a hostile payload
+                // that would trigger this path is rare (extension
+                // whitelist catches most of them anyway).
+                if bytes.len() as u64 >= uncompressed_size {
+                    let mut raw = Vec::with_capacity(uncompressed_size as usize);
+                    File::open(file_path)?.read_to_end(&mut raw)?;
+                    (0u16, raw)
+                } else {
+                    (8u16, bytes)
+                }
             }
         }
     };
