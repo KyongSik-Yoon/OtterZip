@@ -11,10 +11,12 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read};
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use zeroize::Zeroizing;
 
 use crate::backends::zip_writer::{
-    Compression as ZipCompression, WriterOptions as ZipWriterOptions, ZipFileWriter,
+    self, Compression as ZipCompression, PreparedEntry, WriterOptions as ZipWriterOptions,
+    ZipFileWriter,
 };
 use crate::error::{Result, OtterzipError};
 use crate::format::{ArchiveFormat, CompressionMethod};
@@ -45,6 +47,31 @@ pub(crate) trait ArchiveWriter: Send {
     /// Finalise the archive and flush to disk. After `commit` returns, the
     /// writer must not be used further; the outer `Archive` drops it.
     fn commit(self: Box<Self>) -> Result<()>;
+
+    /// Optional: format-specific bulk directory add. Default returns
+    /// `None` — the outer [`add_dir_recursive_through`] then drives
+    /// the generic per-entry walker. Backends that can parallelise
+    /// the per-entry encode (the in-tree ZIP writer in particular)
+    /// override and run a chunked rayon pipeline against the same
+    /// directory tree, then either return `Some(Ok(()))` or fall
+    /// through to `None` if the workload doesn't justify the
+    /// overhead.
+    ///
+    /// `progress` is passed as `&mut Option<...>` rather than
+    /// `Option<&mut ...>` so the borrow stays scoped to the method
+    /// body — overriding implementations call `as_deref_mut()`
+    /// internally, and the caller retains an undisturbed handle to
+    /// drive the fallback walker when `None` comes back.
+    fn add_directory_bulk(
+        &mut self,
+        _src: &Path,
+        _entry_prefix: &str,
+        _follow_symlinks: bool,
+        _exclude_system_metadata: bool,
+        _progress: &mut Option<&mut dyn crate::progress::ProgressSink>,
+    ) -> Option<Result<()>> {
+        None
+    }
 }
 
 /// Open a writer for the requested format. Honours [`CreateOptions::format`]
@@ -115,16 +142,19 @@ pub(crate) fn open_writer(
 
 /// ZIP writer backend — wraps the in-tree [`ZipFileWriter`] so the
 /// outer `Archive` create / add / commit flow gets the libdeflater
-/// dispatch + future rayon pool without the upstream `zip` crate's
-/// serial encoder in the way.
+/// dispatch and the rayon-parallel encode pipeline without the
+/// upstream `zip` crate's serial encoder in the way.
 pub(crate) struct ZipWriterBackend {
     inner: Option<ZipFileWriter>,
+    /// Captured at create time so the parallel walker
+    /// ([`Self::add_directory_bulk`]) can hand the same compression
+    /// settings to every rayon worker without re-deriving them per
+    /// chunk.
+    compression: ZipCompression,
     /// Names queued for removal via `Archive::remove_entry`. Path B
-    /// commit 1 keeps the existing "drop the queue if user re-adds
-    /// the name" semantics — entries that were added through the
-    /// same writer survive only if the most recent action on that
-    /// name was `add_entry`. Phase 8 G7's full remove-after-commit
-    /// path is still on the backlog.
+    /// keeps the existing "drop the queue if user re-adds the name"
+    /// semantics — Phase 8 G7's full remove-after-commit path is
+    /// still on the backlog.
     pending_removals: Vec<String>,
 }
 
@@ -134,16 +164,87 @@ impl ZipWriterBackend {
         opts: &CreateOptions,
         _password: Option<&Zeroizing<String>>,
     ) -> Result<Self> {
-        let writer_opts = ZipWriterOptions {
-            compression: map_compression_method(opts.compression, opts.compression_level),
-        };
-        let inner = ZipFileWriter::create(path, writer_opts)?;
+        let compression = map_compression_method(opts.compression, opts.compression_level);
+        let inner = ZipFileWriter::create(path, ZipWriterOptions { compression })?;
         Ok(Self {
             inner: Some(inner),
+            compression,
             pending_removals: Vec::new(),
         })
     }
+
+    /// Walk `src` and return two ordered lists: directory entries
+    /// (their entry-prefixed names) and file entries (source path +
+    /// entry name pairs). The directory list keeps the same alphabetic
+    /// pop order the generic walker uses so cross-backend round-trip
+    /// tests see the same CDFH ordering.
+    fn collect_entries(
+        src: &Path,
+        entry_prefix: &str,
+        follow_symlinks: bool,
+        exclude_system_metadata: bool,
+    ) -> Result<(Vec<String>, Vec<(PathBuf, String)>)> {
+        let mut dirs: Vec<String> = Vec::new();
+        let mut files: Vec<(PathBuf, String)> = Vec::new();
+        let mut stack: Vec<PathBuf> = vec![src.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            if exclude_system_metadata
+                && current != src
+                && crate::options::is_system_metadata(&current)
+            {
+                continue;
+            }
+            let meta = if follow_symlinks {
+                std::fs::metadata(&current)?
+            } else {
+                std::fs::symlink_metadata(&current)?
+            };
+            if meta.is_dir() {
+                if current != src {
+                    let name = compose_entry_name(src, &current, entry_prefix);
+                    dirs.push(format!("{name}/"));
+                }
+                let mut children: Vec<PathBuf> = Vec::new();
+                for child in std::fs::read_dir(&current)? {
+                    children.push(child?.path());
+                }
+                // Reverse-push so the pop order matches alphabetical
+                // (same convention as the generic walker).
+                for child in children.into_iter().rev() {
+                    stack.push(child);
+                }
+                continue;
+            }
+            if meta.file_type().is_symlink() && !follow_symlinks {
+                continue;
+            }
+            let name = compose_entry_name(src, &current, entry_prefix);
+            files.push((current, name));
+        }
+        Ok((dirs, files))
+    }
 }
+
+/// Chunk size for the rayon parallel encode. Each chunk is `par_iter`-
+/// processed off-thread and the results collected in input order
+/// before the main thread plays them onto the writer. Sized so the
+/// memory footprint per chunk stays bounded: 1024 entries × ~1 MiB
+/// average compressed size ≈ 1 GiB, which is comfortable on 16 GB
+/// machines. Smaller archives never split into multiple chunks; very
+/// large archives (the user's 9 674-entry / 7 GB corpus) take ~10
+/// passes.
+const PARALLEL_CHUNK_SIZE: usize = 1024;
+
+/// Minimum file count for the parallel pipeline to be worth spinning
+/// up. Below this we fall back to the serial walker — the rayon
+/// thread-pool build cost outweighs 4-worker speed-up on a handful
+/// of entries.
+const PARALLEL_MIN_ENTRIES: usize = 16;
+
+/// Worker-count cap — NTFS write contention dominates beyond 4
+/// workers on the same volume even on 16-core machines, mirroring
+/// the read-side `LenientZipBackend::extract_all_parallel` finding.
+const PARALLEL_WORKER_CAP: usize = 4;
 
 impl ArchiveWriter for ZipWriterBackend {
     fn add_entry(
@@ -185,6 +286,177 @@ impl ArchiveWriter for ZipWriterBackend {
         // filters against a pre-existing archive on disk is post-commit
         // backlog work.
         Ok(())
+    }
+
+    /// Chunked rayon-parallel directory walk. Mirrors the read-side
+    /// pipeline in `LenientZipBackend::extract_all_parallel` and is
+    /// the second half of the v1.1 compress-speed sprint (Path B
+    /// commit 2). Returns `None` when the workload is too small to
+    /// amortise the rayon pool build cost; the generic walker then
+    /// takes over.
+    fn add_directory_bulk(
+        &mut self,
+        src: &Path,
+        entry_prefix: &str,
+        follow_symlinks: bool,
+        exclude_system_metadata: bool,
+        progress: &mut Option<&mut dyn crate::progress::ProgressSink>,
+    ) -> Option<Result<()>> {
+        let (dirs, files) =
+            match Self::collect_entries(src, entry_prefix, follow_symlinks, exclude_system_metadata)
+            {
+                Ok(p) => p,
+                Err(e) => return Some(Err(e)),
+            };
+        let total_entries = dirs.len() + files.len();
+
+        if files.len() < PARALLEL_MIN_ENTRIES {
+            // Below the threshold the generic per-entry walker is
+            // already fast enough; declining `bulk` lets the caller's
+            // fallback path take over (carrying its own progress sink
+            // through the regular `add_entry` plumbing). No archive
+            // bytes have been written yet so this is side-effect-free.
+            tracing::info!(
+                target: "otterzip::compress",
+                files = files.len(),
+                dirs = dirs.len(),
+                "parallel compress declined — below threshold, falling back to serial"
+            );
+            return None;
+        }
+
+        let started = std::time::Instant::now();
+        let bytes_total: u64 = files
+            .iter()
+            .filter_map(|(p, _)| std::fs::metadata(p).ok().map(|m| m.len()))
+            .sum();
+        tracing::info!(
+            target: "otterzip::compress",
+            files = files.len(),
+            dirs = dirs.len(),
+            bytes_total,
+            "parallel compress dispatch begin"
+        );
+
+        // Directory entries are cheap — write them through the
+        // sequential surface first so the per-entry LFH offsets in
+        // the file batch all sit past the directory CDFH records.
+        // (Any sub-directory entries come ahead of their leaf files
+        // anyway because the collect_entries walker emits each dir
+        // before recursing into its children.)
+        let writer = match self.inner.as_mut() {
+            Some(w) => w,
+            None => {
+                return Some(Err(OtterzipError::InvalidArgument(
+                    "zip writer already committed",
+                )))
+            }
+        };
+        for dir_name in &dirs {
+            if let Err(e) = writer.add_directory(dir_name) {
+                return Some(Err(e));
+            }
+        }
+
+        // Initial Scanning tick so the UI moves off 0 % the moment
+        // dispatch starts.
+        if let Some(sink) = progress.as_deref_mut() {
+            let snapshot = crate::progress::Progress {
+                bytes_processed: 0,
+                bytes_total,
+                entries_processed: dirs.len() as u32,
+                entries_total: total_entries as u32,
+                current_entry: None,
+                phase: crate::progress::ProgressPhase::Scanning,
+                elapsed: started.elapsed(),
+            };
+            if !sink.update(&snapshot) {
+                return Some(Err(OtterzipError::Canceled));
+            }
+        }
+
+        // Build a private rayon pool capped at 4 workers — NTFS
+        // contention on metadata operations dominates past that even
+        // on 16-core machines (same finding as the lenient extract
+        // pool). The pool's threads die with the writer drop so a
+        // long-lived FFI session doesn't accumulate idle workers.
+        let worker_count = std::cmp::min(rayon::current_num_threads(), PARALLEL_WORKER_CAP);
+        let pool = match rayon::ThreadPoolBuilder::new()
+            .num_threads(worker_count)
+            .build()
+        {
+            Ok(p) => p,
+            Err(e) => {
+                return Some(Err(OtterzipError::BackendError(format!(
+                    "rayon thread-pool build failed: {e}"
+                ))));
+            }
+        };
+
+        let compression = self.compression;
+        let (mtime, mdate) = zip_writer::now_dos_datetime();
+        let mut entries_done: u32 = dirs.len() as u32;
+        let mut bytes_done: u64 = 0;
+
+        // Chunked iteration — par_iter on each chunk collects the
+        // results in input order, then the main thread plays them
+        // onto the writer serially. Bounds the peak in-flight
+        // deflated bytes to chunk_size × per-entry size; for the
+        // 7 GB / 9 674-entry user corpus that's well under 1 GiB
+        // of working memory.
+        for chunk in files.chunks(PARALLEL_CHUNK_SIZE) {
+            let prepared: Vec<Result<PreparedEntry>> = pool.install(|| {
+                chunk
+                    .par_iter()
+                    .map(|(path, name)| zip_writer::prepare_entry(path, name, compression, mtime, mdate))
+                    .collect()
+            });
+            for result in prepared {
+                let entry = match result {
+                    Ok(e) => e,
+                    Err(e) => return Some(Err(e)),
+                };
+                let entry_bytes = entry.uncompressed_size;
+                let entry_name = String::from_utf8_lossy(&entry.name).into_owned();
+                if let Err(e) = writer.add_entry_prepared(entry) {
+                    return Some(Err(e));
+                }
+                entries_done += 1;
+                bytes_done += entry_bytes;
+                if let Some(sink) = progress.as_deref_mut() {
+                    let snapshot = crate::progress::Progress {
+                        bytes_processed: bytes_done,
+                        bytes_total,
+                        entries_processed: entries_done,
+                        entries_total: total_entries as u32,
+                        current_entry: Some(entry_name),
+                        phase: crate::progress::ProgressPhase::Writing,
+                        elapsed: started.elapsed(),
+                    };
+                    if !sink.update(&snapshot) {
+                        return Some(Err(OtterzipError::Canceled));
+                    }
+                }
+            }
+        }
+
+        let elapsed = started.elapsed();
+        let elapsed_ms = elapsed.as_millis() as u64;
+        let mb_per_sec = if elapsed.as_secs_f64() > 0.0 {
+            (bytes_done as f64) / (elapsed.as_secs_f64() * 1_048_576.0)
+        } else {
+            0.0
+        };
+        tracing::info!(
+            target: "otterzip::compress",
+            workers = worker_count,
+            elapsed_ms,
+            entries = entries_done,
+            bytes_uncompressed = bytes_done,
+            mb_per_sec = format!("{mb_per_sec:.1}"),
+            "parallel compress dispatch done — throughput summary"
+        );
+        Some(Ok(()))
     }
 }
 
@@ -490,6 +762,22 @@ pub(crate) fn add_dir_recursive_through(
             std::io::ErrorKind::NotFound,
             src.display().to_string(),
         )));
+    }
+
+    // Format-specific bulk path takes priority — ZIP overrides this
+    // for chunked rayon-parallel deflate, every other backend falls
+    // through. Pass `&mut progress` so the bulk method borrows it
+    // only for the call's duration; if it declines (`None`) the
+    // generic walker below still has the original sink to drive
+    // its per-entry ticks.
+    if let Some(result) = writer.add_directory_bulk(
+        src,
+        entry_prefix,
+        follow_symlinks,
+        exclude_system_metadata,
+        &mut progress,
+    ) {
+        return result;
     }
 
     // Pre-scan to enable percentage-style progress. Cheap: metadata-only

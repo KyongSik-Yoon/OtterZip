@@ -219,6 +219,62 @@ impl ZipFileWriter {
         Ok(())
     }
 
+    /// Append a pre-prepared entry. The worker pool calls
+    /// [`prepare_entry`] off-thread to produce the deflated bytes +
+    /// metadata; this method then plays the result onto the output
+    /// stream serially so LFH byte offsets stay strictly monotonic
+    /// (the CDFH's `local_header_offset` field has to match).
+    ///
+    /// Public to crate so `backends::writer::ZipWriterBackend` can
+    /// drive the chunked parallel pipeline without re-implementing
+    /// the LFH/CDFH bookkeeping.
+    pub(crate) fn add_entry_prepared(&mut self, prepared: PreparedEntry) -> Result<()> {
+        let lfh_offset = self.cursor;
+        let used_zip64_extra = needs_zip64_for_entry(
+            prepared.uncompressed_size,
+            prepared.compressed_size,
+            lfh_offset,
+        );
+        let version_needed = if used_zip64_extra {
+            VERSION_NEEDED_ZIP64
+        } else {
+            VERSION_NEEDED_BASE
+        };
+        write_lfh(
+            &mut self.inner,
+            &prepared.name,
+            version_needed,
+            GP_FLAG_UTF8_NAMES,
+            prepared.method,
+            prepared.mtime,
+            prepared.mdate,
+            prepared.crc32,
+            prepared.compressed_size,
+            prepared.uncompressed_size,
+            used_zip64_extra,
+        )?;
+        let lfh_extra_len = if used_zip64_extra { 20u64 } else { 0 };
+        self.cursor += LFH_FIXED_SIZE + prepared.name.len() as u64 + lfh_extra_len;
+
+        self.inner.write_all(&prepared.deflated)?;
+        self.cursor += prepared.compressed_size;
+
+        self.cd.push(CdRecord {
+            name: prepared.name,
+            method: prepared.method,
+            crc32: prepared.crc32,
+            compressed_size: prepared.compressed_size,
+            uncompressed_size: prepared.uncompressed_size,
+            lfh_offset,
+            is_directory: false,
+            external_attr: UNIX_MODE_FILE << 16,
+            mtime: prepared.mtime,
+            mdate: prepared.mdate,
+            used_zip64_extra,
+        });
+        Ok(())
+    }
+
     /// Append a file entry. `data` is fully consumed via `Read` and
     /// either staged into memory (small entries → libdeflater
     /// one-shot) or streamed through `flate2` with a seek-back
@@ -555,6 +611,102 @@ fn needs_zip64_for_entry(uncompressed: u64, compressed: u64, lfh_offset: u64) ->
     uncompressed > u32::MAX as u64
         || compressed > u32::MAX as u64
         || lfh_offset > u32::MAX as u64
+}
+
+// === Parallel pipeline — worker drop-off ============================
+
+/// Result of off-thread `prepare_entry`: everything the serial
+/// writer needs to splice this entry into the archive byte stream
+/// (LFH + deflated payload + CDFH bookkeeping) without touching
+/// the source file again. Sized to be cheaply movable through a
+/// channel — `name` is short, `deflated` is one allocation.
+pub(crate) struct PreparedEntry {
+    /// Entry name as it should appear in the ZIP. UTF-8 bytes
+    /// directly; the writer always sets GP bit 11.
+    pub name: Vec<u8>,
+    /// Compression method actually used (0 = Stored, 8 = Deflate).
+    /// Stored fires when the worker observed that compression would
+    /// inflate the payload (rare; covers already-compressed inputs
+    /// like JPEGs or other ZIPs).
+    pub method: u16,
+    pub crc32: u32,
+    pub compressed_size: u64,
+    pub uncompressed_size: u64,
+    pub deflated: Vec<u8>,
+    pub mtime: u16,
+    pub mdate: u16,
+}
+
+/// Off-thread encoder — read `file_path`, optionally deflate, and
+/// hand back a [`PreparedEntry`] the main thread can splice into the
+/// archive. Called from rayon workers in `ZipWriterBackend`'s
+/// parallel directory walk. Mirrors the per-entry dispatch in
+/// `add_entry`:
+///
+///   * Method `Stored` → raw bytes + CRC.
+///   * Method `Deflate`, uncompressed ≤ 16 MiB → libdeflater one-shot.
+///   * Method `Deflate`, uncompressed > 16 MiB → flate2 streaming.
+///
+/// "Negative compression" guard: if Deflate output ends up larger
+/// than the input (already-compressed payload like JPEG inside the
+/// archive — common for game asset bundles), we fall back to Stored
+/// so the archive doesn't accidentally grow. Matches Bandizip /
+/// 7-Zip behaviour and keeps total output bytes monotone in
+/// compression_level.
+pub(crate) fn prepare_entry(
+    file_path: &Path,
+    name: &str,
+    compression: Compression,
+    mtime: u16,
+    mdate: u16,
+) -> Result<PreparedEntry> {
+    let mut input = Vec::new();
+    let mut f = File::open(file_path)?;
+    f.read_to_end(&mut input)?;
+    let uncompressed_size = input.len() as u64;
+    let crc32 = crc32fast::hash(&input);
+
+    let (method, deflated) = match compression {
+        Compression::Stored => (0u16, input),
+        Compression::Deflate { level } => {
+            let bytes = if uncompressed_size <= LIBDEFLATER_ONESHOT_THRESHOLD {
+                libdeflate_oneshot(&input, level)?
+            } else {
+                flate2_streaming(&input, level)?
+            };
+            // Negative-compression fallback: keep the smaller of the
+            // two bodies. `input` is consumed by the deflate branch so
+            // we have to re-read from disk if we want the Stored
+            // bytes back — cheap relative to the deflate we already
+            // burned, and a hostile payload that would trigger this
+            // path is rare.
+            if bytes.len() as u64 >= uncompressed_size {
+                let mut raw = Vec::with_capacity(uncompressed_size as usize);
+                File::open(file_path)?.read_to_end(&mut raw)?;
+                (0u16, raw)
+            } else {
+                (8u16, bytes)
+            }
+        }
+    };
+    let compressed_size = deflated.len() as u64;
+    Ok(PreparedEntry {
+        name: name.as_bytes().to_vec(),
+        method,
+        crc32,
+        compressed_size,
+        uncompressed_size,
+        deflated,
+        mtime,
+        mdate,
+    })
+}
+
+/// Re-export of [`current_dos_datetime`] for the parallel walker
+/// (workers call it ahead of file open so all entries in a batch
+/// carry the same timestamp).
+pub(crate) fn now_dos_datetime() -> (u16, u16) {
+    current_dos_datetime()
 }
 
 /// libdeflater one-shot encode. Returns the deflated bytes (raw

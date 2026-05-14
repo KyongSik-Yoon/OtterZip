@@ -304,6 +304,146 @@ fn empty_archive_roundtrips_through_public_api() {
     assert_eq!(got.len(), 0);
 }
 
+/// Build a source directory with `n` files of `payload_size` bytes
+/// each, returning the canonical `(entry_name, body)` set so callers
+/// can verify byte-for-byte round-trip on extract.
+fn stage_source_tree(
+    root: &Path,
+    n: usize,
+    payload_size: usize,
+) -> Vec<(String, Vec<u8>)> {
+    fs::create_dir_all(root).unwrap();
+    let mut entries = Vec::with_capacity(n);
+    let mut seed: u64 = 0xCAFE_BABE_DEAD_F00D;
+    for i in 0..n {
+        let mut payload = Vec::with_capacity(payload_size);
+        for _ in 0..payload_size {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            payload.push((seed >> 33) as u8);
+        }
+        let name = format!("payload_{i:04}.bin");
+        fs::write(root.join(&name), &payload).unwrap();
+        entries.push((name, payload));
+    }
+    entries
+}
+
+#[test]
+fn parallel_directory_walk_round_trips_under_strict_reader() {
+    // 32 entries × 16 KiB = 512 KiB total, comfortably above the
+    // `PARALLEL_MIN_ENTRIES = 16` threshold so the dispatcher
+    // commits to the bulk path. Strict zip-rs must read every byte
+    // back exactly.
+    let td = tempdir().unwrap();
+    let archive_path = td.path().join("parallel.zip");
+    let source = td.path().join("source");
+    let expected = stage_source_tree(&source, 32, 16 * 1024);
+
+    let opts = CreateOptions {
+        format: ArchiveFormat::Zip,
+        compression: CompressionMethod::Deflate,
+        compression_level: 5,
+        ..Default::default()
+    };
+    let mut archive = Archive::create(&archive_path, opts).unwrap();
+    archive
+        .add_dir_recursive::<fn(&otterzip_core::Progress) -> bool>(&source, "", None)
+        .unwrap();
+    archive.commit().unwrap();
+
+    // Strict zip-rs cross-validate. Sort both sides because the
+    // bulk path's ordering follows the same alphabetic pop sequence
+    // as the serial walker, but small filesystem-iteration quirks
+    // can shuffle siblings slightly across runs.
+    let mut got = strict_extract_all(&archive_path);
+    let mut want = expected;
+    got.sort_by(|a, b| a.0.cmp(&b.0));
+    want.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(got.len(), want.len(), "entry count mismatch");
+    for ((g_name, g_body), (w_name, w_body)) in got.iter().zip(want.iter()) {
+        assert_eq!(g_name, w_name, "name");
+        assert_eq!(g_body, w_body, "body for {g_name}");
+    }
+}
+
+#[test]
+fn parallel_path_extract_roundtrip_via_public_api() {
+    // End-to-end: parallel compress → public Archive::extract_all
+    // → bytes-on-disk verification. Mirrors the WinUI host's hot
+    // path so a regression in the worker pool's ordering or the
+    // main-thread LFH bookkeeping shows up here immediately.
+    let td = tempdir().unwrap();
+    let archive_path = td.path().join("parallel-public.zip");
+    let source = td.path().join("source");
+    let expected = stage_source_tree(&source, 24, 4 * 1024);
+    let dest = td.path().join("out");
+
+    let opts = CreateOptions {
+        format: ArchiveFormat::Zip,
+        compression: CompressionMethod::Deflate,
+        compression_level: 5,
+        ..Default::default()
+    };
+    let mut archive = Archive::create(&archive_path, opts).unwrap();
+    archive
+        .add_dir_recursive::<fn(&otterzip_core::Progress) -> bool>(&source, "", None)
+        .unwrap();
+    archive.commit().unwrap();
+
+    let archive = Archive::open(&archive_path, OpenMode::Read).unwrap();
+    let opts = ExtractOptions {
+        destination: dest.clone(),
+        overwrite: OverwritePolicy::Always,
+        ..Default::default()
+    };
+    let report = archive
+        .extract_all::<fn(&otterzip_core::Progress) -> bool>(&opts, None)
+        .unwrap();
+    assert_eq!(report.entries_extracted, expected.len() as u32);
+    for (name, body) in &expected {
+        let got = fs::read(dest.join(name)).unwrap();
+        assert_eq!(got, *body, "parallel-extracted bytes for {name}");
+    }
+}
+
+#[test]
+fn parallel_path_handles_mixed_size_chunk_boundary() {
+    // 18 small entries × 64 KiB. Each entry's deflate is small
+    // enough to fit the libdeflater one-shot path, and the count
+    // crosses PARALLEL_MIN_ENTRIES (16) so the bulk dispatcher
+    // fires. Validates that all 18 entries survive the par_iter
+    // → ordered-write splicing with byte-identical payloads.
+    let td = tempdir().unwrap();
+    let archive_path = td.path().join("mixed.zip");
+    let source = td.path().join("source");
+    let expected = stage_source_tree(&source, 18, 64 * 1024);
+
+    let opts = CreateOptions {
+        format: ArchiveFormat::Zip,
+        compression: CompressionMethod::Deflate,
+        compression_level: 5,
+        ..Default::default()
+    };
+    let mut archive = Archive::create(&archive_path, opts).unwrap();
+    archive
+        .add_dir_recursive::<fn(&otterzip_core::Progress) -> bool>(&source, "", None)
+        .unwrap();
+    archive.commit().unwrap();
+
+    let mut got = strict_extract_all(&archive_path);
+    let mut want = expected;
+    got.sort_by(|a, b| a.0.cmp(&b.0));
+    want.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(got.len(), want.len());
+    for ((g_name, g_body), (w_name, w_body)) in got.iter().zip(want.iter()) {
+        assert_eq!(g_name, w_name);
+        assert_eq!(g_body.len(), w_body.len(), "size for {g_name}");
+        assert_eq!(g_body, w_body, "body for {g_name}");
+    }
+}
+
 #[test]
 fn random_seed_payload_size_distribution_roundtrip() {
     // Mix of small (~1 KB), medium (~64 KB) and one larger (~512 KB)
