@@ -2224,14 +2224,19 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    /// <summary>4-step UI → 1..9 backend level. Store(0) is irrelevant when method is Stored.</summary>
+    /// <summary>4-step UI → 1..9 backend level. Store(0) is irrelevant when method is Stored.
+    /// idx=2 ("Normal", the default) maps to level 3 — same as Bandizip's
+    /// "Fast Drag and Drop" preset which is the wall-clock the user
+    /// measures against. Level 5 sits behind a "best of fast" choice and
+    /// level 9 stays the explicit maximum-compression option for users
+    /// who prioritise size over speed.</summary>
     private static byte MapMethodIndexToLevel(int methodIndex) => methodIndex switch
     {
         0 => 1,
         1 => 1,
-        2 => 5,
+        2 => 3,
         3 => 9,
-        _ => 5,
+        _ => 3,
     };
 
     private static Task<ArchiveBuildReport> RunCompressAsync(

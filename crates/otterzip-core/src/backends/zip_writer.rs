@@ -908,47 +908,88 @@ fn is_incompressible_extension(entry_name: &str) -> bool {
     )
 }
 
-/// Probe the first chunk of a file with libdeflater to decide whether
-/// the entry compresses meaningfully. Returns `true` when the deflate
-/// output ratio sits at or above [`PROBE_INCOMPRESSIBLE_RATIO`] (i.e.
-/// "deflate saved <10 % — don't bother"), false otherwise. Read errors
-/// or empty files conservatively return `false` so the deflate path
-/// still gets a shot.
+/// Probe several positions of a file with libdeflater to decide
+/// whether the entry compresses meaningfully. Returns `true` when
+/// the **average** deflate output ratio across the sampled regions
+/// sits at or above [`PROBE_INCOMPRESSIBLE_RATIO`] (i.e. "deflate
+/// saved <15 % on average — don't bother").
 ///
-/// Why probe at all when the extension list already covers most
-/// already-compressed inputs: installer payloads sit under `.exe`,
-/// game asset bundles often use idiosyncratic extensions, and CI
-/// pipelines pack data into `.bin` / `.dat`. The probe catches the
-/// long-tail cases the extension whitelist can't.
+/// Why 3-point sampling: the user's reproducer has installer-style
+/// `.exe` files (`Setup.exe`, 3.58 GB) whose first 1 MiB is mostly
+/// PE wrapper / digital signature / resource section — those *do*
+/// compress meaningfully, but the payload sitting at ~50 % of the
+/// file is already-compressed CAB/MSI data. A single first-chunk
+/// probe scores the file as "compressible" and the streaming path
+/// burns ~35 s on it before giving up. Sampling at start / middle /
+/// end gives the average a fair shot at catching this pattern.
+///
+/// Sample positions: byte 0, byte `len/2`, byte `len - 1 MiB`. Each
+/// sample is 1 MiB. Files smaller than 3 × 1 MiB fall back to the
+/// single-shot probe; files smaller than 4 KiB skip the probe
+/// entirely (deflate runs fast enough on tiny inputs that the
+/// probe overhead would dominate).
 fn probe_is_incompressible(file_path: &Path, level: u8) -> bool {
-    const PROBE_BYTES: usize = 1 << 20; // 1 MiB
-    const PROBE_INCOMPRESSIBLE_RATIO: f64 = 0.90;
+    const PROBE_BYTES: u64 = 1 << 20; // 1 MiB per sample
+    const PROBE_INCOMPRESSIBLE_RATIO: f64 = 0.85;
 
-    let input = match File::open(file_path) {
+    let file_size = match std::fs::metadata(file_path).map(|m| m.len()) {
+        Ok(n) if n >= 4096 => n,
+        _ => return false,
+    };
+    let mut input = match File::open(file_path) {
         Ok(f) => f,
         Err(_) => return false,
     };
-    let mut buf = Vec::with_capacity(PROBE_BYTES);
-    let _ = (&input).take(PROBE_BYTES as u64).read_to_end(&mut buf);
-    if buf.len() < 4096 {
-        // Too small to draw a useful conclusion — give deflate the
-        // benefit of the doubt. The full path is fast on tiny inputs
-        // anyway.
-        return false;
-    }
     let lvl = match libdeflater::CompressionLvl::new(i32::from(level.clamp(1, 12))) {
         Ok(l) => l,
         Err(_) => return false,
     };
     let mut compressor = libdeflater::Compressor::new(lvl);
-    let bound = compressor.deflate_compress_bound(buf.len());
-    let mut out = vec![0u8; bound];
-    let written = match compressor.deflate_compress(&buf, &mut out) {
-        Ok(n) => n,
-        Err(_) => return false,
+
+    // Sampling positions. Small files: probe once from offset 0.
+    // Medium files (< 3 × 1 MiB): probe once. Large files: probe
+    // start + middle + end to catch the installer-wrapper case.
+    let positions: Vec<u64> = if file_size < 3 * PROBE_BYTES {
+        vec![0]
+    } else {
+        vec![0, file_size / 2, file_size - PROBE_BYTES]
     };
-    let ratio = written as f64 / buf.len() as f64;
-    ratio >= PROBE_INCOMPRESSIBLE_RATIO
+
+    let mut ratios: Vec<f64> = Vec::with_capacity(positions.len());
+    for pos in positions {
+        if input.seek(SeekFrom::Start(pos)).is_err() {
+            continue;
+        }
+        let mut buf = vec![0u8; PROBE_BYTES as usize];
+        let n = match input.read(&mut buf) {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        if n < 4096 {
+            continue;
+        }
+        let sample = &buf[..n];
+        let bound = compressor.deflate_compress_bound(n);
+        let mut out = vec![0u8; bound];
+        let written = match compressor.deflate_compress(sample, &mut out) {
+            Ok(w) => w,
+            Err(_) => continue,
+        };
+        ratios.push(written as f64 / n as f64);
+    }
+    if ratios.is_empty() {
+        return false;
+    }
+    let avg = ratios.iter().sum::<f64>() / ratios.len() as f64;
+    tracing::debug!(
+        target: "otterzip::compress",
+        path = %file_path.display(),
+        samples = ratios.len(),
+        avg_ratio = format!("{avg:.3}"),
+        threshold = PROBE_INCOMPRESSIBLE_RATIO,
+        "smart store probe result"
+    );
+    avg >= PROBE_INCOMPRESSIBLE_RATIO
 }
 
 /// `Write` wrapper that forwards every byte to its inner writer and
