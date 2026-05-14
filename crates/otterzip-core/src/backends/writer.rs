@@ -447,7 +447,25 @@ impl ArchiveWriter for ZipWriterBackend {
         // case (in practice <100 MiB on the user's corpus). Progress
         // ticks after each chunk so the UI sees motion at least
         // every ~1 second on real workloads.
+        //
+        // The secondary progress bar (ABI v9 `current_entry_bytes_*`)
+        // is filled with the *current chunk*'s byte progress —
+        // chunk_bytes_done / chunk_total_bytes. The bar cycles 0 →
+        // 100 % once per chunk; combined with the archive-wide bar
+        // above it, the UI never collapses to "single bar mode" so
+        // there's no jarring layout shift when the dispatcher
+        // transitions between small-chunk and large-streaming.
         for chunk in small_files.chunks(PARALLEL_CHUNK_SIZE) {
+            // Chunk-wide byte total — used to drive the secondary
+            // bar's "current chunk" fraction. Cheap stat() per
+            // chunk-entry; the kernel almost certainly has the
+            // metadata cached from the walk pass anyway.
+            let chunk_total_bytes: u64 = chunk
+                .iter()
+                .filter_map(|(p, _)| std::fs::metadata(p).ok().map(|m| m.len()))
+                .sum();
+            let mut chunk_bytes_done: u64 = 0;
+
             let prepared: Vec<Result<PreparedEntry>> = pool.install(|| {
                 chunk
                     .par_iter()
@@ -466,6 +484,7 @@ impl ArchiveWriter for ZipWriterBackend {
                 }
                 entries_done += 1;
                 bytes_done += entry_bytes;
+                chunk_bytes_done = chunk_bytes_done.saturating_add(entry_bytes);
                 if let Some(sink) = progress.as_deref_mut() {
                     let snapshot = crate::progress::Progress {
                         bytes_processed: bytes_done,
@@ -475,13 +494,12 @@ impl ArchiveWriter for ZipWriterBackend {
                         current_entry: Some(entry_name),
                         phase: crate::progress::ProgressPhase::Writing,
                         elapsed: started.elapsed(),
-                        // Small-chunk path: entire entry is finished
-                        // by the time we get here, so per-entry byte
-                        // progress is moot. Large entries route
-                        // through the streaming path which does fill
-                        // these fields.
-                        current_entry_bytes_processed: 0,
-                        current_entry_bytes_total: 0,
+                        // Small-chunk secondary bar — chunk byte
+                        // progress so the UI sees the bar move every
+                        // splice tick. Resets implicitly on the next
+                        // chunk because chunk_total_bytes changes.
+                        current_entry_bytes_processed: chunk_bytes_done,
+                        current_entry_bytes_total: chunk_total_bytes,
                     };
                     if !sink.update(&snapshot) {
                         return Some(Err(OtterzipError::Canceled));
