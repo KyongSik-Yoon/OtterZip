@@ -37,9 +37,11 @@
 //! field is correct) but worker threads do the actual deflate work
 //! in parallel.
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::sync::mpsc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{OtterzipError, Result};
@@ -1171,20 +1173,46 @@ fn deflate_block_raw(
 }
 
 impl ZipFileWriter {
-    /// Per-block parallel deflate path for very large entries
-    /// (≥ `PIGZ_PARALLEL_THRESHOLD`). Reads the file fully into
-    /// memory, splits into [`PIGZ_BLOCK_SIZE`] chunks, deflates
-    /// every block in parallel on `pool`'s rayon workers, then
-    /// concatenates the raw deflate fragments into a single valid
-    /// ZIP method-8 stream. Falls back to the serial
-    /// [`add_entry_streaming`] when the configured compression is
-    /// `Stored`, since stored bytes don't gain from parallelism.
+    /// Per-block parallel deflate path for very large entries —
+    /// streaming pipeline edition.
     ///
-    /// Memory cost: O(uncompressed_size + Σ deflated chunks) — the
-    /// full input plus the deflated output have to coexist briefly.
-    /// On the user's 32 GB machine with a 3.58 GB Setup.exe that's
-    /// ~6 GB peak — comfortable, and the alternative (main-thread
-    /// serial streaming) was costing 139 s of wall-clock anyway.
+    /// Replaces the previous in-memory pigz implementation that
+    /// loaded the whole file into RAM before starting any worker.
+    /// That layout produced three sequential phases (read → deflate
+    /// → write) where only one resource was active at a time; SSD
+    /// usage cratered to 0 % during the deflate phase, CPU to 0 %
+    /// during read/write. User reproducer task-manager profile
+    /// confirmed the symptom.
+    ///
+    /// The streaming pipeline runs three roles concurrently inside
+    /// a `std::thread::scope`:
+    ///
+    ///   * **Reader thread** — opens the file, BufReader-reads in
+    ///     1 MiB chunks, CRC32-accumulates as it goes, ships
+    ///     `(idx, chunk, is_last)` triples into the input channel.
+    ///     Naturally backpressured by the bounded channel: when the
+    ///     workers fall behind, the reader blocks on `send()`
+    ///     rather than ballooning memory.
+    ///   * **Worker pool** — rayon `par_bridge()` over the input
+    ///     channel; every worker pulls a chunk, deflates it with
+    ///     `Z_SYNC_FLUSH` (or `Z_FINISH` for the last block), pushes
+    ///     `(idx, deflated)` into the output channel.
+    ///   * **Writer (main thread)** — pulls from the output channel,
+    ///     buffers out-of-order results in a `BTreeMap`, drains
+    ///     contiguous prefixes onto the writer. Each splice ticks
+    ///     the progress sink with the actual uncompressed-byte
+    ///     position — no more 25/75/100 % step jumps.
+    ///
+    /// Memory cost: `CHANNEL_DEPTH × CHUNK_SIZE × 2 ≈ 32 MiB` worst
+    /// case (input + output channels both at depth 16 × 1 MiB).
+    /// Versus the previous implementation's full-file Vec<u8>, this
+    /// is a >100× memory reduction on the 3.58 GB Setup.exe case.
+    ///
+    /// LFH is written first with placeholder zeros for CRC + sizes;
+    /// after the pipeline drains we `flush()` the BufWriter, seek
+    /// the underlying File back to the LFH, patch in the real
+    /// values, and seek forward to the post-payload cursor so the
+    /// next entry resumes correctly.
     pub(crate) fn add_entry_pigz_parallel(
         &mut self,
         name: &str,
@@ -1194,9 +1222,9 @@ impl ZipFileWriter {
     ) -> Result<()> {
         let level = match self.options.compression {
             Compression::Stored => {
-                // Stored doesn't benefit from parallel — defer to
-                // the existing streaming path which already runs at
-                // disk speed.
+                // Stored doesn't benefit from per-block parallel —
+                // defer to the existing streaming path which runs
+                // at NVMe disk speed already.
                 return self.add_entry_streaming(name, source_path, progress);
             }
             Compression::Deflate { level } => level,
@@ -1204,57 +1232,21 @@ impl ZipFileWriter {
 
         let name_bytes = name.as_bytes().to_vec();
         let (mtime, mdate) = current_dos_datetime();
+        let file_size = std::fs::metadata(source_path)?.len();
         let lfh_offset = self.cursor;
-
-        // Stage 1 — read the whole file into memory. Cheap on NVMe
-        // (multi-GB/s sustained read) and we need random-access to
-        // all bytes for the parallel block split anyway.
-        let input = std::fs::read(source_path)?;
-        let uncompressed_size = input.len() as u64;
-        let crc32 = crc32fast::hash(&input);
-        progress(uncompressed_size / 4)?; // 25 % tick: read done
-
-        // Stage 2 — split + parallel deflate every block.
-        let blocks: Vec<&[u8]> = input.chunks(PIGZ_BLOCK_SIZE).collect();
-        let last_idx = blocks.len().saturating_sub(1);
-        let deflated_blocks: Vec<Result<Vec<u8>>> = pool.install(|| {
-            use rayon::prelude::*;
-            blocks
-                .par_iter()
-                .enumerate()
-                .map(|(idx, block)| {
-                    let is_final = idx == last_idx;
-                    deflate_block_raw(block, level, is_final)
-                })
-                .collect()
-        });
-        progress((uncompressed_size * 3) / 4)?; // 75 % tick
-
-        // Stage 3 — concat. Allocate the exact size up-front; raw
-        // deflate's worst case is input.len() + small constant per
-        // block, but the real-world average is much smaller.
-        let total_compressed: usize = deflated_blocks
-            .iter()
-            .filter_map(|r| r.as_ref().ok().map(|v| v.len()))
-            .sum();
-        let mut compressed_buf = Vec::with_capacity(total_compressed);
-        for block in deflated_blocks {
-            let block = block?;
-            compressed_buf.extend_from_slice(&block);
-        }
-        let compressed_size = compressed_buf.len() as u64;
-
-        // Stage 4 — write LFH + payload + bookkeeping.
-        let used_zip64_extra = needs_zip64_for_entry(
-            uncompressed_size,
-            compressed_size,
-            lfh_offset,
-        );
+        let used_zip64_extra =
+            file_size > u32::MAX as u64 || lfh_offset > u32::MAX as u64;
         let version_needed = if used_zip64_extra {
             VERSION_NEEDED_ZIP64
         } else {
             VERSION_NEEDED_BASE
         };
+
+        // Stage 1 — LFH placeholder. Real CRC and compressed_size
+        // get patched in once the pipeline finishes. uncompressed_
+        // size is already known from stat() so we write the true
+        // value (matters for readers that don't trust the data
+        // descriptor and peek mid-encode).
         write_lfh(
             &mut self.inner,
             &name_bytes,
@@ -1263,22 +1255,199 @@ impl ZipFileWriter {
             8, // Deflate
             mtime,
             mdate,
-            crc32,
-            compressed_size,
-            uncompressed_size,
+            0, // crc placeholder
+            0, // compressed_size placeholder
+            file_size,
             used_zip64_extra,
         )?;
         let lfh_extra_len = if used_zip64_extra { 20u64 } else { 0 };
-        self.cursor += LFH_FIXED_SIZE + name_bytes.len() as u64 + lfh_extra_len;
-        self.inner.write_all(&compressed_buf)?;
+        let lfh_total = LFH_FIXED_SIZE + name_bytes.len() as u64 + lfh_extra_len;
+        self.cursor += lfh_total;
+
+        // Stage 2 — streaming pipeline. All three roles run
+        // concurrently inside the scope; the scope's join points
+        // give us crisp error propagation.
+        const CHANNEL_DEPTH: usize = 16;
+        let (input_tx, input_rx) =
+            mpsc::sync_channel::<(usize, Vec<u8>, bool)>(CHANNEL_DEPTH);
+        let (output_tx, output_rx) =
+            mpsc::sync_channel::<(usize, Result<Vec<u8>>)>(CHANNEL_DEPTH);
+        let source_path_buf = source_path.to_path_buf();
+
+        let pipeline_outcome: Result<(u32, u64)> =
+            std::thread::scope(|s| -> Result<(u32, u64)> {
+                // Reader thread — owns the input file + CRC.
+                let reader_join = s.spawn(move || -> Result<u32> {
+                    let mut input = BufReader::with_capacity(
+                        4 * 1024 * 1024,
+                        File::open(&source_path_buf)?,
+                    );
+                    let mut crc = crc32fast::Hasher::new();
+                    let mut buf = vec![0u8; PIGZ_BLOCK_SIZE];
+                    let mut idx: usize = 0;
+                    let mut total_read: u64 = 0;
+                    loop {
+                        // Fill one chunk fully (or until EOF) so the
+                        // `is_last` flag is accurate on the final
+                        // send. Partial reads inside the loop don't
+                        // count as EOF.
+                        let mut n = 0;
+                        while n < PIGZ_BLOCK_SIZE {
+                            match input.read(&mut buf[n..]) {
+                                Ok(0) => break,
+                                Ok(r) => n += r,
+                                Err(e)
+                                    if e.kind() == std::io::ErrorKind::Interrupted =>
+                                {
+                                    continue
+                                }
+                                Err(e) => return Err(OtterzipError::Io(e)),
+                            }
+                        }
+                        if n == 0 {
+                            // EOF before any bytes — empty file
+                            // case. We still need to emit a final
+                            // empty Z_FINISH block so the writer can
+                            // seal the stream.
+                            if idx == 0 {
+                                let _ = input_tx.send((0, Vec::new(), true));
+                            }
+                            break;
+                        }
+                        crc.update(&buf[..n]);
+                        total_read += n as u64;
+                        let is_last = total_read >= file_size;
+                        let chunk = buf[..n].to_vec();
+                        if input_tx.send((idx, chunk, is_last)).is_err() {
+                            // Workers/writer hung up early; stop
+                            // reading and let the scope unwind.
+                            break;
+                        }
+                        idx += 1;
+                        if is_last {
+                            break;
+                        }
+                    }
+                    Ok(crc.finalize())
+                });
+
+                // Worker pool — par_bridge the input mpsc into a
+                // parallel iterator. `for_each_with(tx, ...)` clones
+                // the output tx once per worker thread; all clones
+                // drop when the par_bridge drains, closing the
+                // channel and signalling the writer to exit.
+                let worker_join = s.spawn(move || {
+                    use rayon::prelude::*;
+                    pool.install(|| {
+                        input_rx
+                            .into_iter()
+                            .par_bridge()
+                            .for_each_with(output_tx, |tx, (idx, chunk, is_last)| {
+                                let result = deflate_block_raw(&chunk, level, is_last);
+                                let _ = tx.send((idx, result));
+                            });
+                    });
+                });
+
+                // Writer (this thread) — ordered receive + write +
+                // progress tick. BTreeMap holds out-of-order results
+                // until the next contiguous index arrives. Cursor
+                // accounting is local because `self.cursor` gets
+                // patched after the scope joins (we can't borrow
+                // `self.inner` here without making the scope
+                // unwieldy).
+                let mut pending: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
+                let mut next_idx: usize = 0;
+                let mut compressed_size: u64 = 0;
+                let mut bytes_uncompressed_done: u64 = 0;
+                let mut pipeline_error: Option<OtterzipError> = None;
+
+                for (idx, result) in output_rx.iter() {
+                    if pipeline_error.is_some() {
+                        // Drain so the workers don't block on a full
+                        // channel; first error is captured below.
+                        continue;
+                    }
+                    match result {
+                        Ok(deflated) => {
+                            pending.insert(idx, deflated);
+                            while let Some(bytes) = pending.remove(&next_idx) {
+                                if let Err(e) = self.inner.write_all(&bytes) {
+                                    pipeline_error = Some(OtterzipError::Io(e));
+                                    break;
+                                }
+                                compressed_size += bytes.len() as u64;
+                                // The block's uncompressed size is
+                                // PIGZ_BLOCK_SIZE except possibly
+                                // the final one (we don't know
+                                // exactly without tracking — clamp
+                                // to file_size for the last tick).
+                                bytes_uncompressed_done = bytes_uncompressed_done
+                                    .saturating_add(PIGZ_BLOCK_SIZE as u64)
+                                    .min(file_size);
+                                next_idx += 1;
+                                if let Err(e) = progress(bytes_uncompressed_done) {
+                                    pipeline_error = Some(e);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            pipeline_error = Some(e);
+                        }
+                    }
+                }
+
+                // Join reader to surface its error (file open, read
+                // failure) before falling out of the scope.
+                let crc32 = reader_join
+                    .join()
+                    .map_err(|_| {
+                        OtterzipError::BackendError(
+                            "pigz reader thread panicked".into(),
+                        )
+                    })??;
+                let _ = worker_join.join();
+
+                if let Some(e) = pipeline_error {
+                    return Err(e);
+                }
+                Ok((crc32, compressed_size))
+            });
+
+        let (crc32, compressed_size) = pipeline_outcome?;
         self.cursor += compressed_size;
+
+        // Stage 3 — patch LFH (crc + sizes) and restore the cursor
+        // to the post-payload byte for the next entry. Same shape
+        // as `add_entry_streaming`'s seek-back patch.
+        self.inner.flush()?;
+        {
+            let raw = self.inner.get_mut();
+            raw.seek(SeekFrom::Start(lfh_offset + 14))?;
+            raw.write_all(&crc32.to_le_bytes())?;
+            let cs_field = if used_zip64_extra {
+                u32::MAX
+            } else {
+                compressed_size as u32
+            };
+            raw.write_all(&cs_field.to_le_bytes())?;
+            if used_zip64_extra {
+                let extra_body =
+                    lfh_offset + LFH_FIXED_SIZE + name_bytes.len() as u64 + 4;
+                raw.seek(SeekFrom::Start(extra_body))?;
+                raw.write_all(&file_size.to_le_bytes())?;
+                raw.write_all(&compressed_size.to_le_bytes())?;
+            }
+            raw.seek(SeekFrom::Start(self.cursor))?;
+        }
 
         self.cd.push(CdRecord {
             name: name_bytes,
             method: 8,
             crc32,
             compressed_size,
-            uncompressed_size,
+            uncompressed_size: file_size,
             lfh_offset,
             is_directory: false,
             external_attr: UNIX_MODE_FILE << 16,
@@ -1286,8 +1455,7 @@ impl ZipFileWriter {
             mdate,
             used_zip64_extra,
         });
-
-        progress(uncompressed_size)?;
+        progress(file_size)?;
         Ok(())
     }
 }
