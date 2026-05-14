@@ -274,21 +274,31 @@ const PARALLEL_WORKER_CAP: usize = 8;
 
 /// Per-entry uncompressed size above which the bulk dispatcher
 /// stops sending the file through the rayon worker pool and instead
-/// drives it through the main-thread serial path. Two reasons:
-///   1. **Memory**: a worker that reads a 1 GiB file into its
-///      Vec-of-bytes buffer can spike per-worker working memory
-///      into the multi-GB range, and four of those running at
-///      once on a 32 GiB machine pushes the system into swap.
-///   2. **Parallel efficiency**: a single multi-GB file occupies
-///      one worker for the entire chunk while the other three sit
-///      idle. Routing it to the main thread frees those workers
-///      to chew through the long tail of small entries.
+/// drives it through the main-thread serial streaming path.
 ///
-/// 64 MiB picked so the threshold sits well above the libdeflater
-/// one-shot limit (16 MiB) — small entries still take the fast
-/// libdeflater path, mid-sized entries still hit flate2 streaming
-/// in parallel, only the genuinely-large outliers get serialised.
-const LARGE_ENTRY_THRESHOLD_BYTES: u64 = 64 * 1024 * 1024;
+/// History: 64 MiB was the original cap, picked when the encode
+/// pipeline still went through `par_iter().collect()` chunk
+/// barriers. The `add_directory_bulk` overhaul replaced that with
+/// an ordered mpsc pipeline that bounds in-flight memory through
+/// `CHANNEL_DEPTH` instead of chunk size, so the per-worker buffer
+/// concern at 64 MiB no longer applies — workers move on to the
+/// next entry the moment they send. The user's reproducer log
+/// (commit `de2b99b` measurement) showed Phase 2 (large entries)
+/// consuming 253 s out of 274 s wall-clock because 14 mid-sized
+/// `.dll` / `.exe` files (each 64–256 MiB) were taking the
+/// main-thread serial path even though the worker pool would have
+/// handled them in parallel without breaking a sweat.
+///
+/// 256 MiB lifts those mid-sized files into the small / pipeline
+/// path. Only the genuinely-large outliers (the 3.58 GB Setup.exe,
+/// the 542 MB Setup.exe, etc.) stay on the streaming path where
+/// the worker-per-file model would otherwise spike memory.
+///
+/// Memory ceiling at 256 MiB: bounded channel (16 slots) × 256 MiB
+/// = 4 GiB worst case, comfortably inside the user's 31 GiB
+/// machine and well below the previous chunked-rayon path's
+/// uncapped peak.
+const LARGE_ENTRY_THRESHOLD_BYTES: u64 = 256 * 1024 * 1024;
 
 impl ArchiveWriter for ZipWriterBackend {
     fn add_entry(

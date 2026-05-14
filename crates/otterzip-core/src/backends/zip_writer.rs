@@ -960,15 +960,31 @@ fn probe_is_incompressible(file_path: &Path, level: u8) -> bool {
     // resource section drag the average down below 0.85 even with
     // a fully-incompressible payload at the file middle. Lowering
     // the bar for files ≥ 256 MiB catches that class of input.
+    // Three-tier threshold. The bigger the file, the higher the
+    // prior probability it's already a compressed container, and
+    // the larger the wall-clock cost of guessing wrong. User
+    // reproducer measurement: 3.58 GB Setup.exe scored
+    // `avg_ratio=0.632` on the 3-point probe — genuinely
+    // deflate-friendly bytes — but deflating it ate 35 s of
+    // single-thread CPU on the main streaming path. Tiering the
+    // 1 GiB+ cohort down to 0.65 catches that file (ratio 0.632
+    // < threshold 0.65) so it lands on the fast raw-copy path
+    // instead. Archive size grows ~36 % for that single entry,
+    // about 1.3 GB extra on disk; on the user's corpus the
+    // wall-clock saving (~30 s) is worth that trade.
     const PROBE_INCOMPRESSIBLE_RATIO_DEFAULT: f64 = 0.85;
     const PROBE_INCOMPRESSIBLE_RATIO_LARGE: f64 = 0.75;
+    const PROBE_INCOMPRESSIBLE_RATIO_HUGE: f64 = 0.65;
     const LARGE_FILE_PROBE_BYTES: u64 = 256 * 1024 * 1024;
+    const HUGE_FILE_PROBE_BYTES: u64 = 1024 * 1024 * 1024;
 
     let file_size = match std::fs::metadata(file_path).map(|m| m.len()) {
         Ok(n) if n >= 4096 => n,
         _ => return false,
     };
-    let threshold = if file_size >= LARGE_FILE_PROBE_BYTES {
+    let threshold = if file_size >= HUGE_FILE_PROBE_BYTES {
+        PROBE_INCOMPRESSIBLE_RATIO_HUGE
+    } else if file_size >= LARGE_FILE_PROBE_BYTES {
         PROBE_INCOMPRESSIBLE_RATIO_LARGE
     } else {
         PROBE_INCOMPRESSIBLE_RATIO_DEFAULT
