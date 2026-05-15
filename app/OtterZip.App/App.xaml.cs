@@ -72,6 +72,21 @@ public partial class App : Application
         // without showing the main window when appropriate.
         var invokeRequest = ParseInvokeArgs(Environment.GetCommandLineArgs());
 
+        // Bandizip-style quick verbs (`compress-zip` / `compress-7z`)
+        // land here with IsHeadless=true. We skip MainWindow entirely
+        // and route to a standalone ProgressDialog so the user gets
+        // the small modal experience instead of the full app surface.
+        // The dialog owns its own JobQueue + dispatcher; WinUI keeps
+        // the app alive until the last window closes, so when the
+        // dialog hits its Close button the process exits naturally.
+        if (invokeRequest is { IsHeadless: true })
+        {
+            var dialog = new OtterZip.App.Modals.ProgressDialog(invokeRequest);
+            HostWindow = dialog;
+            dialog.Activate();
+            return;
+        }
+
         _mainWindow = new MainWindow();
         HostWindow = _mainWindow;
         if (invokeRequest is not null)
