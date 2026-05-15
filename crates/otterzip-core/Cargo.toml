@@ -22,7 +22,7 @@ xz2         = { workspace = true }
 flate2      = { workspace = true }
 tar         = { workspace = true }
 zip         = { workspace = true }
-sevenz-rust = { workspace = true }
+sevenz-rust2 = { workspace = true }
 unrar       = { workspace = true }
 lz4_flex    = { workspace = true }
 iso9660-rs  = { workspace = true }

@@ -120,10 +120,15 @@ fn targz_path_traversal_blocked() {
 // ---------------------------------------------------------------------------
 
 fn build_7z_fixture(out: &std::path::Path) {
-    use sevenz_rust::SevenZWriter;
+    // 2026-05-15: migrated to `sevenz-rust2` (active fork; the old
+    // `sevenz-rust = 0.6` is unmaintained). 0.16 renamed
+    // `SevenZWriter` → `ArchiveWriter` and `SevenZArchiveEntry` →
+    // `ArchiveEntry`. We alias them locally so the rest of the fixture
+    // body stays unchanged.
+    use sevenz_rust2::{ArchiveEntry as SevenZArchiveEntry, ArchiveWriter as SevenZWriter};
     let mut writer = SevenZWriter::create(out).expect("create 7z fixture");
 
-    let entry_a = sevenz_rust::SevenZArchiveEntry::from_path(
+    let entry_a = SevenZArchiveEntry::from_path(
         std::path::Path::new("entry_a.txt"),
         "entry_a.txt".to_owned(),
     );
@@ -131,7 +136,7 @@ fn build_7z_fixture(out: &std::path::Path) {
         .push_archive_entry::<&[u8]>(entry_a, Some(b"hello 7z\n"))
         .unwrap();
 
-    let entry_b = sevenz_rust::SevenZArchiveEntry::from_path(
+    let entry_b = SevenZArchiveEntry::from_path(
         std::path::Path::new("dir/entry_b.bin"),
         "dir/entry_b.bin".to_owned(),
     );

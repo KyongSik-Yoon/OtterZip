@@ -1,15 +1,21 @@
-//! 7z backend (Sprint 3 read path).
+//! 7z backend (Sprint 3 read path; 2026-05-15 swapped to `sevenz-rust2`).
 //!
-//! Wraps `sevenz-rust` 0.6. Like tar, 7z is best consumed in a single
-//! forward pass — the library exposes random access only via `for_each_entries`
-//! which streams sequentially. We therefore implement
+//! Wraps `sevenz-rust2` 0.21 (active fork of the now-unmaintained
+//! `sevenz-rust` 0.6 upstream). Like tar, 7z is best consumed in a single
+//! forward pass — the library exposes random access only via
+//! `for_each_entries` which streams sequentially. We therefore implement
 //! [`ArchiveBackend::extract_all_streaming`] to avoid re-decompressing the
 //! whole archive once per entry on `extract_all`.
 //!
 //! Solid-block constraint (per `performance.md` §4): when `solid=true`,
 //! entries within the same block must be decompressed in order. We let
-//! `sevenz-rust` handle that internally — our streaming extractor visits
+//! `sevenz-rust2` handle that internally — our streaming extractor visits
 //! entries in archive order, which is always valid.
+//!
+//! Types are imported under their old `sevenz-rust` 0.6 names via `use ...
+//! as ...` aliases so the rest of the read-side body stays unchanged
+//! across the migration (0.16 renamed `SevenZReader` → `ArchiveReader`
+//! etc. but the field/method shapes are identical).
 
 use std::cell::RefCell;
 use std::fs::File;
@@ -17,7 +23,9 @@ use std::io::{self, BufWriter, Read};
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
-use sevenz_rust::{Password, SevenZArchiveEntry, SevenZReader};
+use sevenz_rust2::{
+    ArchiveEntry as SevenZArchiveEntry, ArchiveReader as SevenZReader, Password,
+};
 use zeroize::Zeroizing;
 
 use crate::archive::ExtractWarning;
@@ -166,7 +174,9 @@ impl SevenZBackend {
                 if let Some(err) =
                     crate::archive::__check_bomb_for_streaming(&pod, opts)
                 {
-                    return Err(sevenz_rust::Error::other(err.to_string()));
+                    return Err(sevenz_rust2::Error::Other(
+                        err.to_string().into(),
+                    ));
                 }
 
                 if pod.is_symlink && !opts.follow_symlinks {
@@ -210,10 +220,13 @@ impl SevenZBackend {
                 if out_path.exists() {
                     match opts.overwrite {
                         OverwritePolicy::Never => {
-                            return Err(sevenz_rust::Error::other(format!(
-                                "destination exists: {}",
-                                out_path.display()
-                            )));
+                            return Err(sevenz_rust2::Error::Other(
+                                format!(
+                                    "destination exists: {}",
+                                    out_path.display()
+                                )
+                                .into(),
+                            ));
                         }
                         OverwritePolicy::Always => {}
                         OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
@@ -299,8 +312,8 @@ fn unix_seconds_from_filetime(ft: u64) -> Option<u64> {
     secs.checked_sub(FT_TO_UNIX_DELTA_SECS)
 }
 
-fn map_sevenz_err(e: sevenz_rust::Error) -> OtterzipError {
-    use sevenz_rust::Error as E;
+fn map_sevenz_err(e: sevenz_rust2::Error) -> OtterzipError {
+    use sevenz_rust2::Error as E;
     match e {
         E::Io(io, _) => OtterzipError::Io(io),
         E::PasswordRequired | E::ChecksumVerificationFailed => OtterzipError::WrongPassword,
@@ -309,8 +322,8 @@ fn map_sevenz_err(e: sevenz_rust::Error) -> OtterzipError {
     }
 }
 
-fn map_sevenz_err_io(e: io::Error) -> sevenz_rust::Error {
-    sevenz_rust::Error::other(e.to_string())
+fn map_sevenz_err_io(e: io::Error) -> sevenz_rust2::Error {
+    sevenz_rust2::Error::Other(e.to_string().into())
 }
 
 fn resolve_output_path_streaming(

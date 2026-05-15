@@ -31,7 +31,7 @@ CI에서 차이 발생 시 PR 블록. 수동 편집 금지 (자동 생성 구간
 | `flate2` | 1.x | MIT OR Apache-2.0 | zlib-ng 백엔드 |
 | `tar` | 0.4.x | MIT OR Apache-2.0 | TAR 파싱 |
 | `zip` | 2.x | MIT | ZIP 파싱/작성 |
-| `sevenz-rust` | 0.6.x | Apache-2.0 | 7z 파싱 |
+| `sevenz-rust2` | 0.21.x | Apache-2.0 | 7z 파싱/작성 (active fork; 멀티스레드 LZMA2 지원) |
 | `unrar` | 0.5.x | **RAR License + MIT** | RAR 추출 (유일 합법 경로) |
 | `rayon` | 1.x | MIT OR Apache-2.0 | 데이터 병렬 |
 | `memmap2` | 0.9.x | MIT OR Apache-2.0 | 메모리 매핑 |

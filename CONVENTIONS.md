@@ -146,7 +146,7 @@ let archive = unsafe { &mut *ptr };
 
 **허용 (기본):**
 - `thiserror`, `tracing`, `rayon`, `memmap2`, `zeroize`
-- 백엔드: `libdeflater`, `zstd`, `bzip2`, `xz2`, `tar`, `zip`, `sevenz-rust`, `unrar`
+- 백엔드: `libdeflater`, `zstd`, `bzip2`, `xz2`, `tar`, `zip`, `sevenz-rust2`, `unrar`
 
 **금지:**
 - `anyhow` (라이브러리 크레이트에서)

@@ -39,7 +39,7 @@ tar         = "0.4"
 # them up automatically; tests verify Bandizip / 7-Zip can decompress
 # the result.
 zip         = { version = "2", default-features = false, features = ["deflate-zlib-ng", "bzip2", "lzma"] }
-sevenz-rust = "0.6"
+sevenz-rust2 = "0.21"
 unrar       = "0.5"
 # Phase 7+ option Y (PR-F2): LZ4 frame format. Pure-Rust crate, MIT.
 lz4_flex    = { version = "0.13", default-features = false, features = ["frame", "std"] }

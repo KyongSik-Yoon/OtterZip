@@ -868,16 +868,74 @@ fn map_compression_method(
 // ---------------------------------------------------------------------------
 
 pub(crate) struct SevenZWriterBackend {
-    inner: Option<sevenz_rust::SevenZWriter<File>>,
+    inner: Option<sevenz_rust2::ArchiveWriter<File>>,
 }
 
 impl SevenZWriterBackend {
     fn create(
         path: &Path,
-        _opts: &CreateOptions,
+        opts: &CreateOptions,
         _password: Option<&Zeroizing<String>>,
     ) -> Result<Self> {
-        let writer = sevenz_rust::SevenZWriter::create(path).map_err(map_sevenz_err)?;
+        let mut writer =
+            sevenz_rust2::ArchiveWriter::create(path).map_err(map_sevenz_err)?;
+
+        // === Multi-threaded LZMA2 ============================================
+        //
+        // sevenz-rust2 0.21 exposes parallel LZMA2 via
+        // `Lzma2Options::from_level_mt(level, threads, chunk_size)`. Each
+        // thread encodes one independent chunk with a fresh dictionary; the
+        // writer concatenates the chunks into a single valid LZMA2 stream.
+        // This is the 7z analogue of the ZIP pigz path — same per-block
+        // parallel idea, native to the LZMA2 container.
+        //
+        // Defaults chosen for the 9.5 GB user-corpus profile:
+        //
+        //   * `level = CreateOptions.compression_level` clamped to 1-9.
+        //     LZMA2's preset table: 1=fast (64 KB dict), 3=balanced
+        //     (1 MB dict, ~130 MB total RAM at 8T), 5=default (16 MB dict,
+        //     ~1.5 GB at 8T), 9=ultra (64 MB dict, ~5.7 GB at 8T).
+        //     CreateOptions defaults level=3 (set in options.rs:120 to
+        //     mirror Bandizip's "Fast Drag and Drop").
+        //
+        //   * `threads = min(num_cpus, 8)`. Past 8 the LZMA2 encoder
+        //     scaling drops sharply (per published benchmarks) and RAM
+        //     pressure dominates wall-clock.
+        //
+        //   * `chunk_size = max(dict_size, 4 MiB)`. Bigger chunk = better
+        //     compression ratio (longer LZ77 windows); smaller = more
+        //     parallelism. 4 MiB at level 3 gives ~4 chunks-per-MiB-of-
+        //     dictionary, which keeps all 8 workers busy on multi-MB
+        //     entries while not bloating per-chunk overhead.
+        let level = (opts.compression_level.max(1) as u32).min(9);
+        let threads = std::thread::available_parallelism()
+            .map(std::num::NonZeroUsize::get)
+            .unwrap_or(4)
+            .min(8) as u32;
+        let dict_size = match level {
+            1 => 64 * 1024,            // 64 KiB
+            2 => 256 * 1024,           // 256 KiB
+            3 => 1024 * 1024,          // 1 MiB
+            4 => 4 * 1024 * 1024,      // 4 MiB
+            5 | 6 => 16 * 1024 * 1024, // 16 MiB
+            7 => 32 * 1024 * 1024,     // 32 MiB
+            _ => 64 * 1024 * 1024,     // 64 MiB (levels 8-9)
+        };
+        let chunk_size = (dict_size as u64).max(4 * 1024 * 1024);
+
+        let lzma2 = sevenz_rust2::encoder_options::Lzma2Options::from_level_mt(
+            level, threads, chunk_size,
+        );
+        writer.set_content_methods(vec![lzma2.into()]);
+
+        tracing::info!(
+            target: "otterzip::compress",
+            level,
+            threads,
+            chunk_size,
+            "sevenz writer configured with multi-thread LZMA2"
+        );
+
         Ok(Self {
             inner: Some(writer),
         })
@@ -889,7 +947,7 @@ impl ArchiveWriter for SevenZWriterBackend {
         &mut self,
         entry_path: &str,
         data: &mut dyn Read,
-        _size_hint: Option<u64>,
+        size_hint: Option<u64>,
         is_directory: bool,
     ) -> Result<()> {
         let writer = self
@@ -897,8 +955,8 @@ impl ArchiveWriter for SevenZWriterBackend {
             .as_mut()
             .ok_or(OtterzipError::InvalidArgument("7z writer already committed"))?;
         if is_directory {
-            // sevenz-rust represents directories via metadata-only entries.
-            let mut entry = sevenz_rust::SevenZArchiveEntry::default();
+            // 7z represents directories via metadata-only entries.
+            let mut entry = sevenz_rust2::ArchiveEntry::default();
             entry.name = entry_path.to_string();
             entry.is_directory = true;
             writer
@@ -907,35 +965,36 @@ impl ArchiveWriter for SevenZWriterBackend {
             return Ok(());
         }
 
-        // sevenz-rust pushes data via a Read implementor, but its trait
-        // bound demands `Sized + Read`. We materialise into a Vec — fine
-        // for source files, sub-optimal for huge payloads. S5 will swap
-        // in a streaming wrapper.
-        let mut buf = Vec::new();
-        std::io::copy(data, &mut buf)?;
-
-        let mut entry = sevenz_rust::SevenZArchiveEntry::default();
+        // sevenz-rust2 0.21's `push_archive_entry<R: Read>` accepts any
+        // `Read`. `&mut *data` re-borrows the `&mut dyn Read` we received,
+        // yielding `&mut &mut dyn Read` which implements `Read` directly —
+        // no `Vec<u8>` materialisation, no whole-file slurp. This removes
+        // the multi-GB RAM hazard the old `sevenz-rust = 0.6` code carried
+        // (writer.rs:914 in the previous revision).
+        let mut entry = sevenz_rust2::ArchiveEntry::default();
         entry.name = entry_path.to_string();
-        entry.size = buf.len() as u64;
+        if let Some(size) = size_hint {
+            entry.size = size;
+        }
         writer
-            .push_archive_entry(entry, Some(buf.as_slice()))
+            .push_archive_entry(entry, Some(&mut *data))
             .map_err(map_sevenz_err)?;
         Ok(())
     }
 
     fn commit(mut self: Box<Self>) -> Result<()> {
         if let Some(writer) = self.inner.take() {
-            // sevenz_rust 0.6's `SevenZWriter::finish` returns
-            // `io::Result<()>`, not its own Error type — distinct from
-            // `push_archive_entry` which uses `sevenz_rust::Error`.
-            writer.finish().map_err(OtterzipError::Io)?;
+            // sevenz-rust2 0.13 changed `finish()` to consume `self` and
+            // return the underlying writer (`io::Result<W>`). We discard
+            // the recovered `File` — Drop closes the handle.
+            let _file = writer.finish().map_err(OtterzipError::Io)?;
         }
         Ok(())
     }
 }
 
-fn map_sevenz_err(e: sevenz_rust::Error) -> OtterzipError {
-    use sevenz_rust::Error as E;
+fn map_sevenz_err(e: sevenz_rust2::Error) -> OtterzipError {
+    use sevenz_rust2::Error as E;
     match e {
         E::Io(io, _) => OtterzipError::Io(io),
         other => OtterzipError::BackendError(other.to_string()),
