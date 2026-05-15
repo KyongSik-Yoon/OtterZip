@@ -120,6 +120,13 @@ public partial class App : Application
     /// <summary>
     /// Parse <c>--invoke &lt;verb&gt; --files "p1;p2;..."</c>. Returns
     /// <see langword="null"/> if the args don't carry a verb (normal launch).
+    ///
+    /// <para>
+    /// Format-specific quick verbs (<c>compress-zip</c>, <c>compress-7z</c>)
+    /// collapse to <c>Verb="compress"</c> + <c>QuickFormat=&lt;tag&gt;</c>
+    /// + <c>IsHeadless=true</c> so MainWindow's verb dispatch only has
+    /// to compare against the canonical roots.
+    /// </para>
     /// </summary>
     internal static InvokeRequest? ParseInvokeArgs(string[] argv)
     {
@@ -152,8 +159,27 @@ public partial class App : Application
         {
             return null;
         }
-        // Verbs are ASCII tokens in our control (extract-here / compress / etc.)
-        // We compare case-insensitively in the consumer, so just preserve as-is.
-        return new InvokeRequest(verb, paths);
+
+        // Map format-specific compress verbs into the canonical
+        // `compress` verb plus a QuickFormat tag + headless flag.
+        // Recognised today: `compress-zip`, `compress-7z`. Future
+        // formats add a row here and a matching shell-extension verb.
+        string canonicalVerb = verb;
+        string? quickFormat = null;
+        bool isHeadless = false;
+        if (string.Equals(verb, "compress-zip", StringComparison.OrdinalIgnoreCase))
+        {
+            canonicalVerb = "compress";
+            quickFormat = "zip";
+            isHeadless = true;
+        }
+        else if (string.Equals(verb, "compress-7z", StringComparison.OrdinalIgnoreCase))
+        {
+            canonicalVerb = "compress";
+            quickFormat = "7z";
+            isHeadless = true;
+        }
+
+        return new InvokeRequest(canonicalVerb, paths, quickFormat, isHeadless);
     }
 }
