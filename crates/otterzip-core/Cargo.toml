@@ -23,6 +23,7 @@ flate2      = { workspace = true }
 tar         = { workspace = true }
 zip         = { workspace = true }
 sevenz-rust2 = { workspace = true }
+num_cpus     = { workspace = true }
 unrar       = { workspace = true }
 lz4_flex    = { workspace = true }
 iso9660-rs  = { workspace = true }

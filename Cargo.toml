@@ -40,6 +40,7 @@ tar         = "0.4"
 # the result.
 zip         = { version = "2", default-features = false, features = ["deflate-zlib-ng", "bzip2", "lzma"] }
 sevenz-rust2 = "0.21"
+num_cpus    = "1"
 unrar       = "0.5"
 # Phase 7+ option Y (PR-F2): LZ4 frame format. Pure-Rust crate, MIT.
 lz4_flex    = { version = "0.13", default-features = false, features = ["frame", "std"] }

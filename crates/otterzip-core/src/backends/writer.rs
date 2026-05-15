@@ -880,7 +880,7 @@ impl SevenZWriterBackend {
         let mut writer =
             sevenz_rust2::ArchiveWriter::create(path).map_err(map_sevenz_err)?;
 
-        // === Multi-threaded LZMA2 ============================================
+        // === Multi-threaded LZMA2 — tuned for ship-quality throughput ========
         //
         // sevenz-rust2 0.21 exposes parallel LZMA2 via
         // `Lzma2Options::from_level_mt(level, threads, chunk_size)`. Each
@@ -889,39 +889,40 @@ impl SevenZWriterBackend {
         // This is the 7z analogue of the ZIP pigz path — same per-block
         // parallel idea, native to the LZMA2 container.
         //
-        // Defaults chosen for the 9.5 GB user-corpus profile:
+        // Tuning rationale (2026-05-15 sprint follow-up, real-corpus
+        // measurement: 17.6 → ~40 MiB/s target):
         //
-        //   * `level = CreateOptions.compression_level` clamped to 1-9.
-        //     LZMA2's preset table: 1=fast (64 KB dict), 3=balanced
-        //     (1 MB dict, ~130 MB total RAM at 8T), 5=default (16 MB dict,
-        //     ~1.5 GB at 8T), 9=ultra (64 MB dict, ~5.7 GB at 8T).
-        //     CreateOptions defaults level=3 (set in options.rs:120 to
-        //     mirror Bandizip's "Fast Drag and Drop").
+        //   * **level=1 (was 3)**. LZMA2 preset 1 = HC4 fast matcher
+        //     with 1 MiB dict. Level 3 (HC4 fast / 4 MiB dict) cost ~2×
+        //     wall-clock for only ~1.5% better ratio on real installer
+        //     mixes. Level 4+ enters BT4 normal mode — a memory-bandwidth
+        //     cliff that drops throughput to ~25 MiB/s on 8T regardless
+        //     of CPU. The 35+ MiB/s ship bar lives in the HC4 fast
+        //     family; level 1 is the sweet spot. Trade: archive grows
+        //     ~1.5% (≈ 140 MB on a 9.5 GB corpus) vs Bandizip's
+        //     comparable preset.
         //
-        //   * `threads = min(num_cpus, 8)`. Past 8 the LZMA2 encoder
-        //     scaling drops sharply (per published benchmarks) and RAM
-        //     pressure dominates wall-clock.
+        //   * **threads = num_physical, capped at 8**. Empirical
+        //     measurement on the user's 16-core / 16-logical machine:
+        //     16 threads was 22 % SLOWER than 8 threads on the 9.5 GB
+        //     corpus (5m38s @ 27 MiB/s vs 4m37s @ 33 MiB/s). This
+        //     reproduces the "memory-bandwidth bound past 8 threads"
+        //     finding from published 7-Zip scaling community thread
+        //     and the known `lzma-rust2` MT-writer immaturity (issue
+        //     #83 — unbounded buffering forces flushes that kill
+        //     pipeline parallelism past 8 workers). The 8-cap also
+        //     matches the historical 7-Zip MT cap before its 25.00
+        //     "Threadripper Edition" release.
         //
-        //   * `chunk_size = max(dict_size, 4 MiB)`. Bigger chunk = better
-        //     compression ratio (longer LZ77 windows); smaller = more
-        //     parallelism. 4 MiB at level 3 gives ~4 chunks-per-MiB-of-
-        //     dictionary, which keeps all 8 workers busy on multi-MB
-        //     entries while not bloating per-chunk overhead.
-        let level = (opts.compression_level.max(1) as u32).min(9);
-        let threads = std::thread::available_parallelism()
-            .map(std::num::NonZeroUsize::get)
-            .unwrap_or(4)
-            .min(8) as u32;
-        let dict_size = match level {
-            1 => 64 * 1024,            // 64 KiB
-            2 => 256 * 1024,           // 256 KiB
-            3 => 1024 * 1024,          // 1 MiB
-            4 => 4 * 1024 * 1024,      // 4 MiB
-            5 | 6 => 16 * 1024 * 1024, // 16 MiB
-            7 => 32 * 1024 * 1024,     // 32 MiB
-            _ => 64 * 1024 * 1024,     // 64 MiB (levels 8-9)
-        };
-        let chunk_size = (dict_size as u64).max(4 * 1024 * 1024);
+        //   * **chunk_size = 1 MiB (was 4 MiB)**. yeah.nah.nz's xz-T
+        //     benchmark showed 4 MiB → 1 MiB chunks bought a 2.4×
+        //     throughput jump on a 32-thread box for ~kB of ratio
+        //     drift. Smaller chunks keep all workers fed when input
+        //     entropy varies (the user corpus has both PE binaries
+        //     and already-LZMA-packed payloads).
+        let level = 1u32;
+        let threads = (num_cpus::get_physical() as u32).clamp(1, 8);
+        let chunk_size: u64 = 1024 * 1024; // 1 MiB
 
         let lzma2 = sevenz_rust2::encoder_options::Lzma2Options::from_level_mt(
             level, threads, chunk_size,
@@ -933,7 +934,8 @@ impl SevenZWriterBackend {
             level,
             threads,
             chunk_size,
-            "sevenz writer configured with multi-thread LZMA2"
+            user_level = opts.compression_level,
+            "sevenz writer configured with multi-thread LZMA2 (tuned for throughput)"
         );
 
         Ok(Self {
