@@ -1141,6 +1141,20 @@ const PIGZ_BLOCK_SIZE: usize = 1024 * 1024;
 /// empty stored block that byte-aligns the stream so the next
 /// block can concatenate without bit-shuffling; `Finish` emits a
 /// final block with BFINAL=1 that terminates the stream.
+///
+/// Loop terminates on the zlib-spec **dual sentinel**: after input
+/// is fully consumed, the encoder reports completion via either
+/// `Status::Ok` *or* `Status::BufError` with no new output
+/// progress. zlib-ng (which is what this crate links via flate2's
+/// `zlib-ng` feature) returns `BufError` for Sync-complete; stock
+/// zlib historically uses `Ok` with avail_out untouched. Both must
+/// break out. The earlier "break on first `Ok` after in_consumed
+/// >= input.len()" form silently truncated the Sync trailer (the
+/// `00 00 ff ff` aligner) on every non-final block whose first
+/// call hadn't yet emitted the trailer — `diagnose_pigz` confirmed
+/// this on a 149 MiB VSCode installer where 149/150 blocks lost
+/// their trailer and `libdeflater::Decompressor` reported
+/// `BadData`.
 fn deflate_block_raw(
     input: &[u8],
     level: u8,
@@ -1166,6 +1180,14 @@ fn deflate_block_raw(
 
     let mut in_consumed: usize = 0;
     loop {
+        // Keep at least 1 KiB headroom so the encoder's next call
+        // always has somewhere to put the Sync aligner / Finish
+        // epilogue. Without this, the loop ends up bouncing through
+        // BufError → reserve repeatedly on high-entropy blocks
+        // whose compressed size hovers near input.len().
+        if output.capacity() - output.len() < 1024 {
+            output.reserve(64 * 1024);
+        }
         let prev_out = output.len();
         let status = compressor
             .compress_vec(&input[in_consumed..], &mut output, flush_mode)
@@ -1173,27 +1195,26 @@ fn deflate_block_raw(
                 OtterzipError::BackendError(format!("deflate compress: {e:?}"))
             })?;
         in_consumed = compressor.total_in() as usize;
+        let made_progress = output.len() > prev_out;
         match status {
-            flate2::Status::StreamEnd => break,
+            flate2::Status::StreamEnd => break, // Finish only
             flate2::Status::Ok => {
-                if in_consumed >= input.len() {
-                    if is_final {
-                        // Need another iteration to drain the Finish
-                        // tail; the encoder hasn't seen StreamEnd yet.
-                        if output.len() == prev_out {
-                            // Output buffer needs growing for the
-                            // trailing block — bump capacity.
-                            output.reserve(64);
-                        }
-                    } else {
-                        // Sync flush done; input fully consumed.
-                        break;
-                    }
+                if in_consumed >= input.len() && !is_final && !made_progress {
+                    // Stock-zlib variant of Sync completion: Ok with
+                    // avail_out untouched after input drained.
+                    break;
                 }
             }
             flate2::Status::BufError => {
-                // No forward progress — extend output buffer.
-                output.reserve(64 + input.len() / 4);
+                if in_consumed >= input.len() && !is_final && !made_progress {
+                    // Canonical zlib-ng sentinel — Sync flush complete
+                    // (manual §deflate: "next call must use the same
+                    // flush parameter until deflate() returns
+                    // Z_BUF_ERROR").
+                    break;
+                }
+                // Real out-of-buffer (input still pending) — grow.
+                output.reserve(64 * 1024);
             }
         }
     }
@@ -1231,6 +1252,16 @@ impl ZipFileWriter {
             }
             Compression::Deflate { level } => level,
         };
+
+        // Honor smart-store decisions BEFORE std::fs::read — otherwise
+        // a multi-GB already-compressed entry (MUP3.zip case) gets
+        // slurped into RAM only to be re-streamed by the fallback.
+        // Same probe the regular dispatcher consults in `add_entry`.
+        if is_incompressible_extension(name)
+            || probe_is_incompressible(source_path, level)
+        {
+            return self.add_entry_streaming(name, source_path, progress);
+        }
 
         let name_bytes = name.as_bytes().to_vec();
         let (mtime, mdate) = current_dos_datetime();
@@ -1683,6 +1714,412 @@ mod tests {
         zf.read_to_end(&mut got).unwrap();
         assert_eq!(got.len(), payload.len(), "size mismatch");
         assert_eq!(got, payload, "pigz path corrupted bytes");
+    }
+
+    /// Deterministic compressible payload generator. LCG-based, the
+    /// same sequence the prior `pigz_parallel_round_trips_*` tests use
+    /// — keeps test parity across the dense-block / scaled-block
+    /// variants below.
+    fn make_compressible_payload(size: usize) -> Vec<u8> {
+        let mut out = Vec::with_capacity(size);
+        let mut seed: u64 = 0xCAFE_BABE_DEAD_FEED;
+        for i in 0..size {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            // Same recipe as the 10 MiB test: deflate finds enough
+            // repetition (`0x55` cuckoo bytes) to actually exercise
+            // back-references while the seeded jitter prevents the
+            // pathological "all bytes identical" trivial path.
+            out.push(if i % 64 < 16 { (seed >> 33) as u8 } else { 0x55 });
+        }
+        out
+    }
+
+    /// Pure-logic round trip for the pigz block split + concat. Calls
+    /// `deflate_block_raw` directly on every block (no rayon, no
+    /// ZIP container, no LFH/CDFH) and inflates the concatenated
+    /// stream straight with libdeflate. The whole point is to
+    /// isolate any Z_SYNC_FLUSH semantics bug from the surrounding
+    /// machinery — if this test fails, the per-block deflate +
+    /// concat sequence itself is broken; if it passes, the issue
+    /// lives elsewhere (rayon ordering, ZIP64 LFH, or memory).
+    ///
+    /// 64 MiB / 1 MiB blocks = 64 blocks. Picks a payload size large
+    /// enough that LZ77 sliding-window references would cross every
+    /// block boundary in a normal single-stream deflate, but small
+    /// enough that the test runs in seconds.
+    #[test]
+    fn pigz_deflate_block_concat_inflates_to_original_64mib() {
+        let payload = make_compressible_payload(64 * 1024 * 1024);
+        let blocks: Vec<&[u8]> = payload.chunks(PIGZ_BLOCK_SIZE).collect();
+        let last_idx = blocks.len() - 1;
+        let mut stream: Vec<u8> = Vec::with_capacity(payload.len() / 2);
+        for (idx, block) in blocks.iter().enumerate() {
+            let is_final = idx == last_idx;
+            let compressed = deflate_block_raw(block, 5, is_final).unwrap();
+            stream.extend_from_slice(&compressed);
+        }
+
+        // Inflate concat stream — raw deflate, no zlib wrapper.
+        let mut decompressor = libdeflater::Decompressor::new();
+        let mut decoded = vec![0u8; payload.len()];
+        let n = decompressor
+            .deflate_decompress(&stream, &mut decoded)
+            .expect("inflate of pigz concat must succeed");
+        assert_eq!(n, payload.len(), "inflated length mismatch");
+        decoded.truncate(n);
+        assert_eq!(
+            decoded, payload,
+            "pigz concat inflates to corrupted output — Z_SYNC_FLUSH chain broken"
+        );
+    }
+
+    /// Same as above, but uses the highest-distance-pressure pattern
+    /// we can build: a 1 KiB repeating byte sequence. Every 1 MiB
+    /// block past the first should be saturated with back-references
+    /// to offset 1024 — exactly the case where Z_SYNC_FLUSH-without-
+    /// dictionary-reset semantics would corrupt because the inflater's
+    /// sliding window crosses block boundaries while the deflater's
+    /// fresh-Compress-instance dictionary does not. If pigz path is
+    /// going to break, this is the test that catches it earliest.
+    #[test]
+    fn pigz_deflate_block_concat_distance_pressure_inflates_clean() {
+        let pattern: Vec<u8> = (0..1024u32).map(|i| (i % 251) as u8).collect();
+        let copies = 32 * 1024; // 32 MiB total
+        let mut payload = Vec::with_capacity(pattern.len() * copies);
+        for _ in 0..copies {
+            payload.extend_from_slice(&pattern);
+        }
+        let blocks: Vec<&[u8]> = payload.chunks(PIGZ_BLOCK_SIZE).collect();
+        let last_idx = blocks.len() - 1;
+        let mut stream: Vec<u8> = Vec::new();
+        for (idx, block) in blocks.iter().enumerate() {
+            let compressed = deflate_block_raw(block, 5, idx == last_idx).unwrap();
+            stream.extend_from_slice(&compressed);
+        }
+        let mut decompressor = libdeflater::Decompressor::new();
+        let mut decoded = vec![0u8; payload.len()];
+        let n = decompressor
+            .deflate_decompress(&stream, &mut decoded)
+            .expect("distance-pressure inflate must succeed");
+        decoded.truncate(n);
+        assert_eq!(
+            decoded.len(), payload.len(),
+            "distance-pressure length mismatch"
+        );
+        assert_eq!(
+            decoded, payload,
+            "pigz distance-pressure stream decompressed to wrong bytes"
+        );
+    }
+
+    /// PE-binary-like mixed-entropy payload — Mode A reproducer.
+    ///
+    /// The 2026-05-15 sprint discovered that the previous
+    /// `make_compressible_payload` LCG fixture passed `deflate_block_raw`
+    /// concat tests cleanly EVEN WHEN the Sync-trailer flush sentinel
+    /// was buggy, because LCG noise compresses uniformly per block and
+    /// the first `compress_vec` call always fit input + trailer in
+    /// the reserved 1 MiB+64 capacity. Real Windows installer payloads
+    /// (PE/COFF + LZMA-packed resource section + ICO trailers) have
+    /// high-entropy middle blocks whose compressed size hovers AT
+    /// `input.len()`, exhausting capacity and forcing the encoder
+    /// into the Z_BUF_ERROR → reserve → re-call path, where Mode A's
+    /// "break on first `Ok` after in_consumed reaches input.len()"
+    /// fired before the encoder emitted the `00 00 ff ff` aligner.
+    ///
+    /// Fixture: 12 MiB total — 1 MiB low-entropy header + 10 MiB
+    /// high-entropy body + 1 MiB low-entropy trailer. Twelve 1 MiB
+    /// pigz blocks. Body bytes come from a SplitMix64 PRNG (good
+    /// statistical entropy) so deflate has nothing to compress AND
+    /// the encoder must emit a stored block + Sync trailer that
+    /// doesn't fit in the 64-byte default reserve.
+    ///
+    /// Inflater: `libdeflater::Decompressor` (strict — flate2's
+    /// inflater is lenient and lets Mode A's truncated streams pass).
+    /// This is exactly the inflater the user's strict reader
+    /// (Bandizip / zip-rs) uses internally.
+    #[test]
+    fn pigz_deflate_block_mixed_entropy_pe_like_inflates_clean() {
+        // Section 1 — 1 MiB low entropy (PE header pattern).
+        let mut payload = Vec::with_capacity(12 * 1024 * 1024);
+        for i in 0..(1024 * 1024usize) {
+            payload.push(if i % 32 < 8 { (i & 0xFF) as u8 } else { 0x00 });
+        }
+        // Section 2 — 10 MiB high-entropy SplitMix64 body. Every byte
+        // is statistically independent; deflate's LZ77 finds zero
+        // matches; output ratio ≈ 1.005 (stored blocks + 5-byte
+        // headers); capacity overflow guaranteed.
+        let mut state: u64 = 0xDEAD_BEEF_C0DE_BABE;
+        for _ in 0..(10 * 1024 * 1024usize) {
+            state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            payload.push(z as u8);
+        }
+        // Section 3 — 1 MiB low entropy trailer (ICO / signature
+        // section pattern).
+        for i in 0..(1024 * 1024usize) {
+            payload.push(if i % 64 < 4 { 0xCC } else { 0x00 });
+        }
+        assert_eq!(payload.len(), 12 * 1024 * 1024);
+
+        let blocks: Vec<&[u8]> = payload.chunks(PIGZ_BLOCK_SIZE).collect();
+        let last_idx = blocks.len() - 1;
+        let mut stream: Vec<u8> = Vec::with_capacity(payload.len() + 4096);
+        for (idx, block) in blocks.iter().enumerate() {
+            let compressed = deflate_block_raw(block, 5, idx == last_idx)
+                .expect("deflate_block_raw must succeed");
+            // Sanity: every non-final block must end with the Sync
+            // aligner `00 00 ff ff`. If `deflate_block_raw` regresses
+            // to Mode A's break-on-first-Ok, blocks 1+ (high-entropy
+            // body) will end with random compressed bytes instead.
+            if idx != last_idx {
+                let n = compressed.len();
+                assert!(n >= 4, "block {idx} too short to carry Sync trailer");
+                assert_eq!(
+                    &compressed[n - 4..],
+                    &[0x00, 0x00, 0xff, 0xff],
+                    "block {idx} missing Sync aligner — Mode A regression"
+                );
+            }
+            stream.extend_from_slice(&compressed);
+        }
+
+        let mut decompressor = libdeflater::Decompressor::new();
+        let mut decoded = vec![0u8; payload.len()];
+        let n = decompressor
+            .deflate_decompress(&stream, &mut decoded)
+            .expect("strict inflater must accept Mode E pigz output");
+        assert_eq!(n, payload.len(), "inflated length mismatch");
+        decoded.truncate(n);
+        assert_eq!(
+            decoded, payload,
+            "PE-like mixed-entropy stream inflates to wrong bytes — \
+             Z_SYNC_FLUSH trailer was truncated on a high-entropy block"
+        );
+    }
+
+    /// 1.5 GiB pigz round-trip — crosses every meaningful scale
+    /// gate: block count ≈ 1500 (rayon scheduling stress test),
+    /// total payload past the libdeflater-oneshot threshold, and
+    /// — critically — past the 1 GiB tier of the smart-store
+    /// probe so the dispatch landing on this path is realistic.
+    /// Still stays under u32::MAX so the ZIP64 boundary stays
+    /// separate (covered by the next test).
+    ///
+    /// Memory cost: ~3 GiB peak (payload + deflated). Gated on
+    /// `OTTERZIP_LONG_TESTS=1` so it doesn't burn 30+ seconds on
+    /// every default `cargo test`. The bug we're hunting only
+    /// shows past the GB scale, so this test only earns its keep
+    /// when run as part of the pigz-corruption sprint or a
+    /// pre-release manual gate.
+    #[test]
+    fn pigz_parallel_1_5_gib_round_trips() {
+        if std::env::var("OTTERZIP_LONG_TESTS").unwrap_or_default() != "1" {
+            eprintln!(
+                "pigz_parallel_1_5_gib_round_trips: skipping (set OTTERZIP_LONG_TESTS=1 to run)"
+            );
+            return;
+        }
+        let size: usize = 1_500 * 1024 * 1024;
+        let payload = make_compressible_payload(size);
+        let td = tempdir().unwrap();
+        let src = td.path().join("pigz_1_5_gib.bin");
+        fs::write(&src, &payload).unwrap();
+
+        let archive_path = td.path().join("pigz_1_5_gib.zip");
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .unwrap();
+        {
+            let mut w = ZipFileWriter::create(
+                &archive_path,
+                WriterOptions {
+                    compression: Compression::Deflate { level: 5 },
+                },
+            )
+            .unwrap();
+            w.add_entry_pigz_parallel("pigz_1_5_gib.bin", &src, &pool, &mut |_| Ok(()))
+                .unwrap();
+            w.finish().unwrap();
+        }
+
+        // Strict zip-rs round-trip — the same reader Bandizip /
+        // 7-Zip use a derivative of. If the GB-scale corruption the
+        // user reported lives inside the pigz path itself (rather
+        // than ZIP64 escalation), this is the test that catches it.
+        let f = fs::File::open(&archive_path).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::BufReader::new(f)).unwrap();
+        assert_eq!(zip.len(), 1);
+        let mut zf = zip.by_index(0).unwrap();
+        let mut got = Vec::with_capacity(payload.len());
+        use std::io::Read as _;
+        zf.read_to_end(&mut got).unwrap();
+        assert_eq!(got.len(), payload.len(), "1.5 GiB size mismatch");
+        assert!(
+            got == payload,
+            "1.5 GiB pigz path produced corrupted bytes"
+        );
+    }
+
+    /// ZIP64 boundary pigz test. The user's reproducer has a 3.58 GB
+    /// Setup.exe that escalates to ZIP64 because uncompressed >
+    /// u32::MAX. We can't comfortably synthesise 4.1 GiB of
+    /// compressible payload in a unit test (16 GiB peak memory),
+    /// so we instead use a 4.5 GiB stored fixture by pre-filling
+    /// the writer with a dummy entry whose payload pushes
+    /// `lfh_offset` past u32::MAX before the pigz call. That
+    /// forces the ZIP64 LFH/CDFH branch in `add_entry_pigz_parallel`
+    /// without needing a 4 GiB compressible Vec.
+    ///
+    /// Gated on `OTTERZIP_LONG_TESTS=1`. 4.5 GiB on disk + ~256 MiB
+    /// Vec = workstation-scale, not CI-scale.
+    #[test]
+    fn pigz_parallel_zip64_boundary_round_trips() {
+        if std::env::var("OTTERZIP_LONG_TESTS").unwrap_or_default() != "1" {
+            eprintln!(
+                "pigz_parallel_zip64_boundary_round_trips: skipping (set OTTERZIP_LONG_TESTS=1 to run)"
+            );
+            return;
+        }
+        let td = tempdir().unwrap();
+        let archive_path = td.path().join("pigz_zip64.zip");
+
+        // Stage 1: dummy entry that pushes the writer's byte cursor
+        // past u32::MAX. We write a 4.2 GiB sequence of zero bytes
+        // through the stored path so total elapsed time is bounded
+        // by disk-write speed (NVMe ≈ 2-5 GB/s → < 2 s for 4.2 GiB).
+        let dummy = td.path().join("dummy_padding.bin");
+        let padding_size: u64 = (u32::MAX as u64) + (64 * 1024 * 1024); // 4 GiB + 64 MiB
+        {
+            let f = fs::File::create(&dummy).unwrap();
+            f.set_len(padding_size).unwrap();
+        }
+
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .unwrap();
+
+        // Smaller pigz entry — 64 MiB is plenty to exercise the
+        // multi-block code path with ZIP64-escalated LFH offsets.
+        let pigz_payload = make_compressible_payload(64 * 1024 * 1024);
+        let pigz_src = td.path().join("pigz_zip64_payload.bin");
+        fs::write(&pigz_src, &pigz_payload).unwrap();
+
+        {
+            let mut w = ZipFileWriter::create(
+                &archive_path,
+                WriterOptions {
+                    compression: Compression::Deflate { level: 5 },
+                },
+            )
+            .unwrap();
+            // Push cursor past u32::MAX via a stored sparse file.
+            // `add_entry` with size_hint forces method 0 (Stored)
+            // when the writer config is Deflate, but only if the
+            // smart-store-extension check fires. Easier path:
+            // override the writer's compression to Stored for the
+            // padding then back to Deflate. The public API doesn't
+            // expose that toggle, so the simplest hack is to stage
+            // the test fixture as a writer with Compression::Stored
+            // for the padding and then re-open with Deflate for
+            // the pigz call. But ZipFileWriter doesn't support
+            // re-open; we'd corrupt the EOCD.
+            //
+            // Cleaner: synthesise a stored entry by directly
+            // injecting into the writer's `add_entry` stored path.
+            // The writer dispatches to Stored when its option is
+            // Stored *or* when smart-store decides to. We just
+            // configure the writer as Stored from the start and
+            // verify that pigz with mixed compression options still
+            // produces a valid archive — that mirrors the user's
+            // real reproducer where Setup.exe sits next to other
+            // entries.
+            //
+            // Simpler still: write the padding entry first with a
+            // fresh Stored-configured writer, finish, then open a
+            // *second* archive. That doesn't cover the same byte
+            // cursor scenario though.
+            //
+            // The ZIP64 dimension we actually want to exercise is
+            // `lfh_offset > u32::MAX`. To do that inside one
+            // writer the compression option needs to allow stored
+            // for the padding. Use Compression::Stored for the
+            // entire archive — pigz's deflate-only branch will
+            // return `add_entry_streaming` fallback which isn't
+            // what we want.
+            //
+            // Workaround: bypass the public API and stage the LFH
+            // cursor manually. This is test-only code so reaching
+            // through `pub(crate)` internals is fine.
+            //
+            // Strategy: Compression::Deflate writer, use add_entry
+            // for the padding (it'll deflate the zero bytes — very
+            // fast since flate2's level 5 collapses zeros to
+            // ~64 bytes of output), then add_entry_pigz_parallel
+            // for the real test entry. lfh_offset for the second
+            // entry = LFH+CDFH overhead + ~64 bytes ≈ < 1 KiB,
+            // *not* past u32::MAX. So that doesn't work.
+            //
+            // Final workable plan: write the padding bytes
+            // directly to `w.inner` and bump `w.cursor` to match.
+            // That's test infrastructure abuse, but it's the only
+            // way to make `lfh_offset > u32::MAX` testable without
+            // burning 4 GiB of compressible Vec.
+            use std::io::Write;
+            let chunk = vec![0u8; 16 * 1024 * 1024];
+            let mut written: u64 = 0;
+            while written < padding_size {
+                let to_write = std::cmp::min(chunk.len() as u64, padding_size - written);
+                w.inner
+                    .write_all(&chunk[..to_write as usize])
+                    .unwrap();
+                written += to_write;
+            }
+            w.cursor += padding_size;
+            assert!(w.cursor > u32::MAX as u64, "padding didn't escalate cursor");
+
+            // Now the pigz entry lands at lfh_offset > u32::MAX,
+            // which forces the ZIP64 LFH branch in
+            // add_entry_pigz_parallel. This is the exact path the
+            // user's reproducer hits.
+            w.add_entry_pigz_parallel(
+                "pigz_zip64.bin",
+                &pigz_src,
+                &pool,
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+            w.finish().unwrap();
+        }
+
+        // The padding bytes we wrote weren't a valid LFH, so the
+        // archive will have garbage where the first entry's local
+        // header should be. zip-rs's ZipArchive::new reads the
+        // EOCD (at the end) first, then validates CDFH entries.
+        // We only added the pigz entry's CDFH, so zip.len() == 1
+        // and zip.by_index(0) seeks to the pigz LFH past the
+        // padding. If ZIP64 offsets in the CDFH are written
+        // correctly, the read succeeds.
+        let f = fs::File::open(&archive_path).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::BufReader::new(f)).unwrap();
+        assert_eq!(zip.len(), 1);
+        let mut zf = zip.by_index(0).unwrap();
+        assert_eq!(zf.name(), "pigz_zip64.bin");
+        let mut got = Vec::with_capacity(pigz_payload.len());
+        use std::io::Read as _;
+        zf.read_to_end(&mut got).unwrap();
+        assert_eq!(got.len(), pigz_payload.len(), "ZIP64-pigz size mismatch");
+        assert!(
+            got == pigz_payload,
+            "ZIP64-pigz produced corrupted bytes — LFH/CDFH ZIP64 escalation bug"
+        );
     }
 
     #[test]
