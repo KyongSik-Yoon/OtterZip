@@ -14,6 +14,12 @@
         <com:Class Id="44444444-2222-3333-4444-555555555555"
                    Path="OtterZip.Shell.dll"
                    ThreadingModel="STA" />
+        <com:Class Id="55555555-2222-3333-4444-555555555555"
+                   Path="OtterZip.Shell.dll"
+                   ThreadingModel="STA" />
+        <com:Class Id="66666666-2222-3333-4444-555555555555"
+                   Path="OtterZip.Shell.dll"
+                   ThreadingModel="STA" />
       </com:SurrogateServer>
     </com:ComServer>
   </com:Extension>
@@ -22,6 +28,11 @@
                   Category="windows.fileExplorerContextMenus">
     <uap3:FileExplorerContextMenus>
       <uap3:ItemType Type="*">
+        <!-- Bandizip-style direct format-specific quick verbs. -->
+        <uap3:Verb Id="OtterzipCompressZip"
+                   Clsid="55555555-2222-3333-4444-555555555555" />
+        <uap3:Verb Id="OtterzipCompress7z"
+                   Clsid="66666666-2222-3333-4444-555555555555" />
         <uap3:Verb Id="OtterzipCompress"
                    Clsid="44444444-2222-3333-4444-555555555555" />
       </uap3:ItemType>

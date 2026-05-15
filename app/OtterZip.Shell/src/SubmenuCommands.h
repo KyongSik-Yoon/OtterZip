@@ -18,7 +18,39 @@
 namespace OtterZip::Shell
 {
     // Compress submenu child — always visible inside the parent submenu.
+    // Wraps the "OtterZip으로 압축..." dialog flow.
     struct SubmenuCompressCommand : winrt::implements<SubmenuCompressCommand, IExplorerCommand>
+    {
+        IFACEMETHODIMP GetTitle(IShellItemArray* items, LPWSTR* ppszName) noexcept override;
+        IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept override;
+        IFACEMETHODIMP GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept override;
+        IFACEMETHODIMP GetCanonicalName(GUID* pguidCommandName) noexcept override;
+        IFACEMETHODIMP GetState(IShellItemArray*, BOOL, EXPCMDSTATE* pCmdState) noexcept override;
+        IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx*) noexcept override;
+        IFACEMETHODIMP GetFlags(EXPCMDFLAGS* pFlags) noexcept override;
+        IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** ppEnum) noexcept override;
+    };
+
+    // Bandizip-style direct ZIP quick-compress, inside the nested
+    // submenu. Same Invoke routing as the top-level
+    // CompressZipQuickCommand but always-visible (no flat/nested
+    // gate) — the parent menu's own gate has already fired.
+    struct SubmenuCompressZipCommand : winrt::implements<SubmenuCompressZipCommand, IExplorerCommand>
+    {
+        IFACEMETHODIMP GetTitle(IShellItemArray* items, LPWSTR* ppszName) noexcept override;
+        IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept override;
+        IFACEMETHODIMP GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept override;
+        IFACEMETHODIMP GetCanonicalName(GUID* pguidCommandName) noexcept override;
+        IFACEMETHODIMP GetState(IShellItemArray*, BOOL, EXPCMDSTATE* pCmdState) noexcept override;
+        IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx*) noexcept override;
+        IFACEMETHODIMP GetFlags(EXPCMDFLAGS* pFlags) noexcept override;
+        IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** ppEnum) noexcept override;
+    };
+
+    // Bandizip-style direct 7z quick-compress, inside the nested
+    // submenu. Same Invoke routing as the top-level
+    // CompressSevenZQuickCommand.
+    struct SubmenuCompressSevenZCommand : winrt::implements<SubmenuCompressSevenZCommand, IExplorerCommand>
     {
         IFACEMETHODIMP GetTitle(IShellItemArray* items, LPWSTR* ppszName) noexcept override;
         IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept override;
@@ -56,7 +88,12 @@ namespace OtterZip::Shell
         IFACEMETHODIMP Clone(IEnumExplorerCommand** ppenum) noexcept override;
 
     private:
-        ULONG m_index = 0;       // 0 = Compress, 1 = Extract, 2+ = end
-        static constexpr ULONG kCount = 2;
+        // Submenu order matches the top-level flat layout:
+        //   0 = ZIP quick   ("<name>.zip으로 압축")
+        //   1 = 7z quick    ("<name>.7z으로 압축")
+        //   2 = Compress... ("OtterZip으로 압축…")
+        //   3 = Extract here (visible only on archive selections)
+        ULONG m_index = 0;
+        static constexpr ULONG kCount = 4;
     };
 }

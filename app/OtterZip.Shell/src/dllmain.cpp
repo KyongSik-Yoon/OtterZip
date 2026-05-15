@@ -17,6 +17,7 @@
 #include "CompressCommand.h"
 #include "ExtractHereCommand.h"
 #include "OtterzipMenuCommand.h"
+#include "QuickCompressCommands.h"
 
 #include <windows.h>
 #include <unknwn.h>
@@ -151,6 +152,28 @@ extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPV
         try
         {
             auto factory = winrt::make<ClassFactory<OtterzipMenuCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(CompressZipQuickCommand))
+    {
+        // Bandizip-style direct ZIP quick-compress verb.
+        try
+        {
+            auto factory = winrt::make<ClassFactory<CompressZipQuickCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(CompressSevenZQuickCommand))
+    {
+        // Bandizip-style direct 7z quick-compress verb.
+        try
+        {
+            auto factory = winrt::make<ClassFactory<CompressSevenZQuickCommand>>();
             return factory->QueryInterface(riid, ppv);
         }
         catch (winrt::hresult_error const& e) { return e.code(); }

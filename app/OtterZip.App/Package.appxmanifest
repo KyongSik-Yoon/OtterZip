@@ -384,21 +384,31 @@
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="OtterZip Shell Extension">
+              <!-- 22…: ExtractHereCommand
+                   44…: CompressCommand (the legacy dialog-flow verb,
+                                        now relabelled "OtterZip으로
+                                        압축…(&O)" — opens MainWindow)
+                   33…: OtterzipMenuCommand (parent submenu, nested
+                                            mode only)
+                   55…: CompressZipQuickCommand   (Bandizip-style direct
+                                                  ".zip으로 압축(&Z)")
+                   66…: CompressSevenZQuickCommand (".7z으로 압축(&7)")
+                   New 55/66 CLSIDs are registered for the same DLL —
+                   one factory per verb because IExplorerCommand carries
+                   the verb identity in the canonical name. -->
               <com:Class Id="22222222-2222-3333-4444-555555555555"
                          Path="OtterZip.Shell.dll"
                          ThreadingModel="STA" />
               <com:Class Id="44444444-2222-3333-4444-555555555555"
                          Path="OtterZip.Shell.dll"
                          ThreadingModel="STA" />
-              <!--
-                Phase 9 nested-menu wiring: third class object surfaces
-                the "OtterZip" parent verb (OtterzipMenuCommand) that
-                hosts a Compress / Extract submenu when
-                Settings_ShellMenuMode == "nested" (default). Implemented
-                in OtterzipMenuCommand.cpp; submenu children live in
-                SubmenuCommands.cpp.
-              -->
               <com:Class Id="33333333-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+              <com:Class Id="55555555-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+              <com:Class Id="66666666-2222-3333-4444-555555555555"
                          Path="OtterZip.Shell.dll"
                          ThreadingModel="STA" />
             </com:SurrogateServer>
@@ -417,6 +427,16 @@
         <desktop4:Extension Category="windows.fileExplorerContextMenus">
           <desktop4:FileExplorerContextMenus>
             <desktop4:ItemType Type="*">
+              <!--
+                Bandizip-style direct format-specific quick verbs
+                (commit 6 of the quick-compress sprint). Both hide
+                themselves when Settings_ShellMenuMode == "nested" so
+                the layouts never double-render with OtterzipMenu.
+              -->
+              <desktop4:Verb Id="OtterzipCompressZip"
+                             Clsid="55555555-2222-3333-4444-555555555555" />
+              <desktop4:Verb Id="OtterzipCompress7z"
+                             Clsid="66666666-2222-3333-4444-555555555555" />
               <desktop4:Verb Id="OtterzipCompress"
                              Clsid="44444444-2222-3333-4444-555555555555" />
               <!--

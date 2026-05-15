@@ -76,12 +76,14 @@
     <ClCompile Include="src\SubmenuCommands.cpp" />
     <ClCompile Include="src\ShellInvoke.cpp" />
     <ClCompile Include="src\ShellSettings.cpp" />
+    <ClCompile Include="src\QuickCompressCommands.cpp" />
     <ClInclude Include="src\ExtractHereCommand.h" />
     <ClInclude Include="src\CompressCommand.h" />
     <ClInclude Include="src\OtterzipMenuCommand.h" />
     <ClInclude Include="src\SubmenuCommands.h" />
     <ClInclude Include="src\ShellInvoke.h" />
     <ClInclude Include="src\ShellSettings.h" />
+    <ClInclude Include="src\QuickCompressCommands.h" />
     <None Include="OtterZip.Shell.def" />
     <None Include="Package.Shell.appxmanifest.fragment.xml" />
   </ItemGroup>

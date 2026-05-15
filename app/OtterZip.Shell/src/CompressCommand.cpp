@@ -13,7 +13,12 @@ namespace OtterZip::Shell
 {
     IFACEMETHODIMP CompressCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName) noexcept
     {
-        return SHStrDupW(L"Compress with OtterZip", ppszName);
+        // Generic "dialog-flow" compress verb. Bandizip-style direct
+        // format-specific entries (.zip / .7z) live in
+        // QuickCompressCommands; this one keeps the trailing ellipsis
+        // + the OtterZip brand label so users know it opens the full
+        // MainWindow with the format dropdown.
+        return SHStrDupW(L"OtterZip으로 압축...(&O)", ppszName);
     }
 
     IFACEMETHODIMP CompressCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
