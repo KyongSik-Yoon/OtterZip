@@ -1954,94 +1954,29 @@ public sealed partial class MainWindow : Window
     /// always-prompt dialog → none. Returns null when no password applies
     /// or when the user cancelled the always-prompt.
     /// </summary>
-    private async Task<string?> ResolveCompressPasswordAsync()
+    private Task<string?> ResolveCompressPasswordAsync()
     {
-        // 1. The main window's ConfigPanel password takes precedence —
-        //    it represents what the user just typed on the surface they
-        //    drove the compress from.
-        string fromPanel = ConfigPanel.Password ?? string.Empty;
-        if (!string.IsNullOrEmpty(fromPanel))
-        {
-            return fromPanel;
-        }
-
-        // 2. Settings: stored default applied automatically (via vault
-        //    + optional Hello gate).
-        string? stored = await ResolveStoredDefaultPasswordAsync(
-            "Settings_DefaultPasswordOnCompress",
-            _strings.GetString("Auth_ReasonCompress/Text")).ConfigureAwait(true);
-        if (!string.IsNullOrEmpty(stored))
-        {
-            return stored;
-        }
-
-        // 3. Settings: prompt every time. Returns null if user cancels —
-        //    caller distinguishes cancel from "no password" by checking
-        //    the Settings_AlwaysPromptPassword toggle.
-        if (SettingsService.Get<bool>("Settings_AlwaysPromptPassword", false))
-        {
-            return await PromptPasswordAsync(_strings.GetString("PasswordDialog_PlaceholderArchiveLabel/Text"))
-                .ConfigureAwait(true);
-        }
-
-        return null;
+        // Precedence + Hello gating now live in
+        // Services/PasswordResolver so the headless ProgressDialog
+        // flow can run the same logic without reaching into
+        // MainWindow's ConfigPanel.
+        return PasswordResolver.ResolveCompressAsync(
+            panelPassword: ConfigPanel.Password,
+            authReason: _strings.GetString("Auth_ReasonCompress/Text"),
+            promptArchiveLabel: _strings.GetString("PasswordDialog_PlaceholderArchiveLabel/Text"),
+            prompter: PromptPasswordAsync);
     }
 
     /// <summary>
-    /// PR-7C: shared "fetch stored default password if the per-flow
-    /// auto-apply toggle is on" helper. Reads the credential out of
-    /// <see cref="CredentialStore"/>; when
-    /// <c>Settings_AuthBeforeUseDefaultPassword</c> is on, gates the
-    /// release of that credential behind a Windows Hello prompt. Returns
-    /// null when the toggle is off, no credential exists, or the user
-    /// fails the Hello check.
-    /// </summary>
-    /// <summary>
-    /// Pre-fill source for the inline ExtractPanel password field.
-    /// Returns the stored default password ONLY when the silent-extract
-    /// path didn't already try it — otherwise the panel would suggest a
-    /// known-wrong value. Honours the Hello-gate by leaving the field
-    /// empty when the user opted to require auth before each use.
+    /// Thin wrapper preserving the existing call sites
+    /// (`ResolveExtractPanelPrefill(isEncrypted)`) while the body now
+    /// lives in <see cref="PasswordResolver.ResolveExtractPanelPrefill"/>.
     /// </summary>
     private static string? ResolveExtractPanelPrefill(bool isEncrypted)
-    {
-        if (!isEncrypted) return null;
-        // If auto-try is on the silent path already consumed (and
-        // rejected) the stored default — pre-filling is pointless.
-        if (SettingsService.Get<bool>("Settings_DefaultPasswordOnExtract", false))
-        {
-            return null;
-        }
-        // Hello gate: protect cleartext display by skipping pre-fill.
-        if (SettingsService.Get<bool>("Settings_AuthBeforeUseDefaultPassword", false))
-        {
-            return null;
-        }
-        string stored = CredentialStore.Get();
-        return string.IsNullOrEmpty(stored) ? null : stored;
-    }
+        => PasswordResolver.ResolveExtractPanelPrefill(isEncrypted);
 
-    private static async Task<string?> ResolveStoredDefaultPasswordAsync(string toggleKey, string authReason)
-    {
-        if (!SettingsService.Get<bool>(toggleKey, false))
-        {
-            return null;
-        }
-        string stored = CredentialStore.Get();
-        if (string.IsNullOrEmpty(stored))
-        {
-            return null;
-        }
-        if (SettingsService.Get<bool>("Settings_AuthBeforeUseDefaultPassword", false))
-        {
-            bool ok = await HelloService.RequestVerificationAsync(authReason).ConfigureAwait(true);
-            if (!ok)
-            {
-                return null;
-            }
-        }
-        return stored;
-    }
+    private static Task<string?> ResolveStoredDefaultPasswordAsync(string toggleKey, string authReason)
+        => PasswordResolver.ResolveStoredDefaultAsync(toggleKey, authReason);
 
     /// <summary>
     /// Honor the <c>Settings_DeleteSourceAfterCompress</c> toggle: every
