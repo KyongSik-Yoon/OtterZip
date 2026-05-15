@@ -115,6 +115,16 @@
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>将"解压到此处"设为默认操作</value></data>
   <data name="Settings_QuickProgressAutoClose.Content"><value>快速压缩完成后自动关闭进度窗口</value></data>
 
+  <!-- ProgressDialog (Bandizip-style quick-compress modal) -->
+  <data name="ProgressDialog_TitleCompressFormat.Text"><value>正在压缩 {0}</value></data>
+  <data name="ProgressDialog_TitleDoneFormat.Text"><value>{0} 已压缩</value></data>
+  <data name="ProgressDialog_StatusReady.Text"><value>准备中…</value></data>
+  <data name="ProgressDialog_StatusSuccess.Text"><value>压缩成功。</value></data>
+  <data name="ProgressDialog_StatusCancelled.Text"><value>已取消。</value></data>
+  <data name="ProgressDialog_StatusErrorFormat.Text"><value>错误: {0}</value></data>
+  <data name="ProgressDialog_CancelButton.Content"><value>取消</value></data>
+  <data name="ProgressDialog_CloseButton.Content"><value>关闭</value></data>
+
   <!-- Section 1: General -->
   <data name="Settings_SectionGeneral.Text"><value>常规</value></data>
   <data name="Settings_LanguageLabel.Text"><value>语言</value></data>

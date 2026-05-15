@@ -115,6 +115,17 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>Flat (top-level entries)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>Nested (inside OtterZip submenu)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>Make "Extract here" the default action</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>Auto-close progress window after quick compression completes</value></data>
+
+  <!-- ProgressDialog (Bandizip-style quick-compress modal) -->
+  <data name="ProgressDialog_TitleCompressFormat.Text"><value>Compressing {0}</value></data>
+  <data name="ProgressDialog_TitleDoneFormat.Text"><value>Compressed {0}</value></data>
+  <data name="ProgressDialog_StatusReady.Text"><value>Preparing…</value></data>
+  <data name="ProgressDialog_StatusSuccess.Text"><value>Compression completed successfully.</value></data>
+  <data name="ProgressDialog_StatusCancelled.Text"><value>Cancelled.</value></data>
+  <data name="ProgressDialog_StatusErrorFormat.Text"><value>Error: {0}</value></data>
+  <data name="ProgressDialog_CancelButton.Content"><value>Cancel</value></data>
+  <data name="ProgressDialog_CloseButton.Content"><value>Close</value></data>
 
   <!-- Section 1: General -->
   <data name="Settings_SectionGeneral.Text"><value>General</value></data>

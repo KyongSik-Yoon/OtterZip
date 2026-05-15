@@ -1863,7 +1863,7 @@ public sealed partial class MainWindow : Window
     /// the public method stays under the analyzer's 60-line cap.
     /// </summary>
     private async Task RunCompressWorkAsync(
-        JobItem item, CompressPlan plan, IReadOnlyList<string> sources,
+        JobItem item, CompressEngine.CompressPlan plan, IReadOnlyList<string> sources,
         string? password, CancellationToken ct, IProgress<double> progress)
     {
         // ABI v7/v9: the native side reports byte/entry counts per
@@ -1906,24 +1906,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Best-effort cleanup for an archive that was completed natively but
-    /// the user had already cancelled. Silently swallows IO errors — the
-    /// cancellation path runs as a finalizer and shouldn't crash on file
-    /// locks or permission issues.
-    /// </summary>
     private static void TryDeletePartialArchive(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-    }
+        => CompressEngine.TryDeletePartialArchive(path);
 
     /// <summary>
     /// Marshal <paramref name="action"/> onto the window's DispatcherQueue
@@ -1982,205 +1966,22 @@ public sealed partial class MainWindow : Window
     /// Honor the <c>Settings_DeleteSourceAfterCompress</c> toggle: every
     /// source path that survived the compress moves to the Recycle Bin.
     /// Runs only after a successful compress + verify (caller-gated) so a
-    /// failure path can't inadvertently destroy the user's input.
-    /// </summary>
     private static void MaybeRecycleSources(IReadOnlyList<string> sources)
-    {
-        if (!SettingsService.Get<bool>("Settings_DeleteSourceAfterCompress", false))
-        {
-            return;
-        }
-        foreach (var src in sources)
-        {
-            // Best-effort — a failure here is logged elsewhere and never
-            // aborts the user-visible "compress done" message.
-            _ = Win32Helper.MoveToRecycleBin(src);
-        }
-    }
+        => CompressEngine.MaybeRecycleSources(sources);
 
-    /// <summary>
-    /// Honor the <c>Settings_VerifyAfterCompress</c> toggle: re-open the
-    /// just-written archive and CRC32-verify every entry. Throws when any
-    /// entry is corrupted — the caller's outer try/catch surfaces the
-    /// failure as a normal error toast.
-    /// </summary>
-    private static async Task MaybeVerifyAsync(string archivePath, CancellationToken ct)
-    {
-        if (!SettingsService.Get<bool>("Settings_VerifyAfterCompress", false))
-        {
-            return;
-        }
-        // NOTE: this runs inside JobQueue.Submit's work delegate, which
-        // executes on a thread-pool task. Touching StatusText (or any
-        // XAML element) from here would raise RPC_E_WRONG_THREAD and the
-        // queue would mark the job as Error even though the archive was
-        // written successfully. The verifying-state caption is shown on
-        // the JobCard via StatusText updates from the queue itself; this
-        // helper just gates on the setting and runs the actual CRC scan.
-        using var archive = Archive.Open(archivePath);
-        var report = await archive.TestAsync(ct).ConfigureAwait(false);
-        if (!report.IsHealthy)
-        {
-            throw new InvalidDataException(
-                $"Verification failed: {report.EntriesCorrupted}/{report.EntriesTested} entries corrupted");
-        }
-    }
+    private static Task MaybeVerifyAsync(string archivePath, CancellationToken ct)
+        => CompressEngine.MaybeVerifyAsync(archivePath, ct);
 
-    private CompressPlan PlanCompress(IReadOnlyList<string> sources)
-    {
-        // Stem + parent-dir + collision-safe path resolution all live in
-        // Services/OutputNamer so the ProgressDialog quick-compress flow
-        // can reuse identical behaviour without reaching into
-        // MainWindow.
-        bool useParent = SettingsService.Get<bool>("Settings_UseParentFolderName", true);
-        string stem = OutputNamer.DeriveStem(sources, useParent);
-
-        // PR-7B: filename template overrides the default stem when set.
-        string template = SettingsService.Get<string>("Settings_FilenameTemplate", "");
-        if (!string.IsNullOrWhiteSpace(template))
-        {
-            string firstParent = Path.GetDirectoryName(sources[0]) ?? "";
-            stem = OutputNamer.ApplyFilenameTemplate(template, stem, firstParent, sources.Count);
-        }
-
-        // Phase 6+ rev 5: method index lives in Settings (Compression
-        // tab) since the slider was moved off the main panel.
-        int methodIndex = Math.Clamp(
-            SettingsService.Get<int>("Settings_DefaultMethodIndex", 2), 0, 3);
-        var (fmt, method, ext) = MapFormatAndMethod(ConfigPanel.SelectedFormat, methodIndex);
-        byte level = MapMethodIndexToLevel(methodIndex);
-
-        string saveLoc = SettingsService.Get<string>("Settings_SaveLocation", "same");
-        string customDir = SettingsService.Get<string>("Settings_SaveLocationPath", "");
-        string destination = OutputNamer.Compose(sources, stem, ext, saveLoc, customDir);
-
-        return new CompressPlan(
-            Destination: destination,
-            Format: fmt,
-            Method: method,
-            Level: level);
-    }
-
-    /// <summary>
-    /// Maps ConfigPanel.SelectedFormat + 4-step MethodIndex onto the
-    /// (ArchiveFormat, CompressionMethod, file extension) triple the
-    /// native ArchiveBuilder takes.
-    ///
-    /// MethodIndex 0 (Store) selects the Stored / Copy method regardless
-    /// of format; otherwise the format's natural compression method is
-    /// used and Level encodes Fast / Normal / Best.
-    /// </summary>
-    private static (ArchiveFormat fmt, CompressionMethod method, string ext) MapFormatAndMethod(
-        string formatTag, int methodIndex)
-    {
-        bool store = methodIndex == 0;
-        return formatTag switch
-        {
-            "7z" => (ArchiveFormat.SevenZ,
-                     store ? CompressionMethod.Store : CompressionMethod.Lzma2,
-                     ".7z"),
-            "tar" => (ArchiveFormat.Tar, CompressionMethod.Store, ".tar"),
-            "tar.gz" => (ArchiveFormat.TarGz,
-                         store ? CompressionMethod.Store : CompressionMethod.Deflate,
-                         ".tar.gz"),
-            "tar.bz2" => (ArchiveFormat.TarBz2,
-                          store ? CompressionMethod.Store : CompressionMethod.Bzip2,
-                          ".tar.bz2"),
-            "tar.xz" => (ArchiveFormat.TarXz,
-                         store ? CompressionMethod.Store : CompressionMethod.Lzma2,
-                         ".tar.xz"),
-            // PR-F7 -- single-stream .xz writer (Phase 7+ option Y).
-            // Method choice is informational here; the XZ writer
-            // always uses LZMA2 internally.
-            "xz" => (ArchiveFormat.Xz,
-                     store ? CompressionMethod.Store : CompressionMethod.Lzma2,
-                     ".xz"),
-            // PR-F7 -- ZIPX writer with Bzip2 method (the de-facto
-            // baseline; LZMA write is not supported by zip 2.x).
-            "zipx" => (ArchiveFormat.Zipx,
-                       store ? CompressionMethod.Store : CompressionMethod.Bzip2,
-                       ".zipx"),
-            _ => (ArchiveFormat.Zip,
-                  store ? CompressionMethod.Store : CompressionMethod.Deflate,
-                  ".zip"),
-        };
-    }
-
-    /// <summary>4-step UI → 1..9 backend level. Store(0) is irrelevant when method is Stored.
-    /// idx=2 ("Normal", the default) maps to level 3 — same as Bandizip's
-    /// "Fast Drag and Drop" preset which is the wall-clock the user
-    /// measures against. Level 5 sits behind a "best of fast" choice and
-    /// level 9 stays the explicit maximum-compression option for users
-    /// who prioritise size over speed.</summary>
-    private static byte MapMethodIndexToLevel(int methodIndex) => methodIndex switch
-    {
-        0 => 1,
-        1 => 1,
-        2 => 3,
-        3 => 9,
-        _ => 3,
-    };
+    private CompressEngine.CompressPlan PlanCompress(IReadOnlyList<string> sources)
+        => CompressEngine.BuildPlan(sources, ConfigPanel.SelectedFormat);
 
     private static Task<ArchiveBuildReport> RunCompressAsync(
-        CompressPlan plan,
+        CompressEngine.CompressPlan plan,
         IReadOnlyList<string> sources,
         string? password,
         IProgress<ProgressUpdate>? progress,
         CancellationToken ct)
-    {
-        // Settings toggles read once at the start of a compress job, so
-        // changing them mid-flight doesn't leak into an in-progress task.
-        bool excludeMeta = SettingsService.Get<bool>("Settings_ExcludeSystemMetadata", true);
-
-        if (sources.Count == 1 && Directory.Exists(sources[0]))
-        {
-            // ABI v7 path: native reports bytes_processed / entries_processed
-            // per file and honours mid-write cancellation.
-            return ArchiveBuilder.CreateFromDirectoryAsync(
-                plan.Destination, sources[0], plan.Format, plan.Method,
-                plan.Level, progress: progress,
-                excludeSystemMetadata: excludeMeta,
-                password: password,
-                cancellationToken: ct);
-        }
-        // CompressMixedSources doesn't currently expose a progress hook
-        // through the per-entry ArchiveBuilder API — the card stays
-        // indeterminate for the mixed-file path until that's plumbed.
-        return Task.Run(() => CompressMixedSources(plan, sources, excludeMeta, password, ct), ct);
-    }
-
-    private static ArchiveBuildReport CompressMixedSources(
-        CompressPlan plan,
-        IReadOnlyList<string> sources,
-        bool excludeSystemMetadata,
-        string? password,
-        CancellationToken ct)
-    {
-        using var builder = ArchiveBuilder.Create(
-            plan.Destination, plan.Format, plan.Method, plan.Level,
-            solid: false,
-            excludeSystemMetadata: excludeSystemMetadata,
-            password: password);
-        foreach (string src in sources)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (Directory.Exists(src))
-            {
-                builder.AddDirectory(src, Path.GetFileName(src));
-            }
-            else
-            {
-                builder.AddFile(src, Path.GetFileName(src));
-            }
-        }
-        builder.Commit();
-        ulong size = 0;
-        try { size = (ulong)new FileInfo(plan.Destination).Length; }
-        catch (IOException) { }
-        return new ArchiveBuildReport { BytesWritten = size };
-    }
-
-    private sealed record CompressPlan(string Destination, ArchiveFormat Format, CompressionMethod Method, byte Level);
+        => CompressEngine.RunAsync(plan, sources, password, progress, ct);
 
     /// <summary>
     /// Pick the archive name stem from a single source path. Directories

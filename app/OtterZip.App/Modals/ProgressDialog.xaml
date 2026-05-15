@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bandizip-style standalone quick-compress progress modal.
+
+  Net new in commit 5 of the quick-compress sprint. Hosts a single
+  compress JobItem with progress bar + status text + a single action
+  button that flips role (Cancel during work, Close after settle).
+
+  Sizing: 460×220 dev pixels (Keka-ish compact). Resizing disabled so
+  the window doesn't fight the user's screen-anchor expectations the
+  way an arbitrary-resize compress modal would.
+
+  Brushes: all via {ThemeResource ...} per CLAUDE.md §0.5; no hardcoded
+  hex. Strings: x:Uid for button labels, programmatic GetString() for
+  the Title format (archive basename interpolated).
+-->
+<Window
+    x:Class="OtterZip.App.Modals.ProgressDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0"
+                    Padding="24,24,24,16"
+                    Spacing="14">
+
+            <!-- Archive name + format. Set in code-behind from the
+                 destination filename; falls back to a placeholder
+                 before BuildPlan resolves. -->
+            <TextBlock x:Name="ArchiveNameText"
+                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                       TextTrimming="CharacterEllipsis" />
+
+            <!-- Determinate while a percent is known; indeterminate
+                 before the first tick and on the mixed-source path
+                 (which has no entry-level progress ABI yet). -->
+            <ProgressBar x:Name="OverallBar"
+                         IsIndeterminate="True"
+                         Maximum="100"
+                         Height="6" />
+
+            <!-- Status line: "Preparing…" → percent → terminal message
+                 (success / cancelled / error). Bound from code-behind. -->
+            <TextBlock x:Name="StatusText"
+                       x:Uid="ProgressDialog_StatusReady"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Action bar — one button whose role flips on settle.
+             Cancel: requests JobItem cancellation + cleanup
+             Close:  shuts the window (process exits when last). -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Padding="0,0,24,20"
+                    Spacing="8">
+            <Button x:Name="ActionButton"
+                    x:Uid="ProgressDialog_CancelButton"
+                    Click="OnActionButtonClick"
+                    MinWidth="96" />
+        </StackPanel>
+    </Grid>
+</Window>

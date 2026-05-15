@@ -101,6 +101,16 @@
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>"Hier entpacken" als Standardaktion festlegen</value></data>
   <data name="Settings_QuickProgressAutoClose.Content"><value>Fortschrittsfenster nach Abschluss der Schnellkomprimierung automatisch schließen</value></data>
 
+  <!-- ProgressDialog (Bandizip-style quick-compress modal) -->
+  <data name="ProgressDialog_TitleCompressFormat.Text"><value>Komprimiere {0}</value></data>
+  <data name="ProgressDialog_TitleDoneFormat.Text"><value>{0} komprimiert</value></data>
+  <data name="ProgressDialog_StatusReady.Text"><value>Wird vorbereitet…</value></data>
+  <data name="ProgressDialog_StatusSuccess.Text"><value>Komprimierung erfolgreich abgeschlossen.</value></data>
+  <data name="ProgressDialog_StatusCancelled.Text"><value>Abgebrochen.</value></data>
+  <data name="ProgressDialog_StatusErrorFormat.Text"><value>Fehler: {0}</value></data>
+  <data name="ProgressDialog_CancelButton.Content"><value>Abbrechen</value></data>
+  <data name="ProgressDialog_CloseButton.Content"><value>Schließen</value></data>
+
   <data name="Settings_SectionGeneral.Text"><value>Allgemein</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Sprache</value></data>
   <data name="Settings_LanguageSystem.Content"><value>System folgen</value></data>

@@ -101,6 +101,16 @@
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>Tornar "Extrair aqui" a ação padrão</value></data>
   <data name="Settings_QuickProgressAutoClose.Content"><value>Fechar a janela de progresso automaticamente após a compactação rápida</value></data>
 
+  <!-- ProgressDialog (Bandizip-style quick-compress modal) -->
+  <data name="ProgressDialog_TitleCompressFormat.Text"><value>Compactando {0}</value></data>
+  <data name="ProgressDialog_TitleDoneFormat.Text"><value>{0} compactado</value></data>
+  <data name="ProgressDialog_StatusReady.Text"><value>Preparando…</value></data>
+  <data name="ProgressDialog_StatusSuccess.Text"><value>Compactação concluída com sucesso.</value></data>
+  <data name="ProgressDialog_StatusCancelled.Text"><value>Cancelado.</value></data>
+  <data name="ProgressDialog_StatusErrorFormat.Text"><value>Erro: {0}</value></data>
+  <data name="ProgressDialog_CancelButton.Content"><value>Cancelar</value></data>
+  <data name="ProgressDialog_CloseButton.Content"><value>Fechar</value></data>
+
   <data name="Settings_SectionGeneral.Text"><value>Geral</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Idioma</value></data>
   <data name="Settings_LanguageSystem.Content"><value>Seguir o sistema</value></data>
