@@ -99,6 +99,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>Flach (oberste Ebene)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>Verschachtelt (im OtterZip-Untermenü)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>"Hier entpacken" als Standardaktion festlegen</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>Fortschrittsfenster nach Abschluss der Schnellkomprimierung automatisch schließen</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Allgemein</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Sprache</value></data>

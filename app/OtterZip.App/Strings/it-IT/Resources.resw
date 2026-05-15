@@ -99,6 +99,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>Piatto (voci di primo livello)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>Annidato (nel sottomenu OtterZip)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>Imposta "Estrai qui" come azione predefinita</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>Chiudi automaticamente la finestra di avanzamento dopo la compressione rapida</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Generale</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Lingua</value></data>

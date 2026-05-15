@@ -99,6 +99,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>Plano (entradas no nível superior)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>Aninhado (dentro do submenu OtterZip)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>Tornar "Extrair aqui" a ação padrão</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>Fechar a janela de progresso automaticamente após a compactação rápida</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Geral</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Idioma</value></data>

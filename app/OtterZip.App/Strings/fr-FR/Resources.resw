@@ -99,6 +99,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>Plat (entrées de premier niveau)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>Imbriqué (dans le sous-menu OtterZip)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>Définir « Extraire ici » comme action par défaut</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>Fermer automatiquement la fenêtre de progression après la compression rapide</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Général</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Langue</value></data>

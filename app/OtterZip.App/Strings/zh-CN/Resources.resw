@@ -113,6 +113,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>扁平（顶级菜单）</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>嵌套（OtterZip 子菜单内）</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>将"解压到此处"设为默认操作</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>快速压缩完成后自动关闭进度窗口</value></data>
 
   <!-- Section 1: General -->
   <data name="Settings_SectionGeneral.Text"><value>常规</value></data>

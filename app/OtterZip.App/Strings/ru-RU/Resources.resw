@@ -99,6 +99,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>Плоский (верхний уровень)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>Вложенный (внутри подменю OtterZip)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>Сделать «Извлечь сюда» действием по умолчанию</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>Автоматически закрывать окно прогресса после быстрого сжатия</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Общие</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Язык</value></data>

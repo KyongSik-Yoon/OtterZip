@@ -60,6 +60,18 @@
                       Checked="OnToggle"
                       Unchecked="OnToggle"
                       Tag="Settings_ShellExtractHereAsDefault" />
+
+            <!-- Quick-compress progress dialog auto-close. Default off:
+                 Bandizip / 7-Zip / WinRAR all leave the progress window
+                 open after success so the user can see the elapsed time
+                 and click 닫기 at their leisure. Power users who fire
+                 dozens of quick-compress per hour opt in here. -->
+            <CheckBox x:Name="QuickProgressAutoCloseCheck"
+                      x:Uid="Settings_QuickProgressAutoClose"
+                      MinHeight="0"
+                      Checked="OnToggle"
+                      Unchecked="OnToggle"
+                      Tag="Settings_QuickProgressAutoClose" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

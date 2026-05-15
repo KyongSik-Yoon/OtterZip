@@ -17,8 +17,9 @@ public sealed partial class IntegrationSettingsSection : UserControl
         InitializeComponent();
         Loaded += (_, _) =>
         {
-            ShellMenuEnabledCheck.IsChecked    = SettingsService.Get<bool>("Settings_ShellMenuEnabled", true);
-            ExtractHereDefaultCheck.IsChecked  = SettingsService.Get<bool>("Settings_ShellExtractHereAsDefault", true);
+            ShellMenuEnabledCheck.IsChecked       = SettingsService.Get<bool>("Settings_ShellMenuEnabled", true);
+            ExtractHereDefaultCheck.IsChecked     = SettingsService.Get<bool>("Settings_ShellExtractHereAsDefault", true);
+            QuickProgressAutoCloseCheck.IsChecked = SettingsService.Get<bool>("Settings_QuickProgressAutoClose", false);
             string mode = SettingsService.Get<string>("Settings_ShellMenuMode", "nested");
             ShellMenuModeRadios.SelectedIndex =
                 string.Equals(mode, "flat", StringComparison.Ordinal) ? 0 : 1;

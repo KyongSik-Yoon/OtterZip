@@ -99,6 +99,7 @@
   <data name="Settings_ShellMenuModeFlat.Content"><value>フラット (トップレベル項目)</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>ネスト (OtterZip サブメニュー内)</value></data>
   <data name="Settings_ShellExtractHereAsDefault.Content"><value>「ここに解凍」を既定の動作にする</value></data>
+  <data name="Settings_QuickProgressAutoClose.Content"><value>クイック圧縮完了後に進行ウィンドウを自動的に閉じる</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>全般</value></data>
   <data name="Settings_LanguageLabel.Text"><value>言語</value></data>
