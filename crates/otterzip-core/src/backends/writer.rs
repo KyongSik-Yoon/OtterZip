@@ -789,28 +789,32 @@ impl ArchiveWriter for ZipWriterBackend {
                 }
                 Ok(())
             };
-            // Pigz-pattern per-block parallel deflate path is
-            // currently DISABLED — the in-memory implementation
-            // shipped in `ea224bf` was producing archives that
-            // Bandizip / strict zip-rs flagged as "압축 데이터가
-            // 손상되었습니다" on every large entry, both the
-            // deflate path (Setup.exe / MYGRAM Setup.exe) and the
-            // smart-stored fallback (MUP3.zip / SetupME.exe). The
-            // smart-stored fallback's separate corruption was
-            // root-caused to a method-vs-encoder dispatch bug in
-            // `add_entry_streaming` (now fixed); the pigz path's
-            // own corruption needs a dedicated reproducer + fix
-            // sprint (suspects: Z_SYNC_FLUSH stream-concat
-            // semantics across new Compress instances, BufWriter
-            // get_mut() + seek interaction, or rayon par_iter()
-            // ordering invariants at large block counts).
-            //
-            // Until that sprint lands, large entries flow through
-            // the proven serial-streaming path. Wall-clock regresses
-            // from ~1 min 23 s back toward ~3-4 min on the user's
-            // 9.5 GB corpus, but archives stay byte-correct — a
-            // hard prerequisite for any speed claim.
-            if let Err(e) = writer.add_entry_streaming(name, path, &mut on_tick) {
+            // Pigz path gated behind `OTTERZIP_PIGZ=1` for the
+            // current release. Background: the 2026-05-13 sprint
+            // re-enabled it on top of `pigz_parallel_*` /
+            // `pigz_deflate_block_concat_*` unit tests, the user
+            // immediately reproduced the 4-entry corruption set
+            // (COMMON/GRAMCHAT/Setup.exe, COMMON/MEI/MUP3.zip,
+            // COMMON/MEI/SetupME.exe, COMMON/MYGRAM/Setup.exe), and
+            // the path was reverted in `7953f49`. 2026-05-15
+            // `diagnose_pigz` on a 149 MiB VSCode installer
+            // pinpointed the root cause as a Sync-flush-completion
+            // sentinel bug in `deflate_block_raw` (now fixed) plus a
+            // missing smart-store gate (now added). Env flag bounds
+            // the blast radius for one release cycle — if a fourth
+            // failure mode surfaces we flip the var off without a
+            // revert commit. Remove the flag once a clean release
+            // ships against the full user corpus.
+            let use_pigz = std::env::var("OTTERZIP_PIGZ")
+                .ok()
+                .as_deref()
+                == Some("1");
+            let large_result = if use_pigz {
+                writer.add_entry_pigz_parallel(name, path, &pool, &mut on_tick)
+            } else {
+                writer.add_entry_streaming(name, path, &mut on_tick)
+            };
+            if let Err(e) = large_result {
                 return Some(Err(e));
             }
             entries_done += 1;
