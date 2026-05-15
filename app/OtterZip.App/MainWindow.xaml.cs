@@ -1838,10 +1838,22 @@ public sealed partial class MainWindow : Window
             // height stays stable on chunked-rayon workloads.
             bool hasEntryProgress = p.CurrentEntryBytesTotal > 0;
             double entryFrac = p.CurrentEntryFraction;
+            // Surface the current entry filename when the native side
+            // supplies it. The writer fills `CurrentEntry` on
+            // entry-complete ticks (small-pipeline ordered drain) and
+            // every 1 MiB tick (large-streaming path), then leaves it
+            // null on the in-flight forecast ticks — we preserve the
+            // last non-null name across nulls so the row doesn't
+            // strobe between visible and collapsed at 30 Hz.
+            string? entryName = p.CurrentEntry;
             DispatcherQueue.TryEnqueue(() =>
             {
                 item.CurrentEntryProgress = entryFrac;
                 item.CurrentEntryProgressVisible = hasEntryProgress;
+                if (!string.IsNullOrEmpty(entryName))
+                {
+                    item.CurrentEntryName = entryName;
+                }
             });
         });
     }
@@ -2081,46 +2093,19 @@ public sealed partial class MainWindow : Window
 
     private CompressPlan PlanCompress(IReadOnlyList<string> sources)
     {
-        string firstSource = sources[0];
-        string parentDir = Path.GetDirectoryName(firstSource) ?? Directory.GetCurrentDirectory();
-
-        // Phase 6+ rev 3: Settings_UseParentFolderName decides the stem for
-        // multi-file compress. Default ON — matches Keka's "use parent folder
-        // name when compressing multiple files". OFF falls back to first
-        // source name. For folder sources we use the full folder name —
-        // GetFileNameWithoutExtension would treat a dotted folder like
-        // "Maru.App_1.0.1.0_x64_Test" as having a ".0_x64_Test" extension
-        // and strip it, leaving a wrong stem.
+        // Stem + parent-dir + collision-safe path resolution all live in
+        // Services/OutputNamer so the ProgressDialog quick-compress flow
+        // can reuse identical behaviour without reaching into
+        // MainWindow.
         bool useParent = SettingsService.Get<bool>("Settings_UseParentFolderName", true);
-        string stem = sources.Count == 1
-            ? SourceStem(firstSource)
-            : useParent
-                ? Path.GetFileName(parentDir)
-                : SourceStem(firstSource);
-        if (string.IsNullOrWhiteSpace(stem))
-        {
-            stem = "archive";
-        }
+        string stem = OutputNamer.DeriveStem(sources, useParent);
 
         // PR-7B: filename template overrides the default stem when set.
-        // Tokens: {name}/{date}/{time}/{count}/{parent}. Empty template
-        // means "use the rule above unchanged".
         string template = SettingsService.Get<string>("Settings_FilenameTemplate", "");
         if (!string.IsNullOrWhiteSpace(template))
         {
-            stem = ApplyFilenameTemplate(template, stem, parentDir, sources.Count);
-        }
-
-        // Settings_SaveLocation: "same" (sibling of source) or "custom"
-        // (configured folder). Custom path empty → graceful fall back.
-        string saveLoc = SettingsService.Get<string>("Settings_SaveLocation", "same");
-        if (string.Equals(saveLoc, "custom", StringComparison.Ordinal))
-        {
-            string customDir = SettingsService.Get<string>("Settings_SaveLocationPath", "");
-            if (!string.IsNullOrWhiteSpace(customDir) && Directory.Exists(customDir))
-            {
-                parentDir = customDir;
-            }
+            string firstParent = Path.GetDirectoryName(sources[0]) ?? "";
+            stem = OutputNamer.ApplyFilenameTemplate(template, stem, firstParent, sources.Count);
         }
 
         // Phase 6+ rev 5: method index lives in Settings (Compression
@@ -2130,53 +2115,15 @@ public sealed partial class MainWindow : Window
         var (fmt, method, ext) = MapFormatAndMethod(ConfigPanel.SelectedFormat, methodIndex);
         byte level = MapMethodIndexToLevel(methodIndex);
 
-        string destination = EnsureUniqueDestination(Path.Combine(parentDir, $"{stem}{ext}"));
+        string saveLoc = SettingsService.Get<string>("Settings_SaveLocation", "same");
+        string customDir = SettingsService.Get<string>("Settings_SaveLocationPath", "");
+        string destination = OutputNamer.Compose(sources, stem, ext, saveLoc, customDir);
+
         return new CompressPlan(
             Destination: destination,
             Format: fmt,
             Method: method,
             Level: level);
-    }
-
-    /// <summary>
-    /// Avoid silently overwriting an existing archive. Mirrors Windows
-    /// Explorer's "Copy" behaviour: if "foo.zip" exists, return
-    /// "foo (1).zip"; if that exists too, "foo (2).zip"; and so on.
-    /// Handles dotted extensions like ".tar.gz" / ".tar.bz2" / ".tar.xz"
-    /// as a unit so the suffix lands between the stem and the whole
-    /// extension, not between ".tar" and ".gz".
-    ///
-    /// Race note: ConcurrentLimit=1 makes the File.Exists / write pair
-    /// sequential per process. With a higher limit two parallel jobs
-    /// could pick the same unused index — fine for now, revisit if the
-    /// concurrency option is raised by default.
-    /// </summary>
-    private static string EnsureUniqueDestination(string path)
-    {
-        if (!File.Exists(path)) return path;
-        string dir = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
-        string nameOnly = Path.GetFileNameWithoutExtension(path);
-        string ext = Path.GetExtension(path);
-        // Stitch back compound .tar.* extensions so the numeric suffix
-        // doesn't split them.
-        if (nameOnly.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)
-            && (string.Equals(ext, ".gz", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".bz2", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".xz", StringComparison.OrdinalIgnoreCase)))
-        {
-            nameOnly = Path.GetFileNameWithoutExtension(nameOnly);
-            ext = ".tar" + ext;
-        }
-        for (int i = 1; i < 10000; i++)
-        {
-            string candidate = Path.Combine(dir, string.Format(
-                CultureInfo.InvariantCulture, "{0} ({1}){2}", nameOnly, i, ext));
-            if (!File.Exists(candidate)) return candidate;
-        }
-        // Pathological fallback — millions of duplicates. Stamp with a
-        // timestamp rather than blowing the loop.
-        return Path.Combine(dir, string.Format(CultureInfo.InvariantCulture,
-            "{0} ({1:yyyyMMddHHmmss}){2}", nameOnly, DateTime.Now, ext));
     }
 
     /// <summary>
@@ -2303,46 +2250,6 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Pick the archive name stem from a single source path. Directories
     /// keep their full name (dots are part of the folder name, not an
-    /// extension); files strip the extension as usual.
-    /// </summary>
-    private static string SourceStem(string source)
-    {
-        if (Directory.Exists(source))
-        {
-            string trimmed = source.TrimEnd(
-                Path.DirectorySeparatorChar,
-                Path.AltDirectorySeparatorChar);
-            return Path.GetFileName(trimmed);
-        }
-        return Path.GetFileNameWithoutExtension(source);
-    }
-
-    /// <summary>
-    /// PR-7B: substitute filename template tokens. Sanitises the result
-    /// against Windows-illegal characters so the user can't accidentally
-    /// produce a path that File.Create rejects.
-    /// </summary>
-    private static string ApplyFilenameTemplate(string template, string name, string parentDir, int count)
-    {
-        var now = DateTime.Now;
-        string parent = string.IsNullOrEmpty(parentDir) ? "" : Path.GetFileName(parentDir);
-        string result = template
-            .Replace("{name}", name, StringComparison.Ordinal)
-            .Replace("{date}", now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), StringComparison.Ordinal)
-            .Replace("{time}", now.ToString("HHmm", CultureInfo.InvariantCulture), StringComparison.Ordinal)
-            .Replace("{count}", count.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
-            .Replace("{parent}", parent, StringComparison.Ordinal);
-
-        // Strip Windows-illegal filename chars after substitution so a
-        // {parent} containing a colon (impossible normally) or a manually
-        // typed `*` doesn't break Path.Combine.
-        foreach (char invalid in Path.GetInvalidFileNameChars())
-        {
-            result = result.Replace(invalid.ToString(), "", StringComparison.Ordinal);
-        }
-        return string.IsNullOrWhiteSpace(result) ? name : result;
-    }
-
     // ============================================================
     //  Formatting helpers
     // ============================================================
