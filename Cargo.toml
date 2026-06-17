@@ -79,9 +79,17 @@ sys-locale   = "0.3"
 # self-contained ZIP writer to populate LFH/CDFH per-entry CRC.
 crc32fast    = "1"
 
+# --- CLI (otterzip-cli binary only; anyhow allowed in binaries per
+#     CONVENTIONS §1.3 — the library-side thiserror rule does not apply) ---
+clap     = { version = "4", features = ["derive", "wrap_help"] }
+anyhow   = "1"
+tempfile = "3"
+
 # --- dev ---
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest  = "1"
+assert_cmd = "2"
+predicates = "3"
 
 [profile.release]
 opt-level = 3
