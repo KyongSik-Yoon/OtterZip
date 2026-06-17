@@ -4,12 +4,13 @@
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
   xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 uap10 mp com desktop4 desktop5 rescap">
+  IgnorableNamespaces="uap uap3 uap5 uap10 mp com desktop4 desktop5 rescap">
 
   <!--
     Partner Center reservation (LumiBear Studio account):
@@ -29,7 +30,7 @@
   -->
   <Identity Name="LumiBearStudio.OtterZip"
             Publisher="CN=A55D3041-E7F5-46CB-8707-AD9C81D7CB43"
-            Version="0.21.8.0" />
+            Version="0.22.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000"
                     PhonePublisherId="00000000-0000-0000-0000-000000000000" />
@@ -867,6 +868,55 @@
         </desktop4:Extension>
       </Extensions>
 
+    </Application>
+
+    <!--
+      Public CLI surface. A SECOND Application element whose Executable
+      is the bundled console binary `otterzip-cli.exe` (staged by the
+      IncludeOtterZipCliInPackage csproj Target — named -cli to avoid a
+      case-insensitive payload clash with the GUI host OtterZip.exe).
+      The windows.appExecutionAlias extension registers `otterzip.exe`
+      as a reparse-point stub in %LOCALAPPDATA%\Microsoft\WindowsApps
+      (on the default user PATH), so a NEW terminal resolves
+      `otterzip ...` to this binary.
+
+        * uap10:Subsystem="console" keeps stdio attached when launched
+          by name (a Rust binary is console-subsystem by default —
+          matches). It REQUIRES uap10:SupportsMultipleInstances="true".
+        * NO EntryPoint: with uap10:RuntimeBehavior="win32App" MakeAppx
+          rejects an explicit EntryPoint ("must not declare EntryPoint")
+          — same shape as the GUI App element above.
+        * Same uap10:TrustLevel mediumIL + RuntimeBehavior win32App pair
+          as the GUI App element (the proven, shell-surrogate-safe combo).
+        * AppListEntry="none" keeps it out of the Start menu — it's a
+          command, not a launchable app.
+
+      ⚠ Adding/altering <Application> elements has destabilised the shell
+      verb surrogate before (v0.16-18). After building, unpack the .msix
+      and confirm BOTH Application elements + this alias survived the
+      packaging tool's manifest rewrite, and re-verify the right-click
+      verbs still appear. If the shell breaks, reverting this element
+      alone restores it without touching the CLI binary.
+    -->
+    <Application Id="OtterZipCli"
+                 Executable="otterzip-cli.exe"
+                 uap10:TrustLevel="mediumIL"
+                 uap10:RuntimeBehavior="win32App"
+                 uap10:Subsystem="console"
+                 uap10:SupportsMultipleInstances="true">
+      <uap:VisualElements DisplayName="OtterZip CLI"
+                          Description="OtterZip command-line tool"
+                          BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Square150x150Logo.png"
+                          Square44x44Logo="Assets\Square44x44Logo.png"
+                          AppListEntry="none" />
+      <Extensions>
+        <uap5:Extension Category="windows.appExecutionAlias">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="otterzip.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
+      </Extensions>
     </Application>
   </Applications>
 

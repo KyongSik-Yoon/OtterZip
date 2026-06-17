@@ -8,11 +8,13 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-# Artifact is `otterzip.exe` (not `otterzip-cli.exe`) so it maps 1:1 to
-# the MSIX AppExecutionAlias `otterzip.exe` — no rename step at package
-# time. The crate name stays `otterzip-cli`.
+# Artifact is `otterzip-cli.exe`. It can NOT be `otterzip.exe` because
+# the WinUI host exe is `OtterZip.exe` and the MSIX payload is
+# case-insensitive (APPX1101 collision). The user-facing `otterzip`
+# command comes from the MSIX AppExecutionAlias `otterzip.exe`, which
+# points at this binary regardless of its on-disk name.
 [[bin]]
-name = "otterzip"
+name = "otterzip-cli"
 path = "src/main.rs"
 
 [dependencies]

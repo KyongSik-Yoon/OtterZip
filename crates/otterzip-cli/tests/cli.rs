@@ -11,7 +11,7 @@ use std::fs;
 use tempfile::tempdir;
 
 fn otterzip() -> Command {
-    Command::cargo_bin("otterzip").expect("otterzip binary built")
+    Command::cargo_bin("otterzip-cli").expect("otterzip-cli binary built")
 }
 
 #[test]
