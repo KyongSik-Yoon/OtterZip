@@ -23,20 +23,16 @@ namespace OtterZip.App.Modals;
 /// <list type="number">
 ///   <item>Constructor receives the <see cref="InvokeRequest"/>, sizes
 ///   the window, resolves the destination + plan, and submits the
-///   compress job. Activate() is called by App.OnLaunched (we don't
-///   self-activate so the caller controls timing).</item>
+///   compress job. Activate() is called by App.OnLaunched.</item>
 ///   <item>Progress ticks marshal onto the dispatcher and update the
 ///   <see cref="ProgressBar"/> + status text.</item>
-///   <item>On <see cref="JobQueue.JobSettled"/>: flip the action button
-///   to "Close" (x:Uid swap) and — when
-///   <c>Settings_QuickProgressAutoClose</c> is on — start a 2 s timer
-///   that closes the window.</item>
+///   <item>On <see cref="JobQueue.JobSettled"/>: render the settle UI
+///   (status glyph, summary line, action button flip, optional
+///   auto-close timer).</item>
 ///   <item>If the user closes the window mid-flight, the
-///   <see cref="AppWindow.Closing"/> handler cancels (e.Cancel=true),
-///   asks the job to stop, and waits up to 5 s for the partial-archive
-///   cleanup to run before letting the window close. Without this gate
-///   the process tears down before <see cref="CompressEngine.TryDeletePartialArchive"/>
-///   gets a chance and the partial <c>.zip</c> is orphaned.</item>
+///   <see cref="AppWindow.Closing"/> handler cancels, asks the job to
+///   stop, and waits up to 5 s for the partial-archive cleanup to run
+///   before letting the window close.</item>
 /// </list>
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage(
@@ -53,6 +49,7 @@ public sealed partial class ProgressDialog : Window
     private bool _settled;
     private bool _closeRequested;
     private TaskCompletionSource<bool>? _settlementWait;
+    private readonly System.Diagnostics.Stopwatch _stopwatch = new();
 
     internal ProgressDialog(InvokeRequest request)
     {
@@ -64,16 +61,11 @@ public sealed partial class ProgressDialog : Window
         _jobQueue = new JobQueue(_dispatcher, concurrentLimit: 1);
         _jobQueue.JobSettled += OnJobSettled;
 
-        // 460×220 dev pixels, fixed. Matches MainWindow / SettingsWindow's
-        // approach of locking compact-modal dimensions so the user can't
-        // accidentally drag-resize the bar into 4-pixel-tall obscurity.
-        TrySizeWindow(460, 220);
-
-        // Hook AppWindow.Closing so the user can't X-out mid-write
-        // without giving the cancel + partial-cleanup path a chance.
+        // 500×260 dev pixels. Sized to fit mascot header + status row
+        // + two-button action bar without crowding.
+        TrySizeWindow(500, 260);
+        _stopwatch.Start();
         AppWindow.Closing += OnAppWindowClosing;
-
-        // Kick off the work — placeholder UI until the first tick.
         _ = StartCompressAsync();
     }
 
@@ -81,12 +73,9 @@ public sealed partial class ProgressDialog : Window
     {
         try
         {
-            // The Settings_DefaultFormat persistence stores the
-            // human-visible tag ("ZIP", "7Z", "TAR.GZ"); CompressEngine
-            // expects the lower-case form used by its switch ("zip" /
-            // "7z" / "tar.gz"). MapFormatAndMethod's _default arm picks
-            // up unknown tags as ZIP, so an unmapped value here still
-            // produces a working ZIP archive — just paste-safe.
+            // Settings_DefaultFormat is stored as the UI tag ("ZIP",
+            // "7Z", "TAR.GZ"); CompressEngine takes lowercase. Unknown
+            // tags fall back to ZIP via the engine's _default arm.
             string? quickFormat = _request.QuickFormat;
             string defaultTag = SettingsService.Get<string>("Settings_DefaultFormat", "ZIP");
             string fallbackFormat = string.Equals(defaultTag, "7Z", StringComparison.OrdinalIgnoreCase) ? "7z"
@@ -112,8 +101,6 @@ public sealed partial class ProgressDialog : Window
                 prompter: PromptPasswordAsync).ConfigureAwait(true);
             if (password is null && SettingsService.Get<bool>("Settings_AlwaysPromptPassword", false))
             {
-                // User backed out of the prompt — close immediately
-                // (no archive written, nothing to clean up).
                 Close();
                 return;
             }
@@ -122,7 +109,6 @@ public sealed partial class ProgressDialog : Window
             var item = new JobItem(JobKind.Compress, basename);
             _jobItem = item;
             item.PropertyChanged += OnJobItemPropertyChanged;
-
             _jobQueue.Submit(item, (ct, progress) =>
                 RunWorkAsync(item, plan, sources, password, ct, progress));
         }
@@ -192,57 +178,146 @@ public sealed partial class ProgressDialog : Window
     {
         if (_jobItem is null || !ReferenceEquals(item, _jobItem)) return;
         _settled = true;
+        _stopwatch.Stop();
         _settlementWait?.TrySetResult(true);
-        _dispatcher.TryEnqueue(() =>
+        _dispatcher.TryEnqueue(() => RenderSettledUi(item));
+    }
+
+    // Settle-time UI mutation. Pulled out of OnJobSettled so each step
+    // (glyph, status, title, auto-close timer) stays under the
+    // analyzer's 60-line cap.
+    private void RenderSettledUi(JobItem item)
+    {
+        OverallBar.IsIndeterminate = false;
+        OverallBar.Value = item.Progress * 100.0;
+        ApplyStatusGlyph(item);
+        StatusText.Text = ComposeStatusMessage(item);
+        if (!string.IsNullOrEmpty(_destinationPath))
         {
-            OverallBar.IsIndeterminate = false;
-            OverallBar.Value = item.Progress * 100.0;
-            string statusKey = item.State switch
+            string basename = Path.GetFileName(_destinationPath);
+            Title = string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("ProgressDialog_TitleDoneFormat/Text"), basename);
+        }
+        SwitchActionToClose();
+        if (item.State == JobState.Done)
+        {
+            OpenFolderButton.Visibility = Visibility.Visible;
+            MaybeStartAutoCloseTimer();
+        }
+    }
+
+    // Segoe Fluent Icons codepoints (Done=CheckMark, Cancelled=Cancel,
+    // Error=Warning) stored as escape sequences so the source file
+    // stays portable across editors that mishandle private-use chars.
+    private static string ApplyStatusGlyphCore_GetGlyph(JobState state) => state switch
+    {
+        JobState.Done => "",
+        JobState.Cancelled => "",
+        JobState.Error => "",
+        _ => "",
+    };
+
+    private static string ApplyStatusGlyphCore_GetBrushKey(JobState state) => state switch
+    {
+        JobState.Done => "SystemFillColorSuccessBrush",
+        JobState.Cancelled => "TextFillColorSecondaryBrush",
+        JobState.Error => "SystemFillColorCriticalBrush",
+        _ => "TextFillColorPrimaryBrush",
+    };
+
+    private void ApplyStatusGlyph(JobItem item)
+    {
+        StatusGlyph.Glyph = ApplyStatusGlyphCore_GetGlyph(item.State);
+        StatusGlyph.Foreground = (Microsoft.UI.Xaml.Media.Brush)
+            Application.Current.Resources[ApplyStatusGlyphCore_GetBrushKey(item.State)];
+        StatusGlyph.Visibility = Visibility.Visible;
+    }
+
+    private string ComposeStatusMessage(JobItem item)
+    {
+        string baseMessage = item.State switch
+        {
+            JobState.Done => _strings.GetString("ProgressDialog_StatusSuccess/Text"),
+            JobState.Cancelled => _strings.GetString("ProgressDialog_StatusCancelled/Text"),
+            JobState.Error => string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("ProgressDialog_StatusErrorFormat/Text"),
+                item.StatusText ?? string.Empty),
+            _ => string.Empty,
+        };
+        if (item.State == JobState.Done && !string.IsNullOrEmpty(_destinationPath))
+        {
+            try
             {
-                JobState.Done => "ProgressDialog_StatusSuccess/Text",
-                JobState.Cancelled => "ProgressDialog_StatusCancelled/Text",
-                _ => "ProgressDialog_StatusSuccess/Text", // Error path falls through; ErrorMessage shown below.
+                var info = new FileInfo(_destinationPath);
+                string size = FormatByteSize((ulong)info.Length);
+                string elapsed = FormatElapsed(_stopwatch.Elapsed);
+                return $"{baseMessage}  ·  {size}  ·  {elapsed}";
+            }
+            catch (IOException) { /* file may have been moved/locked */ }
+        }
+        return baseMessage;
+    }
+
+    private void MaybeStartAutoCloseTimer()
+    {
+        if (!SettingsService.Get<bool>("Settings_QuickProgressAutoClose", false))
+        {
+            return;
+        }
+        var timer = _dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(2);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (!_closeRequested) Close();
+        };
+        timer.Start();
+    }
+
+    private void OnOpenFolderClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_destinationPath)) return;
+        try
+        {
+            // explorer.exe /select, highlights the archive in its
+            // parent folder instead of navigating into it.
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{_destinationPath}\"",
+                UseShellExecute = true,
             };
-            // Error path: JobItem carries the failure reason in
-            // StatusText (the work delegate / JobQueue sets it before
-            // MarkError fires). Fall back to a generic prefix when empty.
-            StatusText.Text = item.State == JobState.Error
-                ? string.Format(CultureInfo.CurrentCulture,
-                    _strings.GetString("ProgressDialog_StatusErrorFormat/Text"),
-                    item.StatusText ?? string.Empty)
-                : _strings.GetString(statusKey);
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception)
+        {
+            // Non-fatal — explorer failure shouldn't break the dialog.
+        }
+    }
 
-            if (!string.IsNullOrEmpty(_destinationPath))
-            {
-                string basename = Path.GetFileName(_destinationPath);
-                Title = string.Format(CultureInfo.CurrentCulture,
-                    _strings.GetString("ProgressDialog_TitleDoneFormat/Text"), basename);
-            }
-            SwitchActionToClose();
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        if (elapsed.TotalMinutes >= 1)
+        {
+            return $"{(int)elapsed.TotalMinutes}분 {elapsed.Seconds}초";
+        }
+        return $"{elapsed.TotalSeconds:0.0}초";
+    }
 
-            // Optional auto-close after 2 s. The user can still click Close
-            // during the wait — that path closes immediately.
-            if (item.State == JobState.Done
-                && SettingsService.Get<bool>("Settings_QuickProgressAutoClose", false))
-            {
-                var timer = _dispatcher.CreateTimer();
-                timer.Interval = TimeSpan.FromSeconds(2);
-                timer.IsRepeating = false;
-                timer.Tick += (_, _) =>
-                {
-                    timer.Stop();
-                    if (!_closeRequested) Close();
-                };
-                timer.Start();
-            }
-        });
+    private static string FormatByteSize(ulong bytes)
+    {
+        const ulong KB = 1024;
+        const ulong MB = KB * 1024;
+        const ulong GB = MB * 1024;
+        if (bytes >= GB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} GB", bytes / (double)GB);
+        if (bytes >= MB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} MB", bytes / (double)MB);
+        if (bytes >= KB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} KB", bytes / (double)KB);
+        return string.Format(CultureInfo.CurrentCulture, "{0} B", bytes);
     }
 
     private void SwitchActionToClose()
     {
-        // WinUI 3 doesn't re-evaluate x:Uid after Load. Set Content
-        // directly from the same .resw key the design-time x:Uid would
-        // read, so the localisation source-of-truth stays in resw.
         ActionButton.Content = _strings.GetString("ProgressDialog_CloseButton/Content");
     }
 
@@ -264,9 +339,6 @@ public sealed partial class ProgressDialog : Window
             Close();
             return;
         }
-        // Mid-work: request cancellation. The work delegate's
-        // OperationCanceledException catch runs TryDeletePartialArchive
-        // and the JobSettled handler flips us to Closed state.
         _jobItem?.RequestCancel();
         ActionButton.IsEnabled = false;
         StatusText.Text = _strings.GetString("Job_StatusCancelling/Text");
@@ -275,15 +347,10 @@ public sealed partial class ProgressDialog : Window
     private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (_settled || _closeRequested) return;
-        // Mid-flight close — gate it so the cancel cleanup runs.
         args.Cancel = true;
         _closeRequested = true;
         _settlementWait = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _jobItem?.RequestCancel();
-
-        // 5 s window for TryDeletePartialArchive + JobSettled to fire.
-        // After that we close regardless — a hung worker shouldn't pin
-        // the dialog forever.
         using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
         cts.Token.Register(() => _settlementWait?.TrySetResult(false));
         await _settlementWait.Task.ConfigureAwait(true);
@@ -319,9 +386,6 @@ public sealed partial class ProgressDialog : Window
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
-
-            // Reuse MainWindow's icon helper so the taskbar identity stays
-            // consistent across windows.
             MainWindow.TrySetWindowIcon(appWindow);
 
             uint dpi = GetDpiForWindow(hwnd);
@@ -344,24 +408,4 @@ public sealed partial class ProgressDialog : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll", ExactSpelling = true)]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
-
-    private static string FormatByteSize(ulong bytes)
-    {
-        const ulong KB = 1024;
-        const ulong MB = KB * 1024;
-        const ulong GB = MB * 1024;
-        if (bytes >= GB)
-        {
-            return string.Format(CultureInfo.CurrentCulture, "{0:0.##} GB", bytes / (double)GB);
-        }
-        if (bytes >= MB)
-        {
-            return string.Format(CultureInfo.CurrentCulture, "{0:0.##} MB", bytes / (double)MB);
-        }
-        if (bytes >= KB)
-        {
-            return string.Format(CultureInfo.CurrentCulture, "{0:0.##} KB", bytes / (double)KB);
-        }
-        return string.Format(CultureInfo.CurrentCulture, "{0} B", bytes);
-    }
 }

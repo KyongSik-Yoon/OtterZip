@@ -126,6 +126,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>Error: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>Cancel</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>Close</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>Open folder</value></data>
 
   <!-- Section 1: General -->
   <data name="Settings_SectionGeneral.Text"><value>General</value></data>
@@ -261,5 +262,27 @@
   <data name="Error_WrongPassword.Text"><value>Wrong password. Please try again.</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>Ask for destination before extracting</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>Off by default — drops extract to the configured location immediately. Hold Ctrl or Alt while dropping to ask just this once.</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>Extract here (&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>Extract this archive next to its current folder.</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>Extract here</value></data>
+  <data name="Shell_CompressDialog_Title"><value>Compress with OtterZip... (&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>Create a new archive from the selected files.</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>Compress to {0}{1} (&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>Compress selected items to a ZIP archive (no dialog).</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>Compress selected items to a 7-Zip archive (no dialog).</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — fast archive tool</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>Smart extract (&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>Auto-detect single-root layout and extract accordingly.</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>Extract to {0}\ (&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>Extract into a new folder named after the archive.</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>Extract with OtterZip...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>Open the OtterZip extract dialog (destination, overwrite, password).</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>Compress each item (&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>Create one archive per selected item, using your default format.</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>Smart-extract each (&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>Extract each to its own folder (&amp;E)</value></data>
 </root>

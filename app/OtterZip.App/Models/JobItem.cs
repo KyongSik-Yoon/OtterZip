@@ -108,6 +108,21 @@ public sealed class JobItem : INotifyPropertyChanged
         set => SetProp(ref _currentEntryProgressVisible, value);
     }
 
+    private string? _currentEntryName;
+    /// <summary>
+    /// File path of the entry the writer is currently splicing /
+    /// streaming. Surfaced as a thin TextBlock under the per-entry
+    /// bar so the user can tell which file the worker is on — the
+    /// diagnostic signal needed to identify "this specific file is
+    /// where compression slows down". `null` outside the streaming /
+    /// small-pipeline tick paths; the card row collapses then.
+    /// </summary>
+    public string? CurrentEntryName
+    {
+        get => _currentEntryName;
+        set => SetProp(ref _currentEntryName, value);
+    }
+
     private bool _isIndeterminate = true;
     /// <summary>
     /// True until the worker reports its first concrete progress fraction.

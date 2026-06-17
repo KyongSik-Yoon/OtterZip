@@ -110,6 +110,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>Fehler: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>Abbrechen</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>Schließen</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>Ordner öffnen</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Allgemein</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Sprache</value></data>
@@ -230,5 +231,27 @@
   <data name="Error_WrongPassword.Text"><value>Falsches Passwort. Bitte erneut versuchen.</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>Vor dem Extrahieren nach Ziel fragen</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>Standardmäßig aus — Drops werden sofort am konfigurierten Ort extrahiert. Strg oder Alt beim Ablegen halten, um einmalig nachzufragen.</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>Hier entpacken (&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>Dieses Archiv im aktuellen Ordner entpacken.</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>Hier entpacken</value></data>
+  <data name="Shell_CompressDialog_Title"><value>Mit OtterZip komprimieren...(&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>Aus den ausgewählten Dateien ein neues Archiv erstellen.</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>Zu {0}{1} komprimieren (&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>Ausgewählte Elemente ohne Dialog zu ZIP-Archiv komprimieren.</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>Ausgewählte Elemente ohne Dialog zu 7-Zip-Archiv komprimieren.</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — schnelles Archivierungstool</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>Intelligent entpacken (&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>Bei einzelnem Stammordner direkt entpacken, sonst neuen Ordner anlegen.</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>In {0}\ entpacken (&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>In einen neuen Ordner mit dem Archivnamen entpacken.</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>Mit OtterZip entpacken...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>OtterZip-Entpacken-Dialog öffnen (Ziel, Überschreiben, Passwort).</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>Einzeln komprimieren (&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>Pro ausgewähltem Element ein Archiv erstellen (Standardformat).</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>Jeweils intelligent entpacken (&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>Jeweils in eigenen Ordner entpacken (&amp;E)</value></data>
 </root>

@@ -124,6 +124,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>错误: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>取消</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>关闭</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>打开文件夹</value></data>
 
   <!-- Section 1: General -->
   <data name="Settings_SectionGeneral.Text"><value>常规</value></data>
@@ -258,5 +259,27 @@
   <data name="Error_WrongPassword.Text"><value>密码错误，请重试。</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>提取前询问位置</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>默认关闭 — 拖放后立即解压到配置的位置。按住 Ctrl 或 Alt 拖放可临时询问。</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>解压到当前位置(&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>将此压缩文件解压到当前文件夹。</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>解压到当前位置</value></data>
+  <data name="Shell_CompressDialog_Title"><value>用 OtterZip 压缩...(&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>用所选项目创建新的压缩文件。</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>压缩为 {0}{1}(&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>将所选项目压缩为 ZIP 文件(无对话框)。</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>将所选项目压缩为 7z 文件(无对话框)。</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — 快速压缩工具</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>智能解压(&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>若压缩包内为单一根目录则原地解压, 否则新建文件夹。</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>解压到 {0}\(&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>新建以压缩包命名的文件夹再解压。</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>用 OtterZip 解压...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>打开解压选项对话框 (目标/覆盖/密码)。</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>逐项压缩(&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>为每个所选项创建独立的压缩文件 (使用默认格式)。</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>分别智能解压(&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>分别解压到各自的文件夹(&amp;E)</value></data>
 </root>

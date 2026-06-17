@@ -167,6 +167,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>오류: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>취소</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>닫기</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>폴더 열기</value></data>
 
   <!-- Section 1: 일반 -->
   <data name="Settings_SectionGeneral.Text"><value>일반</value></data>
@@ -308,5 +309,27 @@
   <data name="Error_WrongPassword.Text"><value>암호가 올바르지 않습니다. 다시 입력해주세요.</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>추출 전 위치 묻기</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>기본 OFF — 드롭 시 설정된 위치로 즉시 추출됩니다. Ctrl 또는 Alt를 누른 채 드롭하면 그때만 임시로 위치를 묻습니다.</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>여기에 풀기(&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>이 압축 파일을 현재 폴더에 풀기.</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>여기에 풀기</value></data>
+  <data name="Shell_CompressDialog_Title"><value>OtterZip으로 압축...(&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>선택한 항목으로 새 압축 파일 만들기.</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>{0}{1}으로 압축(&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>선택한 항목을 ZIP 압축 파일로 만들기 (대화상자 없음).</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>선택한 항목을 7z 압축 파일로 만들기 (대화상자 없음).</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — 빠른 압축 도구</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>알아서 풀기(&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>압축 안에 루트 폴더가 하나면 그대로, 아니면 새 폴더에 풀기.</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>{0}\에 풀기(&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>압축파일 이름의 새 폴더를 만들어 풀기.</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>OtterZip으로 풀기...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>대상 폴더/덮어쓰기/암호 옵션 다이얼로그 열기.</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>각 항목별 압축(&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>선택한 항목마다 압축 파일 1개씩 만들기 (기본 포맷 사용).</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>각각 알아서 풀기(&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>각각 파일명 폴더에 풀기(&amp;E)</value></data>
 </root>

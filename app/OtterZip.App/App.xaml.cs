@@ -174,27 +174,76 @@ public partial class App : Application
         {
             return null;
         }
+        var (canonicalVerb, quickFormat, isHeadless) = NormalizeVerb(verb);
+        return new InvokeRequest(canonicalVerb, paths, quickFormat, isHeadless);
+    }
 
-        // Map format-specific compress verbs into the canonical
-        // `compress` verb plus a QuickFormat tag + headless flag.
-        // Recognised today: `compress-zip`, `compress-7z`. Future
-        // formats add a row here and a matching shell-extension verb.
-        string canonicalVerb = verb;
-        string? quickFormat = null;
-        bool isHeadless = false;
+    /// <summary>
+    /// Map a raw shell-extension verb string into the
+    /// <see cref="InvokeRequest"/> shape: canonical verb root + optional
+    /// quick-format tag + headless flag. Extracted from
+    /// <see cref="ParseInvokeArgs"/> to keep that method under the
+    /// MA0051 60-line cap (2026-05-19 4-context parity sprint added 4
+    /// new verbs, which pushed it over).
+    ///
+    /// <para>
+    /// Recognised verbs:
+    /// <list type="bullet">
+    /// <item><c>compress-zip</c> / <c>compress-7z</c> — collapse to
+    /// <c>compress</c> + <c>QuickFormat</c>, headless (single-archive
+    /// ProgressDialog path).</item>
+    /// <item><c>compress-individually</c> — N-archive emit. NOT headless:
+    /// the ProgressDialog builds a single CompressEngine plan, so to
+    /// produce one archive per item we must route through
+    /// MainWindow.DispatchInvokeAsync's per-path loop.</item>
+    /// <item><c>extract-smart</c> / <c>extract-to-subfolder</c> /
+    /// <c>extract-dialog</c> — all EXTRACT operations. NOT headless:
+    /// the headless ProgressDialog only knows how to compress
+    /// (CompressEngine), so an extract verb sent there would silently
+    /// COMPRESS the archive instead of unpacking it (the 2026-06-17
+    /// bug). They route through MainWindow.DispatchInvokeAsync →
+    /// ExtractAsync with the appropriate ShellExtractMode.</item>
+    /// <item>Unrecognised → returned verbatim so MainWindow dispatch
+    /// can produce a useful error.</item>
+    /// </list>
+    ///
+    /// Headless == true is reserved for verbs the standalone
+    /// ProgressDialog can fully service today, which is only the two
+    /// single-archive quick-compress verbs. Everything else needs
+    /// MainWindow's richer dispatch. v0.22's dedicated
+    /// Compress/Extract option dialogs will revisit this split.
+    /// </para>
+    /// </summary>
+    private static (string canonical, string? quickFormat, bool isHeadless) NormalizeVerb(string verb)
+    {
         if (string.Equals(verb, "compress-zip", StringComparison.OrdinalIgnoreCase))
         {
-            canonicalVerb = "compress";
-            quickFormat = "zip";
-            isHeadless = true;
+            return ("compress", "zip", true);
         }
-        else if (string.Equals(verb, "compress-7z", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(verb, "compress-7z", StringComparison.OrdinalIgnoreCase))
         {
-            canonicalVerb = "compress";
-            quickFormat = "7z";
-            isHeadless = true;
+            return ("compress", "7z", true);
         }
-
-        return new InvokeRequest(canonicalVerb, paths, quickFormat, isHeadless);
+        if (string.Equals(verb, "compress-individually", StringComparison.OrdinalIgnoreCase))
+        {
+            // NOT headless — needs the per-path N-archive loop in
+            // DispatchInvokeAsync. Headless would make a single combined
+            // archive, defeating "각 항목별 압축".
+            return ("compress-individually", null, false);
+        }
+        if (string.Equals(verb, "extract-smart", StringComparison.OrdinalIgnoreCase))
+        {
+            // NOT headless — extract, not compress. See class remarks.
+            return ("extract-smart", null, false);
+        }
+        if (string.Equals(verb, "extract-to-subfolder", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("extract-to-subfolder", null, false);
+        }
+        if (string.Equals(verb, "extract-dialog", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("extract-dialog", null, false);
+        }
+        return (verb, null, false);
     }
 }

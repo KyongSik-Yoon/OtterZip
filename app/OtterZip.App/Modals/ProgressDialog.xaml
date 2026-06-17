@@ -2,17 +2,22 @@
 <!--
   Bandizip-style standalone quick-compress progress modal.
 
-  Net new in commit 5 of the quick-compress sprint. Hosts a single
-  compress JobItem with progress bar + status text + a single action
-  button that flips role (Cancel during work, Close after settle).
+  Design v2 (2026-05-18):
+    * Mascot icon + filename header row
+    * Status FontIcon glyph (✓ / ✗ / ⚠) that swaps on settle
+    * Progress bar with smooth indeterminate→determinate transition
+    * Status caption shows percent during work, summary (size + elapsed)
+      on success
+    * Action bar: [Open folder] + [Cancel/Close]
+        — Cancel during work, Close after settle
+        — Open folder visible only on Done state
 
-  Sizing: 460×220 dev pixels (Keka-ish compact). Resizing disabled so
-  the window doesn't fight the user's screen-anchor expectations the
-  way an arbitrary-resize compress modal would.
+  Sizing: 500×260 dev pixels — slightly larger than v1 (was 460×220) to
+  fit the second button and status row comfortably.
 
   Brushes: all via {ThemeResource ...} per CLAUDE.md §0.5; no hardcoded
-  hex. Strings: x:Uid for button labels, programmatic GetString() for
-  the Title format (archive basename interpolated).
+  hex. Strings: x:Uid for static button labels, programmatic GetString()
+  for runtime-composed title/status text.
 -->
 <Window
     x:Class="OtterZip.App.Modals.ProgressDialog"
@@ -28,46 +33,82 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0"
-                    Padding="24,24,24,16"
-                    Spacing="14">
+        <Grid Grid.Row="0" Padding="24,24,24,16" RowSpacing="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <!-- Archive name + format. Set in code-behind from the
-                 destination filename; falls back to a placeholder
-                 before BuildPlan resolves. -->
-            <TextBlock x:Name="ArchiveNameText"
-                       Style="{StaticResource BodyStrongTextBlockStyle}"
-                       TextTrimming="CharacterEllipsis" />
+            <!-- Header row: mascot avatar + filename + status glyph.
+                 Mascot pulled from the same Square150x150Logo asset the
+                 manifest references, so it stays in sync with the app's
+                 brand icon without a separate asset entry. -->
+            <Grid Grid.Row="0" ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="48" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <!-- Determinate while a percent is known; indeterminate
-                 before the first tick and on the mixed-source path
-                 (which has no entry-level progress ABI yet). -->
-            <ProgressBar x:Name="OverallBar"
+                <Image Grid.Column="0"
+                       Width="48"
+                       Height="48"
+                       VerticalAlignment="Center"
+                       Source="ms-appx:///Assets/Square150x150Logo.png" />
+
+                <TextBlock Grid.Column="1"
+                           x:Name="ArchiveNameText"
+                           Style="{StaticResource SubtitleTextBlockStyle}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+
+                <!-- Status glyph: hidden during work, shows ✓ on done /
+                     ✗ on cancel / ⚠ on error after settle. Color via
+                     Foreground binding from code-behind. -->
+                <FontIcon Grid.Column="2"
+                          x:Name="StatusGlyph"
+                          FontFamily="Segoe Fluent Icons"
+                          FontSize="28"
+                          VerticalAlignment="Center"
+                          Visibility="Collapsed" />
+            </Grid>
+
+            <!-- Progress bar. Indeterminate until first tick; switches
+                 to determinate as soon as a percent is reported. -->
+            <ProgressBar Grid.Row="1"
+                         x:Name="OverallBar"
                          IsIndeterminate="True"
                          Maximum="100"
                          Height="6" />
 
-            <!-- Status line: "Preparing…" → percent → terminal message
-                 (success / cancelled / error). Bound from code-behind. -->
-            <TextBlock x:Name="StatusText"
+            <!-- Status line. During work: percent text composed in
+                 code-behind. On settle: full summary (size + elapsed)
+                 written from the JobSettled handler. -->
+            <TextBlock Grid.Row="2"
+                       x:Name="StatusText"
                        x:Uid="ProgressDialog_StatusReady"
-                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Style="{StaticResource BodyTextBlockStyle}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                        TextWrapping="Wrap" />
-        </StackPanel>
+        </Grid>
 
-        <!-- Action bar — one button whose role flips on settle.
-             Cancel: requests JobItem cancellation + cleanup
-             Close:  shuts the window (process exits when last). -->
+        <!-- Action bar. Two buttons; OpenFolder visible only on Done. -->
         <StackPanel Grid.Row="1"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Padding="0,0,24,20"
                     Spacing="8">
+            <Button x:Name="OpenFolderButton"
+                    x:Uid="ProgressDialog_OpenFolderButton"
+                    Click="OnOpenFolderClick"
+                    MinWidth="120"
+                    Visibility="Collapsed" />
             <Button x:Name="ActionButton"
                     x:Uid="ProgressDialog_CancelButton"
                     Click="OnActionButtonClick"
-                    MinWidth="96" />
+                    Style="{StaticResource AccentButtonStyle}"
+                    MinWidth="100" />
         </StackPanel>
     </Grid>
 </Window>

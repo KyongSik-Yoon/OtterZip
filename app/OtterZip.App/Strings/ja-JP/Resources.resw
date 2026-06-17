@@ -110,6 +110,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>エラー: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>キャンセル</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>閉じる</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>フォルダーを開く</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>全般</value></data>
   <data name="Settings_LanguageLabel.Text"><value>言語</value></data>
@@ -230,5 +231,27 @@
   <data name="Error_WrongPassword.Text"><value>パスワードが正しくありません。もう一度入力してください。</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>展開前に保存先を確認</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>既定はオフ — ドロップ時に設定済みの場所へ即時展開します。Ctrl または Alt を押しながらドロップすると、その時だけ確認します。</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>ここに展開(&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>このアーカイブを現在のフォルダーに展開します。</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>ここに展開</value></data>
+  <data name="Shell_CompressDialog_Title"><value>OtterZipで圧縮...(&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>選択した項目から新しいアーカイブを作成します。</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>{0}{1}に圧縮(&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>選択した項目をZIPアーカイブに圧縮します（ダイアログなし）。</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>選択した項目を7zアーカイブに圧縮します(ダイアログなし)。</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — 高速アーカイブツール</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>おまかせ展開(&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>ルートフォルダーが1つなら直接、複数なら新しいフォルダーへ展開。</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>{0}\に展開(&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>アーカイブ名のフォルダーを作成して展開。</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>OtterZipで展開...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>展開先・上書き・パスワードのオプションダイアログを開く。</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>個別に圧縮(&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>選択した項目ごとにアーカイブを作成 (既定の形式)。</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>それぞれおまかせ展開(&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>それぞれの名前のフォルダーに展開(&amp;E)</value></data>
 </root>

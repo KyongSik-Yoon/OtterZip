@@ -13,7 +13,9 @@
 
 #include "OtterzipMenuCommand.h"
 #include "SubmenuCommands.h"
+#include "ShellAssets.h"
 #include "ShellSettings.h"
+#include "ShellStrings.h"
 
 #include <shlwapi.h>     // SHStrDupW
 
@@ -23,18 +25,35 @@ namespace OtterZip::Shell
 {
     IFACEMETHODIMP OtterzipMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName) noexcept
     {
-        return SHStrDupW(L"OtterZip", ppszName);
+        // The parent menu label is the brand name; per CLAUDE.md the brand
+        // name itself is not translated. Still routed through ResourceLoader
+        // so a future build that wants to append "(OtterZip)" or "OtterZip ▶"
+        // in non-Latin locales has a single hook point.
+        std::wstring title = LoadShellString(L"Shell_OtterzipMenu_Title", L"OtterZip");
+        return SHStrDupW(title.c_str(), ppszName);
     }
 
     IFACEMETHODIMP OtterzipMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // Parent submenu icon — appears next to the "OtterZip ▶" entry
+        // in nested mode. Same brand icon as the leaf verbs so the
+        // submenu visually anchors to the cluster.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
 
     IFACEMETHODIMP OtterzipMenuCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"OtterZip — fast archive tool", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_OtterzipMenu_Tooltip",
+            L"OtterZip — fast archive tool");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
 
     IFACEMETHODIMP OtterzipMenuCommand::GetCanonicalName(GUID* pguidCommandName) noexcept

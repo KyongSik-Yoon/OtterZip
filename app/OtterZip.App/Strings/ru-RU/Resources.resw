@@ -110,6 +110,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>Ошибка: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>Отмена</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>Закрыть</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>Открыть папку</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Общие</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Язык</value></data>
@@ -230,5 +231,27 @@
   <data name="Error_WrongPassword.Text"><value>Неверный пароль. Попробуйте снова.</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>Запрашивать путь перед извлечением</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>По умолчанию выключено — перетаскивание извлекает в настроенное место сразу. Удерживайте Ctrl или Alt при отпускании, чтобы спросить однократно.</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>Извлечь сюда (&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>Извлечь архив в текущую папку.</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>Извлечь сюда</value></data>
+  <data name="Shell_CompressDialog_Title"><value>Сжать с помощью OtterZip...(&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>Создать новый архив из выбранных файлов.</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>Сжать в {0}{1} (&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>Сжать выбранные элементы в ZIP-архив (без диалога).</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>Сжать выбранные элементы в 7-Zip-архив (без диалога).</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — быстрый архиватор</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>Умное извлечение (&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>Прямое извлечение при одной корневой папке, иначе создать новую папку.</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>Извлечь в {0}\ (&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>Извлечь в новую папку с именем архива.</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>Извлечь с OtterZip...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>Открыть диалог извлечения (назначение, перезапись, пароль).</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>Сжать каждый элемент (&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>Создать архив для каждого выбранного элемента (формат по умолчанию).</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>Умно извлечь каждый (&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>Извлечь каждый в свою папку (&amp;E)</value></data>
 </root>

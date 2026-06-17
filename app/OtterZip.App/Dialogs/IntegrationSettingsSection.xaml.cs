@@ -20,7 +20,12 @@ public sealed partial class IntegrationSettingsSection : UserControl
             ShellMenuEnabledCheck.IsChecked       = SettingsService.Get<bool>("Settings_ShellMenuEnabled", true);
             ExtractHereDefaultCheck.IsChecked     = SettingsService.Get<bool>("Settings_ShellExtractHereAsDefault", true);
             QuickProgressAutoCloseCheck.IsChecked = SettingsService.Get<bool>("Settings_QuickProgressAutoClose", false);
-            string mode = SettingsService.Get<string>("Settings_ShellMenuMode", "nested");
+            // 2026-05-15: default flipped "nested" → "flat" so the
+            // Bandizip-style quick verbs surface at Explorer's top
+            // level by default. Mirrors ShellSettings.cpp on the C++
+            // side; both must stay in sync or the radio reads back
+            // different than what the shell actually applies.
+            string mode = SettingsService.Get<string>("Settings_ShellMenuMode", "flat");
             ShellMenuModeRadios.SelectedIndex =
                 string.Equals(mode, "flat", StringComparison.Ordinal) ? 0 : 1;
         };

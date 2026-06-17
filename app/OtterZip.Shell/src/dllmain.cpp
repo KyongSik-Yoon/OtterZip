@@ -15,13 +15,18 @@
 // registry, in the packaged path.
 
 #include "CompressCommand.h"
+#include "ExtractCommands.h"
 #include "ExtractHereCommand.h"
 #include "OtterzipMenuCommand.h"
 #include "QuickCompressCommands.h"
+#include "ShellAssets.h"
+#include "ShellSettings.h"
+#include "ShellStrings.h"
 
 #include <windows.h>
 #include <unknwn.h>
 #include <combaseapi.h>
+#include <mutex>
 #include <winrt/base.h>
 
 namespace
@@ -114,6 +119,51 @@ extern "C" HRESULT __stdcall DllCanUnloadNow()
     return g_dll_ref_count.load() == 0 ? S_OK : S_FALSE;
 }
 
+namespace OtterZip::Shell
+{
+    // Prime every cache the verbs hit on their first hover. Without
+    // this, each lazy fetch (LocalSettings RPC, Package.InstalledLocation,
+    // ResourceLoader.GetForViewIndependentUse) costs 50-200ms cold and
+    // the cumulative GetState time pushes past Windows 11's Modern
+    // Context Menu timeout — Explorer renders the right-click without
+    // our verbs and the user has to right-click again to see them.
+    //
+    // Called synchronously inside the FIRST DllGetClassObject (which
+    // COM invokes before our class instance is even created). That's
+    // outside DllMain so all the WinRT-touching code is legal here,
+    // and the warmup completes before the GetState call that needs
+    // the primed caches.
+    static void WarmupCachesOnce() noexcept
+    {
+        static std::once_flag s_flag;
+        std::call_once(s_flag, []() {
+            try
+            {
+                // Settings cache — fetches both LocalSettings flags
+                // we read on every GetState.
+                (void)IsShellMenuEnabled();
+                (void)IsShellMenuNested();
+
+                // Package install location — used by GetIcon path
+                // resolution. First fetch crosses the AppX runtime
+                // boundary.
+                (void)GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+
+                // ResourceLoader — first GetForViewIndependentUse
+                // call binds the package's PRI map. Probe with a
+                // real key that all verbs share.
+                (void)LoadShellString(L"Shell_CompressDialog_Title", L"");
+            }
+            catch (...)
+            {
+                // Warmup failures are non-fatal — the real GetState
+                // calls will fall back to the same defaults that
+                // would have applied without the warmup.
+            }
+        });
+    }
+}
+
 extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
 {
     if (ppv == nullptr)
@@ -123,6 +173,11 @@ extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPV
     *ppv = nullptr;
 
     using namespace OtterZip::Shell;
+
+    // Synchronous first-time cache warmup — see WarmupCachesOnce
+    // rationale. After the first invocation `call_once` is a single
+    // atomic load, so we pay no measurable cost on subsequent calls.
+    WarmupCachesOnce();
 
     if (rclsid == __uuidof(CompressCommand))
     {
@@ -174,6 +229,51 @@ extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPV
         try
         {
             auto factory = winrt::make<ClassFactory<CompressSevenZQuickCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    // ----------------------------------------------------------------
+    // 4 new verbs landed 2026-05-19 (Bandizip 4-context parity sprint).
+    // ExtractSmart / ExtractToSubfolder / ExtractDialog handle archive
+    // selections; CompressIndividually handles multi-select compress.
+    // ----------------------------------------------------------------
+    if (rclsid == __uuidof(ExtractSmartCommand))
+    {
+        try
+        {
+            auto factory = winrt::make<ClassFactory<ExtractSmartCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(ExtractToSubfolderCommand))
+    {
+        try
+        {
+            auto factory = winrt::make<ClassFactory<ExtractToSubfolderCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(ExtractDialogCommand))
+    {
+        try
+        {
+            auto factory = winrt::make<ClassFactory<ExtractDialogCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(CompressIndividuallyCommand))
+    {
+        try
+        {
+            auto factory = winrt::make<ClassFactory<CompressIndividuallyCommand>>();
             return factory->QueryInterface(riid, ppv);
         }
         catch (winrt::hresult_error const& e) { return e.code(); }

@@ -250,6 +250,32 @@ int32_t otterzip_archive_entry_count(const OtterzipArchive *handle, uint64_t *ou
 int32_t otterzip_archive_is_encrypted(const OtterzipArchive *handle, uint8_t *out_bool);
 
 /**
+ * `Archive::detect_root_layout` mirror.
+ *
+ * Probes the archive's top-level layout for Smart Extract decisions
+ * (Bandizip "알아서 풀기" parity).
+ *
+ * Outputs:
+ *   * `out_is_single_folder`: `0` for [`RootLayout::Flat`], `1` for
+ *     [`RootLayout::SingleFolder`]. Always written on success.
+ *   * `out_name_utf8` + `name_capacity`: caller-allocated buffer
+ *     receives the SingleFolder name (NUL-terminated). On Flat the
+ *     buffer is zeroed.
+ *   * `out_name_len`: written length (excluding the NUL). 0 on Flat.
+ *
+ * If the folder name doesn't fit in `name_capacity`, returns
+ * [`ErrorCode::InvalidArgument`] with `out_name_len` set to the
+ * required size (excluding NUL) so callers can retry with a larger
+ * buffer. 256 chars is sufficient for every Windows path component
+ * (MAX_PATH = 260 including drive and separator).
+ */
+int32_t otterzip_archive_detect_root_layout(const OtterzipArchive *handle,
+                                            int32_t *out_is_single_folder,
+                                            char *out_name_utf8,
+                                            size_t name_capacity,
+                                            size_t *out_name_len);
+
+/**
  * `Archive::is_solid` mirror per `ffi-api.md` §5: writes `1`/`0`/`-1`
  * (yes / no / not applicable) into `out_tri`.
  */

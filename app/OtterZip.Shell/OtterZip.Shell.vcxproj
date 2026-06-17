@@ -23,6 +23,28 @@
     <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
     <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
     <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
+
+    <!--
+      Pin OutDir / IntDir to the conventional vcxproj locations under
+      `$(MSBuildThisFileDirectory)`. Without these, MSBuild inherits the
+      `OUTDIR` environment variable that `build-msix.bat` exports
+      (set OUTDIR=...\AppPackages\VER_<ver>) and reads it as the
+      reserved `OutDir` property — pointing the linker at the App's
+      AppPackages staging directory. The cleanup step in build-msix.bat
+      then removes the freshly-built shell DLL from there, and the App
+      csproj's `IncludeShellExtensionInPackage` target picks up the
+      previous build's stale DLL from this very directory.
+
+      Diagnosed 2026-05-19 after v0.20 right-click icons silently
+      defaulted to "no icon" — the shell DLL inside the MSIX was
+      bit-identical to v0.19 because the v0.20 vcxproj output had been
+      orphaned in AppPackages and wiped by cleanup.
+
+      Trailing backslash matters — MSBuild emits warning MSB8004 if
+      either ends without it (and may misjoin paths in some toolsets).
+    -->
+    <OutDir>$(MSBuildThisFileDirectory)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)$(Platform)\$(Configuration)\obj\</IntDir>
   </PropertyGroup>
 
   <ItemGroup Label="ProjectConfigurations">
@@ -77,6 +99,10 @@
     <ClCompile Include="src\ShellInvoke.cpp" />
     <ClCompile Include="src\ShellSettings.cpp" />
     <ClCompile Include="src\QuickCompressCommands.cpp" />
+    <ClCompile Include="src\ExtractCommands.cpp" />
+    <ClCompile Include="src\ShellStrings.cpp" />
+    <ClCompile Include="src\ShellAssets.cpp" />
+    <ClCompile Include="src\ArchiveDetection.cpp" />
     <ClInclude Include="src\ExtractHereCommand.h" />
     <ClInclude Include="src\CompressCommand.h" />
     <ClInclude Include="src\OtterzipMenuCommand.h" />
@@ -84,6 +110,10 @@
     <ClInclude Include="src\ShellInvoke.h" />
     <ClInclude Include="src\ShellSettings.h" />
     <ClInclude Include="src\QuickCompressCommands.h" />
+    <ClInclude Include="src\ExtractCommands.h" />
+    <ClInclude Include="src\ShellStrings.h" />
+    <ClInclude Include="src\ShellAssets.h" />
+    <ClInclude Include="src\ArchiveDetection.h" />
     <None Include="OtterZip.Shell.def" />
     <None Include="Package.Shell.appxmanifest.fragment.xml" />
   </ItemGroup>

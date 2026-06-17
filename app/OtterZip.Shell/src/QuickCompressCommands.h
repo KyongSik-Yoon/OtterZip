@@ -46,11 +46,28 @@ namespace OtterZip::Shell
         IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** ppEnum) noexcept override;
     };
 
-    /// Compute the basename Bandizip / 7-Zip / WinRAR show as the
-    /// selection stem in the right-click verb. Single source = its
-    /// own name; multi = first item's name (the host's OutputNamer
-    /// has the full Settings_UseParentFolderName logic — the shell
-    /// extension shows a preview hint so a small mismatch with the
-    /// final filename is acceptable).
+    /// Compute the basename shown as the selection stem in the
+    /// right-click verb. Single source = its own name; multi = the
+    /// common parent directory name (Bandizip parity, 2026-05-19).
+    /// Falls back to first item's stem if parents are mixed or the
+    /// parent is a root drive.
     std::wstring DeriveSelectionStem(IShellItemArray* items) noexcept;
+
+    // --------------------- CompressIndividually --------------------
+    // Bandizip's `각각 파일명/폴더명으로 압축하기(U)` — emits N archives
+    // (one per selected item) using the user's default-format setting.
+    // GetState hides itself on single selections; the cheaper
+    // single-item case is already covered by the per-format quick verbs.
+    struct __declspec(uuid("aaaaaaaa-2222-3333-4444-555555555555"))
+    CompressIndividuallyCommand : winrt::implements<CompressIndividuallyCommand, IExplorerCommand>
+    {
+        IFACEMETHODIMP GetTitle(IShellItemArray* items, LPWSTR* ppszName) noexcept override;
+        IFACEMETHODIMP GetIcon(IShellItemArray* items, LPWSTR* ppszIcon) noexcept override;
+        IFACEMETHODIMP GetToolTip(IShellItemArray* items, LPWSTR* ppszInfotip) noexcept override;
+        IFACEMETHODIMP GetCanonicalName(GUID* pguidCommandName) noexcept override;
+        IFACEMETHODIMP GetState(IShellItemArray* items, BOOL fOkToBeSlow, EXPCMDSTATE* pCmdState) noexcept override;
+        IFACEMETHODIMP Invoke(IShellItemArray* items, IBindCtx* pbc) noexcept override;
+        IFACEMETHODIMP GetFlags(EXPCMDFLAGS* pFlags) noexcept override;
+        IFACEMETHODIMP EnumSubCommands(IEnumExplorerCommand** ppEnum) noexcept override;
+    };
 }

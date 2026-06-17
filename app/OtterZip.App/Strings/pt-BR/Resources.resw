@@ -110,6 +110,7 @@
   <data name="ProgressDialog_StatusErrorFormat.Text"><value>Erro: {0}</value></data>
   <data name="ProgressDialog_CancelButton.Content"><value>Cancelar</value></data>
   <data name="ProgressDialog_CloseButton.Content"><value>Fechar</value></data>
+  <data name="ProgressDialog_OpenFolderButton.Content"><value>Abrir pasta</value></data>
 
   <data name="Settings_SectionGeneral.Text"><value>Geral</value></data>
   <data name="Settings_LanguageLabel.Text"><value>Idioma</value></data>
@@ -230,5 +231,27 @@
   <data name="Error_WrongPassword.Text"><value>Senha incorreta. Tente novamente.</value></data>
   <data name="Settings_AskBeforeExtract.Content"><value>Perguntar destino antes de extrair</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>Desativado por padrão — arrastar e soltar extrai imediatamente para o local configurado. Segure Ctrl ou Alt ao soltar para perguntar apenas desta vez.</value></data>
-
+  <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
+  <data name="Shell_ExtractHere_Title"><value>Extrair aqui (&amp;X)</value></data>
+  <data name="Shell_ExtractHere_Tooltip"><value>Extrair este arquivo na pasta atual.</value></data>
+  <data name="Shell_ExtractHereSubmenu_Title"><value>Extrair aqui</value></data>
+  <data name="Shell_CompressDialog_Title"><value>Comprimir com OtterZip...(&amp;O)</value></data>
+  <data name="Shell_CompressDialog_Tooltip"><value>Criar um novo arquivo a partir dos itens selecionados.</value></data>
+  <data name="Shell_CompressQuick_TitleFormat"><value>Comprimir para {0}{1} (&amp;{2})</value></data>
+  <data name="Shell_CompressZipQuick_Tooltip"><value>Comprimir itens selecionados em arquivo ZIP (sem diálogo).</value></data>
+  <data name="Shell_Compress7zQuick_Tooltip"><value>Comprimir itens selecionados em arquivo 7-Zip (sem diálogo).</value></data>
+  <data name="Shell_OtterzipMenu_Title"><value>OtterZip</value></data>
+  <data name="Shell_OtterzipMenu_Tooltip"><value>OtterZip — ferramenta de arquivo rápida</value></data>
+  <!-- Bandizip 4-context parity verbs (2026-05-19) -->
+  <data name="Shell_ExtractSmart_Title"><value>Extração inteligente (&amp;Z)</value></data>
+  <data name="Shell_ExtractSmart_Tooltip"><value>Extrair direto se houver uma única pasta raiz, senão criar nova pasta.</value></data>
+  <data name="Shell_ExtractToSubfolder_TitleFormat"><value>Extrair em {0}\ (&amp;E)</value></data>
+  <data name="Shell_ExtractToSubfolder_Tooltip"><value>Extrair em uma nova pasta com o nome do arquivo.</value></data>
+  <data name="Shell_ExtractDialog_Title"><value>Extrair com OtterZip...(&amp;B)</value></data>
+  <data name="Shell_ExtractDialog_Tooltip"><value>Abrir diálogo de extração (destino, sobrescrever, senha).</value></data>
+  <data name="Shell_CompressIndividually_Title"><value>Comprimir cada item (&amp;U)</value></data>
+  <data name="Shell_CompressIndividually_Tooltip"><value>Criar um arquivo por item selecionado (formato padrão).</value></data>
+  <!-- Multi-select "each" extract verbs (2026-06-17) -->
+  <data name="Shell_ExtractSmartEach_Title"><value>Extrair cada um de forma inteligente (&amp;Z)</value></data>
+  <data name="Shell_ExtractToSubfolderEach_Title"><value>Extrair cada um em sua própria pasta (&amp;E)</value></data>
 </root>

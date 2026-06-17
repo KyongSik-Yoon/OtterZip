@@ -5,8 +5,11 @@
 // state. Sprint 5 connects to .resw via Windows.ApplicationModel.Resources.
 
 #include "ExtractHereCommand.h"
+#include "ArchiveDetection.h"
+#include "ShellAssets.h"
 #include "ShellInvoke.h"
 #include "ShellSettings.h"
+#include "ShellStrings.h"
 
 #include <shellapi.h>
 #include <shlwapi.h>     // SHStrDupW
@@ -19,19 +22,42 @@ namespace OtterZip::Shell
 {
     IFACEMETHODIMP ExtractHereCommand::GetTitle(IShellItemArray* /*items*/, LPWSTR* ppszName) noexcept
     {
-        return SHStrDupW(L"Extract here (OtterZip)", ppszName);
+        // i18n: looked up at every hover via cached ResourceLoader. The
+        // fallback is English so non-localized installs (e.g. a fresh
+        // dev cert with no language tag in package identity) still get
+        // a readable label. v0.15-v0.19 hardcoded this literal — Korean
+        // testers saw "Extract here (OtterZip)" in English while the
+        // Compress verbs (also hardcoded, but in Korean) showed in
+        // Hangul. ResourceLoader heals the inconsistency end-to-end.
+        std::wstring title = LoadShellString(L"Shell_ExtractHere_Title", L"Extract here (OtterZip)");
+        return SHStrDupW(title.c_str(), ppszName);
     }
 
     IFACEMETHODIMP ExtractHereCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        // Use the host EXE's icon resource (Sprint 5 wires actual asset).
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // Brand-icon path: every top-level OtterZip verb shows the same
+        // multi-resolution AppIcon.ico so the menu reads as a coherent
+        // OtterZip cluster (Bandizip / 7-Zip do the same with their own
+        // brand marks). `GetPackagedAssetPath` returns an absolute path
+        // resolved against `Package.Current.InstalledLocation` because
+        // Explorer's surrogate has no idea about our package's relative
+        // tree. Empty path = falls back to E_NOTIMPL.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
 
     IFACEMETHODIMP ExtractHereCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"Extract this archive next to its current folder.", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_ExtractHere_Tooltip",
+            L"Extract this archive next to its current folder.");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
 
     IFACEMETHODIMP ExtractHereCommand::GetCanonicalName(GUID* pguidCommandName) noexcept
@@ -59,19 +85,22 @@ namespace OtterZip::Shell
             *pCmdState = ECS_HIDDEN;
             return S_OK;
         }
-        // Show only when at least one item is selected. Detection of
-        // archive-vs-non-archive happens in the manifest's FileType
-        // association, so when this verb fires the items are already
-        // archives by registration.
-        DWORD count = 0;
-        if (items && SUCCEEDED(items->GetCount(&count)) && count > 0)
-        {
-            *pCmdState = ECS_ENABLED;
-        }
-        else
+        // Bandizip parity (spec §E): Extract verbs only render when
+        // EVERY selected item is an archive. The manifest's `.zip` /
+        // `.7z` / etc. ItemType matches a multi-select if ANY item
+        // carries that extension, so a mixed selection (sample.zip +
+        // readme.txt) would otherwise show both Compress AND Extract
+        // verbs simultaneously — confusing because the verb only
+        // makes sense for the archive items. We hide here so the
+        // mixed-selection menu shows Compress verbs only, just like
+        // Bandizip's behavior captured in `docs/02-design/shell-context-
+        // menu-spec.md` §1.4.
+        if (!ItemsAreAllArchives(items))
         {
             *pCmdState = ECS_HIDDEN;
+            return S_OK;
         }
+        *pCmdState = ECS_ENABLED;
         return S_OK;
     }
 

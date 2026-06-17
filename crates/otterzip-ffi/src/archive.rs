@@ -2,7 +2,7 @@
 
 use std::os::raw::c_char;
 
-use otterzip_core::{Archive, ArchiveFormat, OpenMode, OtterzipError};
+use otterzip_core::{Archive, ArchiveFormat, OpenMode, OtterzipError, RootLayout};
 // Re-imports above already pull `ArchiveFormat` for the bytes detector.
 
 use crate::error::{ErrorCode, OK};
@@ -120,6 +120,91 @@ pub extern "C" fn otterzip_archive_is_encrypted(
         );
         // SAFETY: null-checked.
         unsafe { *out_bool = u8::from(v) };
+        Ok(OK)
+    })
+}
+
+/// `Archive::detect_root_layout` mirror.
+///
+/// Probes the archive's top-level layout for Smart Extract decisions
+/// (Bandizip "알아서 풀기" parity).
+///
+/// Outputs:
+///   * `out_is_single_folder`: `0` for [`RootLayout::Flat`], `1` for
+///     [`RootLayout::SingleFolder`]. Always written on success.
+///   * `out_name_utf8` + `name_capacity`: caller-allocated buffer
+///     receives the SingleFolder name (NUL-terminated). On Flat the
+///     buffer is zeroed.
+///   * `out_name_len`: written length (excluding the NUL). 0 on Flat.
+///
+/// If the folder name doesn't fit in `name_capacity`, returns
+/// [`ErrorCode::InvalidArgument`] with `out_name_len` set to the
+/// required size (excluding NUL) so callers can retry with a larger
+/// buffer. 256 chars is sufficient for every Windows path component
+/// (MAX_PATH = 260 including drive and separator).
+#[no_mangle]
+pub extern "C" fn otterzip_archive_detect_root_layout(
+    handle: *const OtterzipArchive,
+    out_is_single_folder: *mut i32,
+    out_name_utf8: *mut c_char,
+    name_capacity: usize,
+    out_name_len: *mut usize,
+) -> i32 {
+    catch_unwind_to_error(|| {
+        if handle.is_null() {
+            return Ok(ErrorCode::InvalidHandle as i32);
+        }
+        if out_is_single_folder.is_null()
+            || out_name_utf8.is_null()
+            || out_name_len.is_null()
+        {
+            return Err(OtterzipError::InvalidArgument(
+                "out parameter is null",
+            ));
+        }
+        // SAFETY: handle valid per open contract.
+        let archive = unsafe { &*handle.cast::<Archive>() };
+        let layout = archive.detect_root_layout()?;
+
+        match layout {
+            RootLayout::Flat => {
+                // SAFETY: null-checked above.
+                unsafe {
+                    *out_is_single_folder = 0;
+                    *out_name_len = 0;
+                    // Zero the buffer so callers reading without
+                    // checking out_name_len don't get stale data.
+                    if name_capacity > 0 {
+                        *out_name_utf8 = 0;
+                    }
+                }
+            }
+            RootLayout::SingleFolder(name) => {
+                let bytes = name.as_bytes();
+                let required = bytes.len();
+                // SAFETY: null-checked above.
+                unsafe {
+                    *out_is_single_folder = 1;
+                    *out_name_len = required;
+                }
+                // Need room for the bytes plus one NUL.
+                if required + 1 > name_capacity {
+                    return Err(OtterzipError::InvalidArgument(
+                        "out_name_utf8 capacity too small",
+                    ));
+                }
+                // SAFETY: buffer is at least `required + 1` bytes
+                // (just verified), and `bytes` is a valid UTF-8 slice.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        bytes.as_ptr(),
+                        out_name_utf8.cast::<u8>(),
+                        required,
+                    );
+                    *out_name_utf8.add(required) = 0;
+                }
+            }
+        }
         Ok(OK)
     })
 }

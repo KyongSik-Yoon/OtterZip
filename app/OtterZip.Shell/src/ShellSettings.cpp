@@ -13,7 +13,13 @@ namespace OtterZip::Shell
 {
     namespace
     {
-        constexpr std::chrono::seconds kCacheTtl{ 5 };
+        // TTL extended from 5s to 60s on 2026-05-19 to address verb
+        // cold-start invisibility: every right-click was re-fetching
+        // LocalSettings (cross-process RPC, ~50ms) for each of 9 verbs.
+        // 60s keeps Settings UI toggles responsive (user flips the
+        // radio → next right-click after a minute reflects it) while
+        // making the steady-state hover essentially free.
+        constexpr std::chrono::seconds kCacheTtl{ 60 };
 
         struct CachedBool
         {
@@ -131,13 +137,28 @@ namespace OtterZip::Shell
 
     bool IsShellMenuNested() noexcept
     {
-        // Default mode = "nested" — matches the C# Settings default
-        // (IntegrationSettingsSection.xaml.cs reads with same default)
-        // and aligns with the Windows 11 / 7-Zip / WinRAR convention of
-        // grouping app verbs under a single labelled parent. Users who
-        // prefer the legacy "flat" layout can flip the radio in
-        // Settings -> Integration tab.
-        auto mode = CachedReadString(g_shellMenuMode, L"Settings_ShellMenuMode", L"nested");
+        // Default mode = "flat" (Bandizip parity, re-attempted 2026-05-19
+        // on a clean v0.20.2 build after the v0.13 flat-default attempt
+        // was rolled back due to packaged-COM verb registration silently
+        // disappearing — that turned out to be a stale Shell DLL bundling
+        // bug in build-msix.bat / vcxproj OutDir, fixed in the same
+        // commit as this default flip; see OtterZip.Shell.vcxproj's
+        // OutDir comment).
+        //
+        // Behaviour:
+        //   * Fresh install with no LocalSettings_ShellMenuMode → "flat"
+        //     fallback → quick verbs (`<basename>.zip으로 압축`,
+        //     `<basename>.7z으로 압축`, `OtterZip으로 압축...`, Extract
+        //     here) render at the right-click root next to Bandizip.
+        //   * `OtterzipMenuCommand::GetState` checks the same key and
+        //     hides its "OtterZip ▶" parent in flat mode, so the two
+        //     layouts never double-render.
+        //   * Users who prefer the v0.13-and-earlier "OtterZip ▶"
+        //     submenu can flip the radio in Settings → Integration tab.
+        //     `IntegrationSettingsSection.xaml.cs` writes the persisted
+        //     string, the cache TTL (5 s) refreshes from LocalSettings,
+        //     and `IsShellMenuNested` flips on the next verb hover.
+        auto mode = CachedReadString(g_shellMenuMode, L"Settings_ShellMenuMode", L"flat");
         return mode == L"nested";
     }
 }

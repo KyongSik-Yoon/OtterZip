@@ -4,10 +4,12 @@
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 mp com desktop4 rescap">
+  IgnorableNamespaces="uap uap3 uap10 mp com desktop4 desktop5 rescap">
 
   <!--
     Partner Center reservation (LumiBear Studio account):
@@ -27,7 +29,7 @@
   -->
   <Identity Name="LumiBearStudio.OtterZip"
             Publisher="CN=A55D3041-E7F5-46CB-8707-AD9C81D7CB43"
-            Version="0.1.0.0" />
+            Version="0.21.8.0" />
 
   <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000"
                     PhonePublisherId="00000000-0000-0000-0000-000000000000" />
@@ -59,9 +61,23 @@
   </Resources>
 
   <Applications>
+    <!--
+      v0.15-proven Application element. The packaging chain auto-resolves
+      `Executable="$targetnametoken$.exe"` to the published EXE name and
+      the `uap10:TrustLevel="mediumIL"` + `uap10:RuntimeBehavior="win32App"`
+      pair tells the AppX engine this is a packaged-classic-app entry —
+      which is what activates the shell extension surrogate path. Reverting
+      to `EntryPoint="$targetentrypoint$"` (the WinUI Win32 default) caused
+      MakeAppx to either ship a broken Application element or fall back to
+      a UWP-style activation that did NOT light up the desktop4
+      FileExplorerContextMenus verb registry — empirically reproduced in
+      v0.16/0.17/0.18 (no verbs in right-click), and resolved by reverting
+      to the v0.15 attributes (verbs back in right-click).
+    -->
     <Application Id="App"
                  Executable="$targetnametoken$.exe"
-                 EntryPoint="$targetentrypoint$">
+                 uap10:TrustLevel="mediumIL"
+                 uap10:RuntimeBehavior="win32App">
       <uap:VisualElements DisplayName="OtterZip"
                           Description="Fast archive tool for Windows"
                           BackgroundColor="transparent"
@@ -381,7 +397,7 @@
           </uap:FileTypeAssociation>
         </uap:Extension>
 
-        <com:Extension Category="windows.comServer">
+        <com:Extension Category="windows.comServer" uap10:RuntimeBehavior="packagedClassicApp">
           <com:ComServer>
             <com:SurrogateServer DisplayName="OtterZip Shell Extension">
               <!-- 22…: ExtractHereCommand
@@ -411,6 +427,24 @@
               <com:Class Id="66666666-2222-3333-4444-555555555555"
                          Path="OtterZip.Shell.dll"
                          ThreadingModel="STA" />
+              <!-- 2026-05-19 sprint: 4-context Bandizip parity verbs.
+                   77…: ExtractSmartCommand        ("알아서 풀기(&Z)")
+                   88…: ExtractToSubfolderCommand  ("<stem>\에 풀기(&E)")
+                   99…: ExtractDialogCommand       ("OtterZip으로 풀기...(&B)")
+                   AAA…: CompressIndividuallyCommand ("각 항목별 압축(&U)")
+              -->
+              <com:Class Id="77777777-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+              <com:Class Id="88888888-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+              <com:Class Id="99999999-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
+              <com:Class Id="aaaaaaaa-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>
@@ -426,18 +460,20 @@
         -->
         <desktop4:Extension Category="windows.fileExplorerContextMenus">
           <desktop4:FileExplorerContextMenus>
-            <desktop4:ItemType Type="*">
+            <desktop5:ItemType Type="*">
               <!--
                 Bandizip-style direct format-specific quick verbs
                 (commit 6 of the quick-compress sprint). Both hide
                 themselves when Settings_ShellMenuMode == "nested" so
                 the layouts never double-render with OtterzipMenu.
               -->
-              <desktop4:Verb Id="OtterzipCompressZip"
+              <desktop5:Verb Id="OtterzipCompressZip"
                              Clsid="55555555-2222-3333-4444-555555555555" />
-              <desktop4:Verb Id="OtterzipCompress7z"
+              <desktop5:Verb Id="OtterzipCompress7z"
                              Clsid="66666666-2222-3333-4444-555555555555" />
-              <desktop4:Verb Id="OtterzipCompress"
+              <desktop5:Verb Id="OtterzipCompressIndividually"
+                             Clsid="aaaaaaaa-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipCompress"
                              Clsid="44444444-2222-3333-4444-555555555555" />
               <!--
                 Parent menu verb. Visible only when ShellMenuMode is
@@ -446,130 +482,326 @@
                 themselves at top level when nested mode is on, so the
                 two layouts never double-render.
               -->
-              <desktop4:Verb Id="OtterzipMenu"
+              <desktop5:Verb Id="OtterzipMenu"
                              Clsid="33333333-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+            </desktop5:ItemType>
+
+            <!--
+              Folder right-click (a folder is SELECTED, right-clicked
+              from its parent): same compress verbs as file right-click,
+              minus Extract (folders aren't archives). ExtractHere is
+              intentionally omitted from Directory — nothing to extract
+              from a folder.
+
+              `Directory\Background` (right-click the EMPTY SPACE inside
+              a folder) is intentionally NOT registered — decision
+              2026-06-17. Rationale:
+                * Windows 11 already puts "새 폴더 / New Folder" at the
+                  top of the background menu AND under 새로 만들기, so
+                  there's nothing for an archive tool to add there.
+                * "Compress the current folder" from its own background
+                  is an unusual, self-referential action (the output
+                  would sit beside or inside the folder being archived)
+                  and Bandizip doesn't offer it either.
+                * Keeps the background menu uncluttered, matching the
+                  Keka-inherited minimalism. To compress a folder, the
+                  user right-clicks the folder itself (Type="Directory").
+            -->
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="OtterzipCompressZip"
+                             Clsid="55555555-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipCompress7z"
+                             Clsid="66666666-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipCompressIndividually"
+                             Clsid="aaaaaaaa-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipCompress"
+                             Clsid="44444444-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipMenu"
+                             Clsid="33333333-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!-- 컨테이너 / 멀티엔트리 -->
-            <desktop4:ItemType Type=".zip">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".zip">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".zipx">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".zipx">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".7z">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".7z">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".rar">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".rar">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".tar">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tar">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!-- TAR alias (Zip/TarGz 등 enum 재사용) -->
-            <desktop4:ItemType Type=".tgz">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".tgz">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".tbz">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tbz">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".tbz2">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tbz2">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".tlz">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tlz">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".txz">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".txz">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".tzst">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".tzst">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!-- 단일 스트림 -->
-            <desktop4:ItemType Type=".gz">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".gz">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".bz2">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".bz2">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".xz">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".xz">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".lzma">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".lzma">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
             <!--
               .z (UNIX compress, LZW) — 옵션 Y 결정으로 OUT.
               schema.md §1.1.1 "Rust crate 부재" 카테고리.
               v1.1에서 libarchive 도입 시 재추가 검토.
             -->
-            <desktop4:ItemType Type=".zst">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".zst">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".lz4">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".lz4">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!-- ZIP 변종 (Zip enum 재사용, UI 라벨만 분리) -->
-            <desktop4:ItemType Type=".jar">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".jar">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".war">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".war">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".ear">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".ear">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".ipa">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".ipa">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".apk">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".apk">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".aab">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".aab">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".appx">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".appx">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".msix">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".msix">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".xpi">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".xpi">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".crx">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".crx">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!--
               디스크 이미지 (추출 전용) — 옵션 Y: ISO9660 + Joliet + Rock Ridge만.
@@ -577,30 +809,60 @@
               UDF 컨테이너인 .iso 파일도 detect 시 ISO9660 매직 매칭 실패 →
               사용자에게 "UDF는 v1.1 예정" 안내 표시.
             -->
-            <desktop4:ItemType Type=".iso">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".iso">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".img">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".img">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!-- Windows installer (추출 전용) -->
-            <desktop4:ItemType Type=".cab">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".cab">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
-            <desktop4:ItemType Type=".msi">
-              <desktop4:Verb Id="OtterzipExtract"
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type=".msi">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
 
             <!-- UNIX 패키지 (추출 전용) -->
-            <desktop4:ItemType Type=".deb">
-              <desktop4:Verb Id="OtterzipExtract"
+            <desktop5:ItemType Type=".deb">
+              <desktop5:Verb Id="OtterzipExtract"
                              Clsid="22222222-2222-3333-4444-555555555555" />
-            </desktop4:ItemType>
+              <desktop5:Verb Id="OtterzipExtractSmart"
+                             Clsid="77777777-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractToSubfolder"
+                             Clsid="88888888-2222-3333-4444-555555555555" />
+              <desktop5:Verb Id="OtterzipExtractDialog"
+                             Clsid="99999999-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
           </desktop4:FileExplorerContextMenus>
         </desktop4:Extension>
       </Extensions>
@@ -610,6 +872,11 @@
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
+    <!-- PowerToys 패턴: shell extension IExplorerCommand handler 가
+         실제 HKCU / 사용자 폴더에 MSIX virtualization 없이 접근하도록
+         필요. 2026-05-15 verb registration silent-fail 진단 결과
+         추가. -->
+    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
 
 </Package>

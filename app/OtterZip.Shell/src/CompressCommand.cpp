@@ -1,8 +1,11 @@
 // OtterZip.Shell — IExplorerCommand "Compress" — Sprint 4 scaffold.
 
 #include "CompressCommand.h"
+#include "ArchiveDetection.h"
+#include "ShellAssets.h"
 #include "ShellInvoke.h"
 #include "ShellSettings.h"
+#include "ShellStrings.h"
 
 #include <shellapi.h>
 #include <shlwapi.h>     // SHStrDupW
@@ -18,18 +21,36 @@ namespace OtterZip::Shell
         // QuickCompressCommands; this one keeps the trailing ellipsis
         // + the OtterZip brand label so users know it opens the full
         // MainWindow with the format dropdown.
-        return SHStrDupW(L"OtterZip으로 압축...(&O)", ppszName);
+        //
+        // i18n: ResourceLoader-resolved at every hover. Korean fallback
+        // matches the v0.15-v0.19 hardcoded string so existing testers
+        // see the same label they're used to even if MRT briefly fails.
+        std::wstring title = LoadShellString(
+            L"Shell_CompressDialog_Title",
+            L"OtterZip으로 압축...(&O)");
+        return SHStrDupW(title.c_str(), ppszName);
     }
 
     IFACEMETHODIMP CompressCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // See ExtractHereCommand::GetIcon for the rationale. Same brand
+        // mark on every top-level verb is the Bandizip / 7-Zip pattern.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
 
     IFACEMETHODIMP CompressCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"Create a new archive from the selected files.", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_CompressDialog_Tooltip",
+            L"Create a new archive from the selected files.");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
 
     IFACEMETHODIMP CompressCommand::GetCanonicalName(GUID* pguidCommandName) noexcept
@@ -54,6 +75,15 @@ namespace OtterZip::Shell
         // The submenu's SubmenuCompressCommand carries the same Invoke
         // path inside the parent.
         if (IsShellMenuNested())
+        {
+            *pCmdState = ECS_HIDDEN;
+            return S_OK;
+        }
+        // Bandizip parity (spec §E): hide the dialog-flow compress
+        // verb only when EVERY selected item is an archive. Mixed
+        // selections still surface Compress so the user can pack
+        // mixed bags. See ArchiveDetection.h.
+        if (ItemsAreAllArchives(items))
         {
             *pCmdState = ECS_HIDDEN;
             return S_OK;

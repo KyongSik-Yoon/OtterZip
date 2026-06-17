@@ -1,17 +1,43 @@
 <!--
-  Sprint 4 scaffold. Fragment to be merged into the eventual MSIX
-  Package.appxmanifest at packaging time. See docs/03-api/shell-extension.md
-  §2 for the canonical reference.
+  Sprint 4 scaffold reference, kept in sync with the live registration
+  in `app/OtterZip.App/Package.appxmanifest`. Not consumed by the
+  build — the MSIX packaging Target reads the App manifest directly.
+  Kept for documentation: if a new IExplorerCommand verb is added,
+  update BOTH this fragment and the App manifest so anyone reading
+  shell-extension.md gets a complete picture.
+
+  Namespace note (2026-05-15 fix):
+    * `windows.comServer`         — `com:Extension`
+    * `windows.fileExplorerContextMenus` — `desktop4:Extension`
+                                          + `desktop4:FileExplorerContextMenus`
+                                          + `desktop5:ItemType`
+                                          + `desktop5:Verb`
+    Microsoft's `desktop5:ItemType` / `desktop5:Verb` are the schema
+    elements; `desktop4:Extension` wraps them but the children must
+    be desktop5. The earlier `uap3:Extension` / `uap3:Verb` in this
+    fragment was wrong (uap3 has no FileExplorerContextMenus element)
+    and silently caused Win11 to skip the packaged COM verb index —
+    explorer never queried our CLSIDs.
+
+  Build:
+    * `windows.comServer` Extension also needs
+      `uap10:RuntimeBehavior="packagedClassicApp"` so the in-proc
+      surrogate is recognised as a desktop COM server.
 -->
 <Extensions>
   <com:Extension Category="windows.comServer"
-                 xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10">
+                 uap10:RuntimeBehavior="packagedClassicApp"
+                 xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+                 xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10">
     <com:ComServer>
       <com:SurrogateServer DisplayName="OtterZip Shell Extension">
         <com:Class Id="22222222-2222-3333-4444-555555555555"
                    Path="OtterZip.Shell.dll"
                    ThreadingModel="STA" />
         <com:Class Id="44444444-2222-3333-4444-555555555555"
+                   Path="OtterZip.Shell.dll"
+                   ThreadingModel="STA" />
+        <com:Class Id="33333333-2222-3333-4444-555555555555"
                    Path="OtterZip.Shell.dll"
                    ThreadingModel="STA" />
         <com:Class Id="55555555-2222-3333-4444-555555555555"
@@ -24,34 +50,37 @@
     </com:ComServer>
   </com:Extension>
 
-  <uap3:Extension xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
-                  Category="windows.fileExplorerContextMenus">
-    <uap3:FileExplorerContextMenus>
-      <uap3:ItemType Type="*">
+  <desktop4:Extension xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+                      xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+                      Category="windows.fileExplorerContextMenus">
+    <desktop4:FileExplorerContextMenus>
+      <desktop5:ItemType Type="*">
         <!-- Bandizip-style direct format-specific quick verbs. -->
-        <uap3:Verb Id="OtterzipCompressZip"
-                   Clsid="55555555-2222-3333-4444-555555555555" />
-        <uap3:Verb Id="OtterzipCompress7z"
-                   Clsid="66666666-2222-3333-4444-555555555555" />
-        <uap3:Verb Id="OtterzipCompress"
-                   Clsid="44444444-2222-3333-4444-555555555555" />
-      </uap3:ItemType>
-      <uap3:ItemType Type=".zip">
-        <uap3:Verb Id="OtterzipExtract"
-                   Clsid="22222222-2222-3333-4444-555555555555" />
-      </uap3:ItemType>
-      <uap3:ItemType Type=".7z">
-        <uap3:Verb Id="OtterzipExtract"
-                   Clsid="22222222-2222-3333-4444-555555555555" />
-      </uap3:ItemType>
-      <uap3:ItemType Type=".tar">
-        <uap3:Verb Id="OtterzipExtract"
-                   Clsid="22222222-2222-3333-4444-555555555555" />
-      </uap3:ItemType>
-      <uap3:ItemType Type=".gz">
-        <uap3:Verb Id="OtterzipExtract"
-                   Clsid="22222222-2222-3333-4444-555555555555" />
-      </uap3:ItemType>
-    </uap3:FileExplorerContextMenus>
-  </uap3:Extension>
+        <desktop5:Verb Id="OtterzipCompressZip"
+                       Clsid="55555555-2222-3333-4444-555555555555" />
+        <desktop5:Verb Id="OtterzipCompress7z"
+                       Clsid="66666666-2222-3333-4444-555555555555" />
+        <desktop5:Verb Id="OtterzipCompress"
+                       Clsid="44444444-2222-3333-4444-555555555555" />
+        <desktop5:Verb Id="OtterzipMenu"
+                       Clsid="33333333-2222-3333-4444-555555555555" />
+      </desktop5:ItemType>
+      <desktop5:ItemType Type=".zip">
+        <desktop5:Verb Id="OtterzipExtract"
+                       Clsid="22222222-2222-3333-4444-555555555555" />
+      </desktop5:ItemType>
+      <desktop5:ItemType Type=".7z">
+        <desktop5:Verb Id="OtterzipExtract"
+                       Clsid="22222222-2222-3333-4444-555555555555" />
+      </desktop5:ItemType>
+      <desktop5:ItemType Type=".tar">
+        <desktop5:Verb Id="OtterzipExtract"
+                       Clsid="22222222-2222-3333-4444-555555555555" />
+      </desktop5:ItemType>
+      <desktop5:ItemType Type=".gz">
+        <desktop5:Verb Id="OtterzipExtract"
+                       Clsid="22222222-2222-3333-4444-555555555555" />
+      </desktop5:ItemType>
+    </desktop4:FileExplorerContextMenus>
+  </desktop4:Extension>
 </Extensions>

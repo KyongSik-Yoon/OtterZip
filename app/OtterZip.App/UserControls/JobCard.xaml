@@ -107,6 +107,21 @@
                          Opacity="0.7"
                          Visibility="Collapsed" />
 
+            <!-- Row 2c: current entry filename. Diagnostic surface
+                 so the user can identify *which* file the writer is
+                 on at any moment — answers "which entry is slow?"
+                 without needing to open the log. Collapses when the
+                 worker hasn't reported a name yet (e.g. between
+                 in-flight ticks in the small-files pipeline). -->
+            <TextBlock x:Name="CurrentEntryNameEl"
+                       Style="{StaticResource CaptionTextStyle}"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                       Opacity="0.75"
+                       FontSize="10"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,1,0,0"
+                       Visibility="Collapsed" />
+
             <!-- Row 3a: error message (Error state only). Indented to
                  match the filename column; wraps so long messages stay
                  readable instead of being squeezed into the top-right

@@ -2,8 +2,11 @@
 // See SubmenuCommands.h for the architecture rationale.
 
 #include "SubmenuCommands.h"
+#include "ArchiveDetection.h"
 #include "QuickCompressCommands.h"
+#include "ShellAssets.h"
 #include "ShellInvoke.h"
+#include "ShellStrings.h"
 
 #include <shlwapi.h>
 #include <shobjidl.h>
@@ -14,77 +17,69 @@
 
 #pragma comment(lib, "Shlwapi.lib")
 
+namespace OtterZip::Shell::detail
+{
+    // Shared placeholder substitution helper, matches the FormatTitle
+    // logic in QuickCompressCommands. Used by the two submenu quick
+    // verb classes below.
+    static std::wstring SubstituteFmt(std::wstring fmt, std::wstring const& a,
+                                      std::wstring const& b, std::wstring const& c)
+    {
+        auto replace = [](std::wstring& s, std::wstring const& token, std::wstring const& v)
+        {
+            size_t pos = s.find(token);
+            if (pos != std::wstring::npos)
+            {
+                s.replace(pos, token.size(), v);
+            }
+        };
+        replace(fmt, L"{0}", a);
+        replace(fmt, L"{1}", b);
+        replace(fmt, L"{2}", c);
+        return fmt;
+    }
+}
+
 namespace OtterZip::Shell
 {
-    namespace
-    {
-        // Lower-case .ext suffixes we open. Mirrors the set declared in
-        // Package.appxmanifest's FileTypeAssociation block — keep both
-        // lists in sync if a new format lands.
-        constexpr wchar_t const* kArchiveExts[] = {
-            L".zip",  L".zipx", L".7z",   L".rar",  L".tar",
-            L".tgz",  L".tbz",  L".tbz2", L".tlz",  L".txz",  L".tzst",
-            L".gz",   L".bz2",  L".xz",   L".lzma", L".zst",  L".lz4",
-            L".jar",  L".war",  L".ear",  L".ipa",  L".apk",  L".aab",
-            L".xpi",  L".crx",  L".iso",  L".img",  L".cab",  L".deb",
-        };
-
-        bool HasArchiveExtension(std::wstring_view path) noexcept
-        {
-            auto dot = path.find_last_of(L'.');
-            if (dot == std::wstring_view::npos) return false;
-            std::wstring ext{ path.substr(dot) };
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                [](wchar_t c) { return static_cast<wchar_t>(::towlower(c)); });
-            for (auto const* candidate : kArchiveExts)
-            {
-                if (ext == candidate) return true;
-            }
-            return false;
-        }
-
-        // Returns true if *any* item in the array carries an archive
-        // extension. Used to decide whether to surface "Extract here" in
-        // the submenu — for a folder selection we just want Compress.
-        bool ItemsContainAnyArchive(IShellItemArray* items) noexcept
-        {
-            if (!items) return false;
-            DWORD count = 0;
-            if (FAILED(items->GetCount(&count)) || count == 0) return false;
-
-            for (DWORD i = 0; i < count; ++i)
-            {
-                Microsoft::WRL::ComPtr<IShellItem> item;
-                if (FAILED(items->GetItemAt(i, item.GetAddressOf()))) continue;
-
-                LPWSTR raw = nullptr;
-                if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &raw)) || !raw)
-                {
-                    continue;
-                }
-                std::wstring path{ raw };
-                ::CoTaskMemFree(raw);
-
-                if (HasArchiveExtension(path)) return true;
-            }
-            return false;
-        }
-    }
+    // Archive-detection helpers (kArchiveExts, HasArchiveExtension,
+    // ItemsContainAnyArchive) moved to ArchiveDetection.{h,cpp} so the
+    // Compress* GetStates in QuickCompressCommands.cpp / CompressCommand.cpp
+    // can share the same logic for Bandizip parity (archive context →
+    // Compress verbs hidden).
 
     // ----------------------------- SubmenuCompressCommand -----------------------------
 
     IFACEMETHODIMP SubmenuCompressCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName) noexcept
     {
-        return SHStrDupW(L"Compress with OtterZip", ppszName);
+        // Reuse the same key as the top-level CompressCommand so the
+        // submenu label is consistent with the flat-mode equivalent.
+        std::wstring title = LoadShellString(
+            L"Shell_CompressDialog_Title",
+            L"OtterZip으로 압축...(&O)");
+        return SHStrDupW(title.c_str(), ppszName);
     }
     IFACEMETHODIMP SubmenuCompressCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // Submenu wrappers share the brand icon with their top-level
+        // siblings — nested-mode users see consistent iconography
+        // inside the "OtterZip ▶" parent menu. Identical resolution
+        // pattern as CompressCommand::GetIcon etc.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
     IFACEMETHODIMP SubmenuCompressCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"Create a new archive from the selected files.", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_CompressDialog_Tooltip",
+            L"Create a new archive from the selected files.");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
     IFACEMETHODIMP SubmenuCompressCommand::GetCanonicalName(GUID* pguidCommandName) noexcept
     {
@@ -123,18 +118,33 @@ namespace OtterZip::Shell
     IFACEMETHODIMP SubmenuCompressZipCommand::GetTitle(IShellItemArray* items, LPWSTR* ppszName) noexcept
     {
         std::wstring stem = DeriveSelectionStem(items);
-        wchar_t buf[MAX_PATH + 32] = {};
-        ::swprintf_s(buf, L"%s.zip으로 압축(&Z)", stem.c_str());
-        return SHStrDupW(buf, ppszName);
+        std::wstring fmt = LoadShellString(
+            L"Shell_CompressQuick_TitleFormat",
+            L"{0}{1}으로 압축(&{2})");
+        std::wstring out = detail::SubstituteFmt(fmt, stem, L".zip", L"Z");
+        return SHStrDupW(out.c_str(), ppszName);
     }
     IFACEMETHODIMP SubmenuCompressZipCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // Submenu wrappers share the brand icon with their top-level
+        // siblings — nested-mode users see consistent iconography
+        // inside the "OtterZip ▶" parent menu. Identical resolution
+        // pattern as CompressCommand::GetIcon etc.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
     IFACEMETHODIMP SubmenuCompressZipCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"Compress selected items to a ZIP archive (no dialog).", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_CompressZipQuick_Tooltip",
+            L"Compress selected items to a ZIP archive (no dialog).");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
     IFACEMETHODIMP SubmenuCompressZipCommand::GetCanonicalName(GUID* pguidCommandName) noexcept
     {
@@ -172,18 +182,33 @@ namespace OtterZip::Shell
     IFACEMETHODIMP SubmenuCompressSevenZCommand::GetTitle(IShellItemArray* items, LPWSTR* ppszName) noexcept
     {
         std::wstring stem = DeriveSelectionStem(items);
-        wchar_t buf[MAX_PATH + 32] = {};
-        ::swprintf_s(buf, L"%s.7z으로 압축(&7)", stem.c_str());
-        return SHStrDupW(buf, ppszName);
+        std::wstring fmt = LoadShellString(
+            L"Shell_CompressQuick_TitleFormat",
+            L"{0}{1}으로 압축(&{2})");
+        std::wstring out = detail::SubstituteFmt(fmt, stem, L".7z", L"7");
+        return SHStrDupW(out.c_str(), ppszName);
     }
     IFACEMETHODIMP SubmenuCompressSevenZCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // Submenu wrappers share the brand icon with their top-level
+        // siblings — nested-mode users see consistent iconography
+        // inside the "OtterZip ▶" parent menu. Identical resolution
+        // pattern as CompressCommand::GetIcon etc.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
     IFACEMETHODIMP SubmenuCompressSevenZCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"Compress selected items to a 7-Zip archive (no dialog).", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_Compress7zQuick_Tooltip",
+            L"Compress selected items to a 7-Zip archive (no dialog).");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
     IFACEMETHODIMP SubmenuCompressSevenZCommand::GetCanonicalName(GUID* pguidCommandName) noexcept
     {
@@ -217,16 +242,33 @@ namespace OtterZip::Shell
 
     IFACEMETHODIMP SubmenuExtractHereCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName) noexcept
     {
-        return SHStrDupW(L"Extract here", ppszName);
+        // Inside the parent submenu the verb doesn't need the brand
+        // suffix — Explorer already shows the parent's "OtterZip" label
+        // above. Distinct key from the top-level Shell_ExtractHere_Title.
+        std::wstring title = LoadShellString(L"Shell_ExtractHereSubmenu_Title", L"Extract here");
+        return SHStrDupW(title.c_str(), ppszName);
     }
     IFACEMETHODIMP SubmenuExtractHereCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon) noexcept
     {
-        if (ppszIcon) *ppszIcon = nullptr;
-        return E_NOTIMPL;
+        // Submenu wrappers share the brand icon with their top-level
+        // siblings — nested-mode users see consistent iconography
+        // inside the "OtterZip ▶" parent menu. Identical resolution
+        // pattern as CompressCommand::GetIcon etc.
+        if (!ppszIcon) return E_POINTER;
+        std::wstring path = GetPackagedAssetPath(L"Assets\\AppIcon.ico");
+        if (path.empty())
+        {
+            *ppszIcon = nullptr;
+            return E_NOTIMPL;
+        }
+        return SHStrDupW(path.c_str(), ppszIcon);
     }
     IFACEMETHODIMP SubmenuExtractHereCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip) noexcept
     {
-        return SHStrDupW(L"Extract this archive next to its current folder.", ppszInfotip);
+        std::wstring tooltip = LoadShellString(
+            L"Shell_ExtractHere_Tooltip",
+            L"Extract this archive next to its current folder.");
+        return SHStrDupW(tooltip.c_str(), ppszInfotip);
     }
     IFACEMETHODIMP SubmenuExtractHereCommand::GetCanonicalName(GUID* pguidCommandName) noexcept
     {

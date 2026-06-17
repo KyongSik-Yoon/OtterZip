@@ -140,6 +140,9 @@ public sealed partial class JobCard : UserControl
                         ? Microsoft.UI.Xaml.Visibility.Visible
                         : Microsoft.UI.Xaml.Visibility.Collapsed;
                     break;
+                case nameof(JobItem.CurrentEntryName):
+                    UpdateCurrentEntryName();
+                    break;
             }
         }
         catch (InvalidOperationException)
@@ -159,7 +162,26 @@ public sealed partial class JobCard : UserControl
         CurrentEntryProgressEl.Visibility = _item.CurrentEntryProgressVisible
             ? Microsoft.UI.Xaml.Visibility.Visible
             : Microsoft.UI.Xaml.Visibility.Collapsed;
+        UpdateCurrentEntryName();
         ApplyState();
+    }
+
+    /// <summary>
+    /// Render the current-entry name row. Collapses when no name is
+    /// available so the JobCard doesn't grow taller in states (queued
+    /// / done / cancelled / error) where the field has no meaning.
+    /// </summary>
+    private void UpdateCurrentEntryName()
+    {
+        string name = _item?.CurrentEntryName ?? string.Empty;
+        if (string.IsNullOrEmpty(name) || _item?.State != JobState.Running)
+        {
+            CurrentEntryNameEl.Text = string.Empty;
+            CurrentEntryNameEl.Visibility = Visibility.Collapsed;
+            return;
+        }
+        CurrentEntryNameEl.Text = name;
+        CurrentEntryNameEl.Visibility = Visibility.Visible;
     }
 
     private void ApplyState()
@@ -215,6 +237,11 @@ public sealed partial class JobCard : UserControl
                 ApplyErrorState();
                 break;
         }
+        // CurrentEntryName visibility tracks the Running state — let
+        // the helper re-evaluate after every state transition so a
+        // late "current entry" property-change dispatch can't leak a
+        // filename into the Done caption row.
+        UpdateCurrentEntryName();
     }
 
     /// <summary>

@@ -107,6 +107,24 @@ pub struct TestReport {
     pub elapsed: std::time::Duration,
 }
 
+/// Top-level layout of an archive's entries, used by Smart Extract to
+/// decide between a flat extract and a `<stem>/`-wrapped extract.
+///
+/// Mirrors Bandizip's `알아서 풀기` heuristic — a single top-level
+/// directory means the archive creator already wrapped everything in a
+/// folder, so extracting into the current directory produces a single
+/// tidy folder. Any deviation (multiple roots, or files at the root)
+/// indicates the archive expects to be wrapped before being unpacked.
+#[derive(Debug, Clone)]
+pub enum RootLayout {
+    /// Every probed entry lives under the same top-level component
+    /// (the carried string, without the trailing slash).
+    SingleFolder(String),
+    /// Either multiple top-level components, or at least one entry at
+    /// the archive root.
+    Flat,
+}
+
 #[derive(Debug, Clone)]
 pub enum ExtractWarning {
     PathTraversalClamped { original: String, clamped: PathBuf },
@@ -488,6 +506,76 @@ impl Archive {
 
         report.elapsed = start.elapsed();
         Ok(report)
+    }
+
+    /// Inspect the archive's top-level layout to decide whether a
+    /// destination-side "smart extract" should drop entries into the
+    /// current directory or wrap them in `<stem>/`.
+    ///
+    /// Returns:
+    ///   * [`RootLayout::SingleFolder(name)`] when every entry probed
+    ///     lives under the same top-level component `name/` — a flat
+    ///     extract into the current directory will yield a single tidy
+    ///     `name/` subfolder, mirroring what the archive creator
+    ///     intended.
+    ///   * [`RootLayout::Flat`] when probed entries include either a
+    ///     root-level file, or multiple top-level directories. Smart
+    ///     extract then creates a `<stem>/` wrapper to avoid littering
+    ///     the destination with loose files.
+    ///
+    /// Probes up to 1024 entries — sufficient sample for the
+    /// single-root vs flat decision on every real archive we've seen,
+    /// and cheap because the iteration touches metadata only (no
+    /// decompression). If the archive has more entries and the first
+    /// 1024 are consistent, we trust the pattern; this matches
+    /// Bandizip's `알아서 풀기` behavior, which also samples rather
+    /// than scans exhaustively.
+    pub fn detect_root_layout(&self) -> Result<RootLayout> {
+        const MAX_ENTRIES_PROBED: usize = 1024;
+        let mut common_root: Option<String> = None;
+        let mut probed = 0usize;
+
+        for entry_result in self.entries()?.take(MAX_ENTRIES_PROBED) {
+            let entry = entry_result?;
+            probed += 1;
+
+            // OtterZip paths are forward-slash normalised at backend
+            // ingest (see `glossary.md`). The split below relies on
+            // that invariant.
+            let top = match entry.path.find('/') {
+                Some(idx) => &entry.path[..idx],
+                None => {
+                    // Entry at archive root with no sub-component —
+                    // by definition flat. Bail early; no need to
+                    // examine more entries.
+                    return Ok(RootLayout::Flat);
+                }
+            };
+
+            // Defensive: empty top-level component (would happen for
+            // a leading-slash entry, which our path normaliser rejects
+            // but third-party tools sometimes emit).
+            if top.is_empty() {
+                return Ok(RootLayout::Flat);
+            }
+
+            match &common_root {
+                None => common_root = Some(top.to_string()),
+                Some(root) => {
+                    if root != top {
+                        return Ok(RootLayout::Flat);
+                    }
+                }
+            }
+        }
+
+        match common_root {
+            Some(root) if probed > 0 => Ok(RootLayout::SingleFolder(root)),
+            // Empty archive (no entries at all) — treat as flat so the
+            // smart-extract caller creates a `<stem>/` wrapper rather
+            // than silently doing nothing.
+            _ => Ok(RootLayout::Flat),
+        }
     }
 
     /// Stream a single entry's decompressed bytes. Implements the

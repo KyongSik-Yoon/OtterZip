@@ -266,7 +266,13 @@ public sealed partial class MainWindow : Window
             return;
         }
         TryToastCompletion(item);
-        TryRevealOnCompletion(item);
+        // Shell-invoked (right-click) ops don't reveal — the user is
+        // already in the Explorer view that the verb fired from. The
+        // toast still fires so there's a completion signal.
+        if (!_launchedFromShellInvoke)
+        {
+            TryRevealOnCompletion(item);
+        }
         TryRecycleSourceArchive(item);
     }
 
@@ -429,8 +435,21 @@ public sealed partial class MainWindow : Window
     // ============================================================
     //  Shell extension entry (--invoke verb)
     // ============================================================
+
+    /// <summary>
+    /// True when this MainWindow was launched to service an Explorer
+    /// right-click verb (<c>--invoke</c>). Suppresses the post-job
+    /// reveal-in-Explorer: the user is already looking at the folder
+    /// in the Explorer window they right-clicked from, so popping a
+    /// second Explorer window selecting the new archive is redundant
+    /// and jarring (Bandizip doesn't do it either). Drag &amp; drop /
+    /// in-app operations keep the Settings_RevealAfter* behavior.
+    /// </summary>
+    private bool _launchedFromShellInvoke;
+
     internal void PreloadInvoke(InvokeRequest request)
     {
+        _launchedFromShellInvoke = true;
         DispatcherQueue.TryEnqueue(() =>
         {
             _ = DispatchInvokeAsync(request);
@@ -444,14 +463,35 @@ public sealed partial class MainWindow : Window
             if (string.Equals(request.Verb, "extract-here", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(request.Verb, "extract", StringComparison.OrdinalIgnoreCase))
             {
-                if (request.Paths.Count > 0)
-                {
-                    await ExtractAsync(request.Paths[0]).ConfigureAwait(true);
-                }
+                await ExtractEachAsync(request.Paths, ShellExtractMode.Here).ConfigureAwait(true);
+            }
+            else if (string.Equals(request.Verb, "extract-smart", StringComparison.OrdinalIgnoreCase))
+            {
+                await ExtractEachAsync(request.Paths, ShellExtractMode.Smart).ConfigureAwait(true);
+            }
+            else if (string.Equals(request.Verb, "extract-to-subfolder", StringComparison.OrdinalIgnoreCase))
+            {
+                await ExtractEachAsync(request.Paths, ShellExtractMode.Subfolder).ConfigureAwait(true);
+            }
+            else if (string.Equals(request.Verb, "extract-dialog", StringComparison.OrdinalIgnoreCase))
+            {
+                await ExtractEachAsync(request.Paths, ShellExtractMode.Dialog).ConfigureAwait(true);
             }
             else if (string.Equals(request.Verb, "compress", StringComparison.OrdinalIgnoreCase))
             {
                 await CompressAsync(request.Paths).ConfigureAwait(true);
+            }
+            else if (string.Equals(request.Verb, "compress-individually", StringComparison.OrdinalIgnoreCase))
+            {
+                // Bandizip 각 항목별 압축 — emit N archives, one per
+                // selected input. Sequential through CompressAsync so
+                // progress + cleanup paths stay identical. Default
+                // format comes from Settings_DefaultMethodIndex via
+                // PlanCompress, which CompressAsync already honors.
+                foreach (var path in request.Paths)
+                {
+                    await CompressAsync(new[] { path }).ConfigureAwait(true);
+                }
             }
             else
             {
@@ -464,6 +504,30 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Extract every selected archive with the given mode. Bandizip
+    /// parity (2026-06-17): a multi-select Extract verb unpacks ALL of
+    /// the chosen archives, not just the first. Each archive runs
+    /// through <see cref="ExtractAsync"/> independently so per-archive
+    /// destination logic (Here / Smart-layout / Subfolder) is applied
+    /// to each. One archive failing doesn't abort the rest — the error
+    /// surfaces on its own JobCard and the loop continues.
+    /// </summary>
+    private async Task ExtractEachAsync(IReadOnlyList<string> paths, ShellExtractMode mode)
+    {
+        foreach (string path in paths)
+        {
+            try
+            {
+                await ExtractAsync(path, mode).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(path), ex.Message);
+            }
         }
     }
 
@@ -891,9 +955,30 @@ public sealed partial class MainWindow : Window
     // the drop — that's the one-shot "actually I want to pick the
     // destination this time" override.
     // ============================================================
-    private async Task ExtractAsync(string archivePath, bool forceDialog = false)
+    /// <summary>
+    /// Destination semantics for a shell extract verb. Drives which
+    /// folder the archive unpacks into; see <see cref="ResolveDestForMode"/>.
+    /// </summary>
+    private enum ShellExtractMode
     {
-        DebugLog.Info("ExtractAsync begin: " + archivePath + " forceDialog=" + forceDialog);
+        /// <summary>Settings-driven (drag &amp; drop / double-click default).</summary>
+        Default,
+        /// <summary>"여기에 풀기" — straight into the archive's parent folder.</summary>
+        Here,
+        /// <summary>"알아서 풀기" — in place if single-root, else into &lt;stem&gt;/.</summary>
+        Smart,
+        /// <summary>"&lt;stem&gt;\에 풀기" — always into &lt;stem&gt;/ (unique).</summary>
+        Subfolder,
+        /// <summary>"OtterZip으로 풀기..." — force the destination/options dialog.</summary>
+        Dialog,
+    }
+
+    private Task ExtractAsync(string archivePath, bool forceDialog = false)
+        => ExtractAsync(archivePath, ShellExtractMode.Default, forceDialog);
+
+    private async Task ExtractAsync(string archivePath, ShellExtractMode mode, bool forceDialog = false)
+    {
+        DebugLog.Info("ExtractAsync begin: " + archivePath + " mode=" + mode + " forceDialog=" + forceDialog);
         // Probe for split-archive layout before touching any archive
         // reader — the Rust core's `open()` on a partial volume returns
         // a "Could not find EOCD" / mid-stream error that confuses
@@ -906,6 +991,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Dialog mode always shows the destination/options panel.
+        if (mode == ShellExtractMode.Dialog)
+        {
+            forceDialog = true;
+        }
+
         bool isEncrypted;
         string suggestedDest;
         try
@@ -913,7 +1004,7 @@ public sealed partial class MainWindow : Window
             var probeStart = System.Diagnostics.Stopwatch.StartNew();
             isEncrypted = ProbeIsEncrypted(archivePath);
             DebugLog.Info("ExtractAsync: ProbeIsEncrypted took " + probeStart.ElapsedMilliseconds + "ms (encrypted=" + isEncrypted + ")");
-            suggestedDest = ResolveExtractDestination(archivePath);
+            suggestedDest = ResolveDestForMode(archivePath, mode);
         }
         catch (Exception ex)
         {
@@ -930,6 +1021,107 @@ public sealed partial class MainWindow : Window
         }
 
         await RunExtractPanelLoopAsync(archivePath, suggestedDest, isEncrypted, forceDialog).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Resolve the extract destination for a shell verb mode. Bandizip
+    /// parity (2026-06-17):
+    ///   * <see cref="ShellExtractMode.Here"/> → parent folder, merge.
+    ///   * <see cref="ShellExtractMode.Subfolder"/> → &lt;stem&gt;/ (unique).
+    ///   * <see cref="ShellExtractMode.Smart"/> → single-root archives
+    ///     unpack in place (the archive already wraps everything in one
+    ///     folder); otherwise wrap in &lt;stem&gt;/ to avoid littering.
+    ///   * <see cref="ShellExtractMode.Default"/> / <see cref="ShellExtractMode.Dialog"/>
+    ///     → the settings-driven path (the dialog overrides anyway).
+    /// </summary>
+    private static string ResolveDestForMode(string archivePath, ShellExtractMode mode)
+    {
+        switch (mode)
+        {
+            case ShellExtractMode.Here:
+                return ComputeExtractHerePath(archivePath);
+            case ShellExtractMode.Subfolder:
+                return ComputeSubfolderExtractPath(archivePath);
+            case ShellExtractMode.Smart:
+                return IsSingleRootFolderArchive(archivePath)
+                    ? ComputeExtractHerePath(archivePath)
+                    : ComputeSubfolderExtractPath(archivePath);
+            default:
+                return ResolveExtractDestination(archivePath);
+        }
+    }
+
+    /// <summary>
+    /// Forced "&lt;stem&gt;/" destination next to the archive, with a
+    /// "(1)" / "(2)" suffix when that folder already exists. Independent
+    /// of Settings_AlwaysExtractToSubfolder — the verb's whole point is
+    /// the subfolder.
+    /// </summary>
+    private static string ComputeSubfolderExtractPath(string archivePath)
+    {
+        string baseDir = Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory();
+        string stem = StripArchiveExtension(Path.GetFileName(archivePath));
+        return EnsureUniqueExtractDirectory(Path.Combine(baseDir, stem));
+    }
+
+    /// <summary>
+    /// "알아서 풀기" layout probe — true when every entry lives under a
+    /// single shared top-level folder (so a flat extract yields one tidy
+    /// folder). Computed in managed code via the already-bound
+    /// <c>ReadEntries</c> rather than the Rust <c>detect_root_layout</c>
+    /// FFI (no extra P/Invoke surface; the core function stays for when
+    /// extraction moves fully into the engine in v0.22). Any failure
+    /// (encrypted headers, read error) defaults to <c>false</c> → safe
+    /// subfolder wrap.
+    /// </summary>
+    private static bool IsSingleRootFolderArchive(string archivePath)
+    {
+        try
+        {
+            using var arc = Archive.Open(archivePath);
+            string? root = null;
+            foreach (var entry in arc.ReadEntries())
+            {
+                string p = entry.Path.Replace('\\', '/');
+                int slash = p.IndexOf('/', StringComparison.Ordinal);
+                if (slash <= 0)
+                {
+                    return false;   // a root-level file → flat layout
+                }
+                string top = p.Substring(0, slash);
+                if (root is null)
+                {
+                    root = top;
+                }
+                else if (!string.Equals(root, top, StringComparison.Ordinal))
+                {
+                    return false;   // more than one top-level component
+                }
+            }
+            return root is not null;
+        }
+        catch (Exception ex)
+        {
+            DebugLog.Info("IsSingleRootFolderArchive: probe failed, assuming flat: " + ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Strip a single or compound archive extension for stem derivation.
+    /// `foo.tar.gz` → `foo`, `bar.zip` → `bar`.
+    /// </summary>
+    private static string StripArchiveExtension(string fileName)
+    {
+        string[] compound = { ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tar.lz4", ".tar.lzma" };
+        foreach (string suffix in compound)
+        {
+            if (fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return fileName.Substring(0, fileName.Length - suffix.Length);
+            }
+        }
+        return Path.GetFileNameWithoutExtension(fileName);
     }
 
     /// <summary>

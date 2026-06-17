@@ -33,7 +33,9 @@ pub mod progress;
 mod backends;
 
 // Re-exports — crate root shortcuts
-pub use archive::{Archive, ExtractReport, ExtractWarning, OpenMode, TestReport, VolumeInfo};
+pub use archive::{
+    Archive, ExtractReport, ExtractWarning, OpenMode, RootLayout, TestReport, VolumeInfo,
+};
 pub use entry::{Entry, EntryIter, HostOs};
 pub use error::{Result, OtterzipError};
 pub use format::{detect, detect_bytes, ArchiveFormat, CompressionMethod, EncryptionMethod};
