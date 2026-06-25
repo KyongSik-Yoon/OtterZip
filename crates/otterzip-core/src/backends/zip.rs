@@ -627,7 +627,19 @@ impl ZipBackend {
                         return;
                     }
                     OverwritePolicy::Always => out_path,
-                    OverwritePolicy::Rename => crate::archive::unique_extract_path(&out_path),
+                    // Reserve the keep-both name atomically (create_new) — a
+                    // plain unique_extract_path + File::create would let two
+                    // workers pick the same `foo (2).ext` and truncate each
+                    // other.
+                    OverwritePolicy::Rename => {
+                        match crate::archive::reserve_unique_extract_path(&out_path) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                set_first_err(&first_err, &canceled, OtterzipError::Io(e));
+                                return;
+                            }
+                        }
+                    }
                     OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
                         entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         return;

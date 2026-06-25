@@ -291,7 +291,19 @@ impl Archive {
     /// or [`Archive::entries`] on it returns [`OtterzipError::InvalidArgument`].
     /// Use [`Archive::add_file`] / [`Archive::add_dir_recursive`] /
     /// [`Archive::commit`] to populate.
-    pub fn create(path: impl AsRef<Path>, opts: CreateOptions) -> Result<Self> {
+    pub fn create(path: impl AsRef<Path>, mut opts: CreateOptions) -> Result<Self> {
+        // Fail closed: a password supplied with no explicit encryption method
+        // must NEVER silently produce a PLAINTEXT archive. Treat "password
+        // present, method unset" as a request for the strong default (AES-256)
+        // rather than dropping encryption. The shell UI / CLI already pair the
+        // two, but this guards any other FFI consumer from the silent-plaintext
+        // footgun (the backends gate on `password.is_some() && encryption !=
+        // None`, so without this they'd write an unencrypted archive).
+        if opts.password.is_some()
+            && opts.encryption == crate::format::EncryptionMethod::None
+        {
+            opts.encryption = crate::format::EncryptionMethod::Aes256;
+        }
         let path = path.as_ref();
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
@@ -1330,6 +1342,40 @@ pub(crate) fn unique_extract_path(path: &Path) -> PathBuf {
         }
     }
     path.to_path_buf()
+}
+
+/// Atomically reserve a non-colliding sibling name for the keep-both
+/// ([`OverwritePolicy::Rename`]) policy in the PARALLEL extract backends.
+/// Same naming as [`unique_extract_path`] (`foo (2).ext`, `(3)`, …) but each
+/// candidate is opened with `create_new`, so two rayon workers racing on the
+/// same name can't both win — the loser gets `AlreadyExists` and advances.
+/// This closes the check-then-`File::create` TOCTOU that the pure path-compute
+/// version leaves open under concurrency (the reserved empty file is then
+/// truncate-opened by the caller's normal `File::create`). Serial backends are
+/// single-threaded and keep using [`unique_extract_path`].
+pub(crate) fn reserve_unique_extract_path(path: &Path) -> std::io::Result<PathBuf> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let ext = path.extension().and_then(|s| s.to_str());
+    for i in 2..10_000u32 {
+        let name = match ext {
+            Some(e) => format!("{stem} ({i}).{e}"),
+            None => format!("{stem} ({i})"),
+        };
+        let candidate = parent.join(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(_) => return Ok(candidate),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    // Pathological collision count — degrade to overwriting the original
+    // (matches unique_extract_path's fallback) rather than erroring out.
+    Ok(path.to_path_buf())
 }
 
 /// Combine an entry's in-archive path with the destination root.

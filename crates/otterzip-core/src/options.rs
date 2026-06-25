@@ -16,8 +16,11 @@ pub enum OverwritePolicy {
     /// Keep both: when the output path already exists, extract to a
     /// non-colliding sibling (`name (2).ext`) instead of overwriting or
     /// skipping. Windows Explorer / Bandizip "keep both" behavior — the
-    /// safest default (never loses data). Applies to file entries only;
-    /// directory entries merge as usual.
+    /// safest *choice* (never loses data), which is why the GUI selects it by
+    /// default (`Settings_OverwritePolicy`). The core [`ExtractOptions`]
+    /// struct default stays the conservative `Never` so a direct library
+    /// caller fails loudly on a collision rather than silently renaming.
+    /// Applies to file entries only; directory entries merge as usual.
     Rename = 4,
 }
 
