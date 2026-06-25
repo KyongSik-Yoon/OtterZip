@@ -44,6 +44,10 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // EXPERIMENTAL cold-start mitigation (v0.22.34): a logon startup-task
+        // launch warms the shell COM surrogate and exits before this returns.
+        WarmupShellSurrogateIfStartupTask();
+
         InitializeAppServices();
 
         // Sprint 5: shell extension routes context-menu verbs through
@@ -185,6 +189,81 @@ public partial class App : Application
         }
         return Array.Empty<string>();
     }
+
+    /// <summary>
+    /// On a logon startup-task launch, pre-warm the shell context-menu COM
+    /// surrogate (see <see cref="WarmShellSurrogate"/>) and exit the process at
+    /// once — no app services, no window. Returns normally (does nothing) for
+    /// every other activation so <see cref="OnLaunched"/> proceeds.
+    /// </summary>
+    private static void WarmupShellSurrogateIfStartupTask()
+    {
+        if (!IsStartupTaskActivation())
+        {
+            return;
+        }
+        WarmShellSurrogate();
+        Environment.Exit(0);
+    }
+
+    /// <summary>
+    /// True when Windows launched this process as our registered logon startup
+    /// task (the cold-start shell-warm-up vehicle), as opposed to a normal
+    /// launch / file activation / shell verb.
+    /// </summary>
+    private static bool IsStartupTaskActivation()
+    {
+        try
+        {
+            var activated = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent()?.GetActivatedEventArgs();
+            return activated?.Kind
+                == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.StartupTask;
+        }
+        catch (Exception)
+        {
+            // Best-effort — treat introspection failure as a normal launch.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// EXPERIMENTAL (v0.22.34) cold-start mitigation. The first right-click
+    /// after a cold boot misses our context-menu verbs because Explorer must
+    /// spin up the packaged-COM <c>SurrogateServer</c> (dllhost under app
+    /// identity) and load OtterZip.Shell.dll before our already-fast menu
+    /// build runs — exceeding Win11's modern-menu timeout. Activating any of
+    /// the surrogate's classes here at logon pre-pays that cost (AppX
+    /// activation + AppXSVC resolution + DLL/page load + surrogate spin-up),
+    /// so Explorer's first use is warm. Best-effort; a failure just means the
+    /// warm-up didn't happen. Revert this + the manifest startupTask if a
+    /// reboot test shows no improvement.
+    /// </summary>
+    private static void WarmShellSurrogate()
+    {
+        try
+        {
+            // 22…: ExtractHereCommand — any class in the package surrogate
+            // loads the one shared OtterZip.Shell.dll, which is the cold cost.
+            var clsid = new Guid("22222222-2222-3333-4444-555555555555");
+            var iidUnknown = new Guid("00000000-0000-0000-C000-000000000046");
+            const uint CLSCTX_LOCAL_SERVER = 0x4;
+            if (CoCreateInstance(in clsid, IntPtr.Zero, CLSCTX_LOCAL_SERVER,
+                    in iidUnknown, out IntPtr ppv) == 0
+                && ppv != IntPtr.Zero)
+            {
+                System.Runtime.InteropServices.Marshal.Release(ppv);
+            }
+        }
+        catch (Exception)
+        {
+            // Optimization only — never block or fail logon on warm-up.
+        }
+    }
+
+    [System.Runtime.InteropServices.LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(
+        in Guid rclsid, IntPtr pUnkOuter, uint dwClsContext,
+        in Guid riid, out IntPtr ppv);
 
     /// <summary>
     /// One-time process initialization shared by every launch path

@@ -30,7 +30,7 @@
   -->
   <Identity Name="LumiBearStudio.OtterZip"
             Publisher="CN=A55D3041-E7F5-46CB-8707-AD9C81D7CB43"
-            Version="0.22.33.0" />
+            Version="0.22.34.0" />
 
   <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000"
                     PhonePublisherId="00000000-0000-0000-0000-000000000000" />
@@ -454,6 +454,25 @@
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>
+
+        <!--
+          EXPERIMENTAL (v0.22.34) cold-start mitigation. Runs OtterZip at
+          logon so App.OnLaunched can pre-warm the shell context-menu COM
+          surrogate (WarmShellSurrogate) and exit before the user's first
+          right-click — which otherwise misses our verbs while Explorer
+          cold-spins the packaged-COM SurrogateServer. The launched process
+          shows no window and exits in well under a second. Enabled for the
+          experiment; the user can disable it under Task Manager → Startup.
+          Remove this extension + WarmShellSurrogate if a reboot test shows
+          no improvement. Executable is the app exe (AssemblyName=OtterZip).
+        -->
+        <uap5:Extension Category="windows.startupTask"
+                        Executable="OtterZip.exe"
+                        EntryPoint="Windows.FullTrustApplication">
+          <uap5:StartupTask TaskId="OtterZipShellWarmup"
+                            Enabled="true"
+                            DisplayName="OtterZip" />
+        </uap5:Extension>
 
         <!--
           Phase 7+ (Bandizip mainstream 호환): ItemType 확장.
