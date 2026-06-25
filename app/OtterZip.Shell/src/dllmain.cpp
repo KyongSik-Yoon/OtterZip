@@ -167,6 +167,20 @@ namespace OtterZip::Shell
                 // calls will fall back to the same defaults that
                 // would have applied without the warmup.
             }
+
+            // Pin the module resident for the rest of the surrogate's
+            // lifetime. Once Explorer first activates a verb (this very
+            // call), hold one permanent reference so DllCanUnloadNow keeps
+            // returning S_FALSE. Otherwise, after LockServer(FALSE) drops
+            // the count to 0, the COM surrogate (dllhost) unloads our DLL
+            // on idle and EXITS — so the NEXT right-click after a quiet
+            // period pays the full cold activation again and drops the
+            // verbs (the recurring "한번에 안 나옴"). Pinning keeps the
+            // surrogate warm for the whole session; only the first cold
+            // load per boot remains (out-of-proc packaged-COM activation
+            // is structurally unavoidable — deep-research 2026-06-25).
+            // Ref: DllCanUnloadNow / CoFreeUnusedLibrariesEx (combaseapi).
+            ::OtterzipShell_AddRef();
         });
     }
 }
