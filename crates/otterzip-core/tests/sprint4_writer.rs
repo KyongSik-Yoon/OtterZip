@@ -173,6 +173,53 @@ fn create_zip_aes256_roundtrip() {
 }
 
 #[test]
+fn create_password_without_method_fails_closed() {
+    // SECURITY regression guard. Supplying a password while leaving
+    // `encryption` at its default (None) must NOT silently write a PLAINTEXT
+    // archive — `Archive::create` upgrades password+None to AES-256. The
+    // result must therefore report encrypted and round-trip via the password.
+    let td = tempdir().unwrap();
+    let src = td.path().join("src");
+    write_source_tree(&src);
+    let archive = td.path().join("guard.zip");
+    {
+        let opts = CreateOptions {
+            format: ArchiveFormat::Zip,
+            compression: CompressionMethod::Deflate,
+            compression_level: 5,
+            // `encryption` deliberately left at the default (None) while a
+            // password IS supplied — the fail-closed path under test.
+            password: Some(Zeroizing::new("s3cret".to_string())),
+            ..Default::default()
+        };
+        let mut archive_w = Archive::create(&archive, opts).unwrap();
+        archive_w.add_file(src.join("a.txt"), "a.txt").unwrap();
+        archive_w.commit().unwrap();
+    }
+
+    // Must be encrypted despite encryption=None at create time.
+    let probe = Archive::open(&archive, OpenMode::Read).unwrap();
+    assert!(
+        probe.is_encrypted().unwrap(),
+        "password without an explicit method must still encrypt (fail-closed)"
+    );
+
+    // And it must round-trip with the supplied password.
+    let out = td.path().join("out");
+    let opts = ExtractOptions {
+        destination: out.clone(),
+        overwrite: OverwritePolicy::Always,
+        ..Default::default()
+    };
+    let reader =
+        Archive::open_with_password(&archive, OpenMode::Read, "s3cret".to_string()).unwrap();
+    reader
+        .extract_all::<fn(&otterzip_core::Progress) -> bool>(&opts, None)
+        .unwrap();
+    assert_eq!(fs::read(out.join("a.txt")).unwrap(), b"alpha\n");
+}
+
+#[test]
 fn create_7z_solid_roundtrip() {
     // Solid 7z packs small entries into shared blocks; verify the result
     // is still a valid, fully-extractable archive.
