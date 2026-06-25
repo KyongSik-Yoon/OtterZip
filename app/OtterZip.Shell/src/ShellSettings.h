@@ -19,9 +19,6 @@ namespace OtterZip::Shell
     /// Reads the OtterZip package's LocalSettings under a 5 s cache.
     bool IsShellMenuEnabled() noexcept;
 
-    /// True when `Settings_ShellExtractHereAsDefault` is set (default ON).
-    bool IsExtractHereDefault() noexcept;
-
     /// True when `Settings_ShellMenuMode` == "nested" (the user wants
     /// "OtterZip ▶ {Compress, Extract}" submenu layout). Default false
     /// (== "flat", legacy behavior where Compress / Extract sit at the

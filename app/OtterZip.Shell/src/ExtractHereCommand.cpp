@@ -116,10 +116,9 @@ namespace OtterZip::Shell
         if (!pFlags) return E_POINTER;
         // ECF_DEFAULT is `0` — i.e. "no special flags". Explorer decides
         // the default verb from the order in `FileExplorerContextMenus`,
-        // not from this flag. The Settings_ShellExtractHereAsDefault
-        // toggle therefore can't be enforced here without a manifest
-        // edit; we keep the toggle UI but document the limitation in
-        // the integration tab.
+        // not from a runtime flag — there's no per-user "make extract-here
+        // the default" knob (the prior Settings_ShellExtractHereAsDefault
+        // toggle was removed as a no-op since it could never be enforced).
         *pFlags = ECF_DEFAULT;
         return S_OK;
     }

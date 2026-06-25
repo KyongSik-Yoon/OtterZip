@@ -93,22 +93,26 @@
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
     <ClCompile Include="src\ExtractHereCommand.cpp" />
+    <ClCompile Include="src\OpenAppCommand.cpp" />
     <ClCompile Include="src\CompressCommand.cpp" />
     <ClCompile Include="src\OtterzipMenuCommand.cpp" />
     <ClCompile Include="src\SubmenuCommands.cpp" />
     <ClCompile Include="src\ShellInvoke.cpp" />
     <ClCompile Include="src\ShellSettings.cpp" />
+    <ClCompile Include="src\ShellCache.cpp" />
     <ClCompile Include="src\QuickCompressCommands.cpp" />
     <ClCompile Include="src\ExtractCommands.cpp" />
     <ClCompile Include="src\ShellStrings.cpp" />
     <ClCompile Include="src\ShellAssets.cpp" />
     <ClCompile Include="src\ArchiveDetection.cpp" />
     <ClInclude Include="src\ExtractHereCommand.h" />
+    <ClInclude Include="src\OpenAppCommand.h" />
     <ClInclude Include="src\CompressCommand.h" />
     <ClInclude Include="src\OtterzipMenuCommand.h" />
     <ClInclude Include="src\SubmenuCommands.h" />
     <ClInclude Include="src\ShellInvoke.h" />
     <ClInclude Include="src\ShellSettings.h" />
+    <ClInclude Include="src\ShellCache.h" />
     <ClInclude Include="src\QuickCompressCommands.h" />
     <ClInclude Include="src\ExtractCommands.h" />
     <ClInclude Include="src\ShellStrings.h" />

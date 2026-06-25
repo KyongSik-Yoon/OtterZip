@@ -1,6 +1,12 @@
 // OtterZip.Shell — LocalSettings probe with short TTL cache.
+//
+// 2026-06-18: a pure-Win32 LocalState cache fast-path (ShellCache) is tried
+// first. It avoids the AppX activation context that the LocalSettings RPC
+// below would establish — the cold-boot first-right-click miss. The WinRT
+// path here remains as the fallback when the cache file is absent.
 
 #include "ShellSettings.h"
+#include "ShellCache.h"
 
 #include <atomic>
 #include <chrono>
@@ -40,7 +46,6 @@ namespace OtterZip::Shell
         };
 
         CachedBool g_shellMenuEnabled;
-        CachedBool g_extractHereDefault;
         CachedString g_shellMenuMode;
 
         // Reads a single bool from ApplicationData::LocalSettings.
@@ -127,12 +132,12 @@ namespace OtterZip::Shell
 
     bool IsShellMenuEnabled() noexcept
     {
+        bool cached;
+        if (TryGetCachedBool(L"ShellMenuEnabled", cached))
+        {
+            return cached;
+        }
         return CachedRead(g_shellMenuEnabled, L"Settings_ShellMenuEnabled", /*default*/ true);
-    }
-
-    bool IsExtractHereDefault() noexcept
-    {
-        return CachedRead(g_extractHereDefault, L"Settings_ShellExtractHereAsDefault", /*default*/ true);
     }
 
     bool IsShellMenuNested() noexcept
@@ -158,6 +163,11 @@ namespace OtterZip::Shell
         //     `IntegrationSettingsSection.xaml.cs` writes the persisted
         //     string, the cache TTL (5 s) refreshes from LocalSettings,
         //     and `IsShellMenuNested` flips on the next verb hover.
+        std::wstring cachedMode;
+        if (TryGetCachedString(L"ShellMenuMode", cachedMode))
+        {
+            return cachedMode == L"nested";
+        }
         auto mode = CachedReadString(g_shellMenuMode, L"Settings_ShellMenuMode", L"flat");
         return mode == L"nested";
     }

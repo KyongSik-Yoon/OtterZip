@@ -127,4 +127,35 @@ namespace OtterZip::Shell
         }
         return S_OK;
     }
+
+    HRESULT LaunchHostApp() noexcept
+    {
+        std::wstring exePath = DllDirectory();
+        if (exePath.empty())
+        {
+            return E_FAIL;
+        }
+        wchar_t fullExe[MAX_PATH] = {};
+        if (FAILED(PathCchCombine(fullExe, MAX_PATH, exePath.c_str(), L"OtterZip.exe")))
+        {
+            return E_FAIL;
+        }
+
+        SHELLEXECUTEINFOW info{};
+        info.cbSize = sizeof(info);
+        info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        info.lpVerb = L"open";
+        info.lpFile = fullExe;
+        info.lpParameters = nullptr;   // no args → MainWindow opens clean
+        info.nShow = SW_SHOWNORMAL;
+        if (!ShellExecuteExW(&info))
+        {
+            return HRESULT_FROM_WIN32(GetLastError());
+        }
+        if (info.hProcess)
+        {
+            CloseHandle(info.hProcess);
+        }
+        return S_OK;
+    }
 }

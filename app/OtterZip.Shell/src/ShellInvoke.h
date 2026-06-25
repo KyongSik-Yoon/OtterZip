@@ -21,4 +21,9 @@ namespace OtterZip::Shell
     /// Spawn the host app with the given verb and the paths from `items`.
     /// Returns S_OK on successful launch, hresult of ShellExecute on failure.
     HRESULT InvokeHostApp(IShellItemArray* items, std::wstring_view verb) noexcept;
+
+    /// Launch the host app with NO arguments — App.OnLaunched then shows the
+    /// MainWindow (drop zone) without any --invoke verb dispatch. Used by the
+    /// empty-space "OtterZip 열기" verb.
+    HRESULT LaunchHostApp() noexcept;
 }

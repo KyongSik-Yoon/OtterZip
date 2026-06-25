@@ -18,6 +18,7 @@
 // Explorer never sees an exception escape from a verb method.
 
 #include "ShellStrings.h"
+#include "ShellCache.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -76,6 +77,20 @@ namespace OtterZip::Shell
             return fallback;
         }
         std::wstring keyStr{ key };
+
+        // 2026-06-18: pure-Win32 LocalState cache first. The host app
+        // mirrors every Shell_* string (resolved for the active locale)
+        // there, so this returns the correctly localized title without
+        // touching ResourceLoader / the AppX activation context — the
+        // cold-boot first-right-click miss. Falls through to MRT below
+        // when the cache is absent (app never launched yet).
+        {
+            std::wstring cached;
+            if (TryGetCachedString(key, cached))
+            {
+                return cached;
+            }
+        }
 
         // Cache hit fast-path. We hold the mutex only for the lookup,
         // not for the (potentially blocking) MRT call.

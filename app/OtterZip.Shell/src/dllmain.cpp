@@ -17,6 +17,7 @@
 #include "CompressCommand.h"
 #include "ExtractCommands.h"
 #include "ExtractHereCommand.h"
+#include "OpenAppCommand.h"
 #include "OtterzipMenuCommand.h"
 #include "QuickCompressCommands.h"
 #include "ShellAssets.h"
@@ -37,6 +38,12 @@ namespace
 
 void OtterzipShell_AddRef() noexcept { ++g_dll_ref_count; }
 void OtterzipShell_Release() noexcept { --g_dll_ref_count; }
+
+// Expose the DLL's own module handle so ShellAssets can resolve packaged
+// asset paths from the DLL's install directory (GetModuleFileNameW) —
+// a pure-Win32 path that doesn't establish the AppX activation context,
+// unlike Package.Current.InstalledLocation.
+extern "C" HMODULE OtterzipShell_GetModuleHandle() noexcept { return g_module_handle; }
 
 extern "C" BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID /*reserved*/) noexcept
 {
@@ -274,6 +281,17 @@ extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, LPV
         try
         {
             auto factory = winrt::make<ClassFactory<CompressIndividuallyCommand>>();
+            return factory->QueryInterface(riid, ppv);
+        }
+        catch (winrt::hresult_error const& e) { return e.code(); }
+        catch (...) { return E_FAIL; }
+    }
+    if (rclsid == __uuidof(OpenAppCommand))
+    {
+        // 2026-06-18: empty-space (Directory\Background) "OtterZip 열기" verb.
+        try
+        {
+            auto factory = winrt::make<ClassFactory<OpenAppCommand>>();
             return factory->QueryInterface(riid, ppv);
         }
         catch (winrt::hresult_error const& e) { return e.code(); }

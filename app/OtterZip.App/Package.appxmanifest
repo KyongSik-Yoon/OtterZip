@@ -30,7 +30,7 @@
   -->
   <Identity Name="LumiBearStudio.OtterZip"
             Publisher="CN=A55D3041-E7F5-46CB-8707-AD9C81D7CB43"
-            Version="0.22.0.0" />
+            Version="0.22.33.0" />
 
   <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000"
                     PhonePublisherId="00000000-0000-0000-0000-000000000000" />
@@ -446,6 +446,11 @@
               <com:Class Id="aaaaaaaa-2222-3333-4444-555555555555"
                          Path="OtterZip.Shell.dll"
                          ThreadingModel="STA" />
+              <!-- 2026-06-18: bbb… OpenAppCommand ("OtterZip 열기") —
+                   empty-space (Directory\Background) launch verb. -->
+              <com:Class Id="bbbbbbbb-2222-3333-4444-555555555555"
+                         Path="OtterZip.Shell.dll"
+                         ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>
@@ -495,18 +500,14 @@
               from a folder.
 
               `Directory\Background` (right-click the EMPTY SPACE inside
-              a folder) is intentionally NOT registered — decision
-              2026-06-17. Rationale:
-                * Windows 11 already puts "새 폴더 / New Folder" at the
-                  top of the background menu AND under 새로 만들기, so
-                  there's nothing for an archive tool to add there.
-                * "Compress the current folder" from its own background
-                  is an unusual, self-referential action (the output
-                  would sit beside or inside the folder being archived)
-                  and Bandizip doesn't offer it either.
-                * Keeps the background menu uncluttered, matching the
-                  Keka-inherited minimalism. To compress a folder, the
-                  user right-clicks the folder itself (Type="Directory").
+              a folder) deliberately does NOT carry the compress verbs —
+              "compress the current folder" from its own background is a
+              self-referential action Bandizip doesn't offer either. It
+              carries ONLY the "새 폴더 / New folder" verb (user request
+              2026-06-18, reversing the 2026-06-17 "no background verb"
+              decision). Windows 11 still shows its own native "새 폴더(N)"
+              at the top; this is the OtterZip-branded equivalent in the
+              OtterZip group lower in the menu.
             -->
             <desktop5:ItemType Type="Directory">
               <desktop5:Verb Id="OtterzipCompressZip"
@@ -519,6 +520,13 @@
                              Clsid="44444444-2222-3333-4444-555555555555" />
               <desktop5:Verb Id="OtterzipMenu"
                              Clsid="33333333-2222-3333-4444-555555555555" />
+            </desktop5:ItemType>
+
+            <!-- Empty space inside a folder: a single "OtterZip 열기"
+                 launch verb (Windows already provides native "새 폴더"). -->
+            <desktop5:ItemType Type="Directory\Background">
+              <desktop5:Verb Id="OtterzipOpenApp"
+                             Clsid="bbbbbbbb-2222-3333-4444-555555555555" />
             </desktop5:ItemType>
 
             <!-- 컨테이너 / 멀티엔트리 -->
