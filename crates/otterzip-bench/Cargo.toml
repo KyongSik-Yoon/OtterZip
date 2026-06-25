@@ -1,6 +1,7 @@
 [package]
 name = "otterzip-bench"
 description = "OtterZip — benchmark runner"
+publish = false   # internal benchmark harness, never published
 version.workspace = true
 edition.workspace = true
 license.workspace = true

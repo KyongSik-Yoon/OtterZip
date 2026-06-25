@@ -108,6 +108,7 @@ fn overwrite_from_u32(value: u32) -> Result<OverwritePolicy, OtterzipError> {
         1 => Ok(OverwritePolicy::Always),
         2 => Ok(OverwritePolicy::IfNewer),
         3 => Ok(OverwritePolicy::AskCallback),
+        4 => Ok(OverwritePolicy::Rename),
         _ => Err(OtterzipError::InvalidArgument("overwrite policy out of range")),
     }
 }

@@ -49,6 +49,9 @@ public enum OverwritePolicy : uint
     Always = 1,
     IfNewer = 2,
     AskCallback = 3,
+    /// <summary>Keep both — extract a colliding file to a numbered
+    /// sibling (<c>name (2).ext</c>) instead of overwriting/skipping.</summary>
+    Rename = 4,
 }
 
 public enum ProgressPhase : uint

@@ -45,6 +45,11 @@ pub struct Archive {
     /// the handle came from `open` (single-volume) — `volume_count`
     /// reports `Some(1)` in that case.
     volumes: Option<Vec<VolumeInfo>>,
+    /// Write-mode only. `Some(n)` when [`CreateOptions::volume_size_bytes`]
+    /// requested split output: the writer targets a single temp file and
+    /// `commit` slices it into `.001/.002/…` segments of ≤ `n` bytes.
+    /// `None` for read-mode handles and for un-split creation.
+    volume_size_bytes: Option<u64>,
     /// Phase 6+ — captured from `CreateOptions::exclude_system_metadata`
     /// at writer creation. Only consulted by `add_dir_recursive`; reader
     /// handles ignore it. `false` for read-mode archives.
@@ -180,6 +185,7 @@ impl Archive {
             mode,
             password,
             volumes: None,
+            volume_size_bytes: None,
             exclude_system_metadata: false,
             inner: ArchiveInner::Reader(backend),
         })
@@ -233,6 +239,7 @@ impl Archive {
                     mode,
                     password: None,
                     volumes: Some(volumes_meta),
+                    volume_size_bytes: None,
                     exclude_system_metadata: false,
                     inner: ArchiveInner::Reader(Box::new(backend)),
                 })
@@ -293,13 +300,23 @@ impl Archive {
         }
         let password = opts.password.clone();
         let exclude_system_metadata = opts.exclude_system_metadata;
-        let writer = open_writer(path, &opts, password.as_ref())?;
+        // When a volume size is requested the backend writes one contiguous
+        // temp archive; `commit` then slices it into `name.ext.001/.002/…`
+        // segments. 7-Zip / Bandizip read that `.NNN` set natively and the
+        // GUI's raw-split concatenator reassembles it on extract.
+        let volume_size_bytes = opts.volume_size_bytes.filter(|&v| v > 0);
+        let write_path = match volume_size_bytes {
+            Some(_) => split_write_path(path),
+            None => path.to_path_buf(),
+        };
+        let writer = open_writer(&write_path, &opts, password.as_ref())?;
         Ok(Self {
             path: path.to_path_buf(),
             format: opts.format,
             mode: OpenMode::CreateOrOverwrite,
             password,
             volumes: None,
+            volume_size_bytes,
             exclude_system_metadata,
             inner: ArchiveInner::Writer(writer),
         })
@@ -346,15 +363,36 @@ impl Archive {
     }
 
     /// Finalise a write-mode archive and flush to disk. Consumes the handle.
+    ///
+    /// In split mode (`CreateOptions::volume_size_bytes`) the backend has
+    /// been writing to a temp file; this slices it into `.001/.002/…`
+    /// segments and removes the temp. Any partial segments are cleaned up
+    /// if slicing fails midway.
     pub fn commit(mut self) -> Result<()> {
-        match std::mem::replace(
+        let split = self.volume_size_bytes;
+        let final_path = self.path.clone();
+        let writer = match std::mem::replace(
             &mut self.inner,
             ArchiveInner::Reader(Box::new(EmptyBackend)),
         ) {
-            ArchiveInner::Writer(w) => w.commit(),
-            ArchiveInner::Reader(_) => Err(OtterzipError::InvalidArgument(
-                "commit called on a read-mode archive",
-            )),
+            ArchiveInner::Writer(w) => w,
+            ArchiveInner::Reader(_) => {
+                return Err(OtterzipError::InvalidArgument(
+                    "commit called on a read-mode archive",
+                ))
+            }
+        };
+        match split {
+            None => writer.commit(),
+            Some(volume_size) => {
+                let temp = split_write_path(&final_path);
+                let result = writer
+                    .commit()
+                    .and_then(|()| split_into_volumes(&temp, &final_path, volume_size));
+                // The temp archive is transient regardless of outcome.
+                let _ = fs::remove_file(&temp);
+                result.map(|_segments| ())
+            }
         }
     }
 
@@ -363,7 +401,22 @@ impl Archive {
     pub fn rollback(mut self) -> Result<()> {
         // Drop the writer so the file handle releases.
         let path = self.path.clone();
+        let split = self.volume_size_bytes;
         self.inner = ArchiveInner::Reader(Box::new(EmptyBackend));
+        if split.is_some() {
+            // Split writers target a temp file; segments only materialise on
+            // a successful commit. Clear the temp plus any segments a partial
+            // commit may have left, best-effort.
+            let _ = fs::remove_file(split_write_path(&path));
+            for idx in 1u32..=999 {
+                let seg = volume_segment_path(&path, idx);
+                if !seg.exists() {
+                    break;
+                }
+                let _ = fs::remove_file(seg);
+            }
+            return Ok(());
+        }
         match fs::remove_file(&path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -772,7 +825,7 @@ impl Archive {
                 fs::create_dir_all(parent)?;
             }
 
-            if out_path.exists() {
+            let out_path = if out_path.exists() {
                 match opts.overwrite {
                     OverwritePolicy::Never => {
                         return Err(OtterzipError::Io(std::io::Error::new(
@@ -780,13 +833,17 @@ impl Archive {
                             out_path.display().to_string(),
                         )));
                     }
-                    OverwritePolicy::Always => {}
+                    OverwritePolicy::Always => out_path,
+                    // Keep both: divert this file to `name (2).ext`.
+                    OverwritePolicy::Rename => unique_extract_path(&out_path),
                     OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
                         report.entries_skipped += 1;
                         continue;
                     }
                 }
-            }
+            } else {
+                out_path
+            };
 
             let file = fs::File::create(&out_path)?;
             let mut writer = BufWriter::new(file);
@@ -856,6 +913,110 @@ impl ProgressSink for NoopSink {
 /// Phase 8 G6 stops at *discovery* — the first-volume backend handles
 /// extraction. Cross-volume read support depends on backend capability
 /// upgrades (tracked in the gap report).
+/// Temp path the writer targets while building a to-be-split archive.
+/// `dir/name.7z` → `dir/name.7z.otzpart`. Chosen so it can never collide
+/// with a `.NNN` segment or be picked up by [`discover_split_volumes`].
+fn split_write_path(final_path: &Path) -> PathBuf {
+    let mut s = final_path.as_os_str().to_os_string();
+    s.push(".otzpart");
+    PathBuf::from(s)
+}
+
+/// `dir/name.7z` + index 1 → `dir/name.7z.001` (7-Zip / Bandizip split
+/// convention, 3-digit, 1-based).
+fn volume_segment_path(base: &Path, index: u32) -> PathBuf {
+    let mut s = base.as_os_str().to_os_string();
+    s.push(format!(".{index:03}"));
+    PathBuf::from(s)
+}
+
+/// Removes a set of segment files on drop unless explicitly disarmed.
+/// Guards the multi-volume slice so a mid-stream I/O error leaves no
+/// orphaned `.NNN` files behind.
+struct SegmentGuard {
+    paths: Vec<PathBuf>,
+    armed: bool,
+}
+
+impl SegmentGuard {
+    fn disarm(mut self) -> Vec<PathBuf> {
+        self.armed = false;
+        std::mem::take(&mut self.paths)
+    }
+}
+
+impl Drop for SegmentGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            for p in &self.paths {
+                let _ = fs::remove_file(p);
+            }
+        }
+    }
+}
+
+/// Slice the contiguous archive at `src` into `base.001`, `base.002`, …
+/// each at most `volume_size` bytes (the last holds the remainder).
+/// Returns the produced segment paths. `volume_size` must be > 0 (the
+/// caller filters zero). Caps at 999 segments — the `.NNN` convention.
+fn split_into_volumes(src: &Path, base: &Path, volume_size: u64) -> Result<Vec<PathBuf>> {
+    use std::io::{Read, Write};
+
+    let mut input = std::io::BufReader::new(fs::File::open(src)?);
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut guard = SegmentGuard {
+        paths: Vec::new(),
+        armed: true,
+    };
+    let mut out: Option<std::io::BufWriter<fs::File>> = None;
+    let mut written_in_vol: u64 = 0;
+    let mut index: u32 = 1;
+
+    loop {
+        let n = input.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        let mut data = &buf[..n];
+        while !data.is_empty() {
+            if out.is_none() || written_in_vol >= volume_size {
+                if let Some(mut w) = out.take() {
+                    w.flush()?;
+                }
+                if index > 999 {
+                    return Err(OtterzipError::InvalidArgument(
+                        "split would exceed 999 volumes; increase the volume size",
+                    ));
+                }
+                let seg = volume_segment_path(base, index);
+                out = Some(std::io::BufWriter::new(fs::File::create(&seg)?));
+                guard.paths.push(seg);
+                index = index.saturating_add(1);
+                written_in_vol = 0;
+            }
+            let space = (volume_size - written_in_vol) as usize;
+            let take = space.min(data.len());
+            out.as_mut()
+                .expect("segment writer set just above")
+                .write_all(&data[..take])?;
+            written_in_vol += take as u64;
+            data = &data[take..];
+        }
+    }
+    if let Some(mut w) = out.take() {
+        w.flush()?;
+    }
+    // An empty source still yields a single empty `.001` so the volume
+    // set is never absent (real archives always carry headers, so this
+    // is purely defensive).
+    if guard.paths.is_empty() {
+        let seg = volume_segment_path(base, 1);
+        std::io::BufWriter::new(fs::File::create(&seg)?).flush()?;
+        guard.paths.push(seg);
+    }
+    Ok(guard.disarm())
+}
+
 fn discover_split_volumes(first: &Path) -> Vec<VolumeInfo> {
     let mut out = vec![first_volume_info(first, 1)];
 
@@ -1143,6 +1304,32 @@ fn validate_component_phase7(component: &str) -> std::result::Result<(), &'stati
         return Err("trailing dot or space");
     }
     Ok(())
+}
+
+/// Compute a non-colliding sibling path for the [`OverwritePolicy::Rename`]
+/// (keep-both) policy. `foo.txt` → `foo (2).txt`, then `(3)`, … scanning
+/// for the first free name. `foo` (no extension) → `foo (2)`. The caller
+/// only invokes this when `path` already exists, so the scan starts at 2.
+/// Falls back to the original path after an absurd number of collisions
+/// (pathological — degrades to overwrite rather than looping forever).
+pub(crate) fn unique_extract_path(path: &Path) -> PathBuf {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let ext = path.extension().and_then(|s| s.to_str());
+    for i in 2..10_000u32 {
+        let name = match ext {
+            Some(e) => format!("{stem} ({i}).{e}"),
+            None => format!("{stem} ({i})"),
+        };
+        let candidate = parent.join(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    path.to_path_buf()
 }
 
 /// Combine an entry's in-archive path with the destination root.

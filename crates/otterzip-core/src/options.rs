@@ -13,6 +13,12 @@ pub enum OverwritePolicy {
     Always = 1,
     IfNewer = 2,
     AskCallback = 3,
+    /// Keep both: when the output path already exists, extract to a
+    /// non-colliding sibling (`name (2).ext`) instead of overwriting or
+    /// skipping. Windows Explorer / Bandizip "keep both" behavior — the
+    /// safest default (never loses data). Applies to file entries only;
+    /// directory entries merge as usual.
+    Rename = 4,
 }
 
 #[derive(Debug, Clone)]

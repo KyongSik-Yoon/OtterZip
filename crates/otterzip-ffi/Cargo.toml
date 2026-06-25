@@ -1,6 +1,7 @@
 [package]
 name = "otterzip-ffi"
 description = "OtterZip — C ABI FFI layer (cbindgen)"
+publish = false   # shipped as a DLL in the MSIX, not a crates.io package
 version.workspace = true
 edition.workspace = true
 license.workspace = true

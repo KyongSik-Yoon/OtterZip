@@ -82,7 +82,15 @@ pub(crate) fn open_writer(
     password: Option<&Zeroizing<String>>,
 ) -> Result<Box<dyn ArchiveWriter + Send>> {
     match opts.format {
-        ArchiveFormat::Zip => Ok(Box::new(ZipWriterBackend::create(path, opts, password)?)),
+        ArchiveFormat::Zip => {
+            // Encrypted ZIP routes through the upstream zip crate's writer
+            // (AES-256); plain ZIP keeps the fast in-tree pipeline.
+            if password.is_some() && opts.encryption != crate::format::EncryptionMethod::None {
+                Ok(Box::new(EncryptedZipWriterBackend::create(path, opts, password)?))
+            } else {
+                Ok(Box::new(ZipWriterBackend::create(path, opts, password)?))
+            }
+        }
         ArchiveFormat::SevenZ => Ok(Box::new(SevenZWriterBackend::create(path, opts, password)?)),
         ArchiveFormat::TarGz => Ok(Box::new(TarGzWriterBackend::create(path, opts)?)),
         ArchiveFormat::Tar => Ok(Box::new(TarPlainWriterBackend::create(path, opts)?)),
@@ -867,15 +875,28 @@ fn map_compression_method(
 // 7z writer
 // ---------------------------------------------------------------------------
 
+/// Peak in-memory bound for a buffered solid block. The sevenz crate's own
+/// solid path uses a 4 GiB block but reads files lazily by path; our backend
+/// only receives `Read` streams, so a block is buffered in RAM — cap it
+/// small. Entries at/over this size stream individually (no buffering).
+const SOLID_BLOCK_CAP: u64 = 64 * 1024 * 1024; // 64 MiB
+
 pub(crate) struct SevenZWriterBackend {
     inner: Option<sevenz_rust2::ArchiveWriter<File>>,
+    /// When true, small entries are packed into shared solid blocks via
+    /// `push_archive_entries` (better ratio for many small files); large
+    /// entries still stream individually.
+    solid: bool,
+    pending_entries: Vec<sevenz_rust2::ArchiveEntry>,
+    pending_data: Vec<std::io::Cursor<Vec<u8>>>,
+    pending_bytes: u64,
 }
 
 impl SevenZWriterBackend {
     fn create(
         path: &Path,
         opts: &CreateOptions,
-        _password: Option<&Zeroizing<String>>,
+        password: Option<&Zeroizing<String>>,
     ) -> Result<Self> {
         let mut writer =
             sevenz_rust2::ArchiveWriter::create(path).map_err(map_sevenz_err)?;
@@ -927,20 +948,67 @@ impl SevenZWriterBackend {
         let lzma2 = sevenz_rust2::encoder_options::Lzma2Options::from_level_mt(
             level, threads, chunk_size,
         );
-        writer.set_content_methods(vec![lzma2.into()]);
+
+        // AES-256 when a password is supplied. The 7z method chain is
+        // ordered [compress, encrypt] so data flows LZMA2 → AES → stored.
+        // `set_encrypt_header(true)` also encrypts the file-name list
+        // (matches 7-Zip's "Encrypt file names" default). 7z only supports
+        // AES-256; any non-None encryption with a password maps to it
+        // (ZipCrypto is a ZIP-only concept). No password → no encryption.
+        let encrypt = password.is_some()
+            && opts.encryption != crate::format::EncryptionMethod::None;
+        if encrypt {
+            let pw = password.expect("encrypt implies password present");
+            let aes = sevenz_rust2::encoder_options::AesEncoderOptions::new(
+                sevenz_rust2::Password::from(pw.as_str()),
+            );
+            writer.set_content_methods(vec![lzma2.into(), aes.into()]);
+            writer.set_encrypt_header(true);
+        } else {
+            writer.set_content_methods(vec![lzma2.into()]);
+        }
 
         tracing::info!(
             target: "otterzip::compress",
             level,
             threads,
             chunk_size,
+            encrypt,
             user_level = opts.compression_level,
             "sevenz writer configured with multi-thread LZMA2 (tuned for throughput)"
         );
 
         Ok(Self {
             inner: Some(writer),
+            solid: opts.solid,
+            pending_entries: Vec::new(),
+            pending_data: Vec::new(),
+            pending_bytes: 0,
         })
+    }
+
+    /// Flush the buffered solid block (if any) as one packed stream via
+    /// `push_archive_entries`. No-op when the block is empty. Peak memory
+    /// stays ~one block (`SOLID_BLOCK_CAP`) regardless of archive size.
+    fn flush_solid_block(&mut self) -> Result<()> {
+        if self.pending_entries.is_empty() {
+            return Ok(());
+        }
+        let writer = self
+            .inner
+            .as_mut()
+            .ok_or(OtterzipError::InvalidArgument("7z writer already committed"))?;
+        let entries = std::mem::take(&mut self.pending_entries);
+        let readers: Vec<sevenz_rust2::SourceReader<std::io::Cursor<Vec<u8>>>> =
+            std::mem::take(&mut self.pending_data)
+                .into_iter()
+                .map(sevenz_rust2::SourceReader::new)
+                .collect();
+        writer
+            .push_archive_entries(entries, readers)
+            .map_err(map_sevenz_err)?;
+        self.pending_bytes = 0;
+        Ok(())
     }
 }
 
@@ -952,12 +1020,16 @@ impl ArchiveWriter for SevenZWriterBackend {
         size_hint: Option<u64>,
         is_directory: bool,
     ) -> Result<()> {
-        let writer = self
-            .inner
-            .as_mut()
-            .ok_or(OtterzipError::InvalidArgument("7z writer already committed"))?;
+        // Directory entries are metadata-only. In solid mode flush the open
+        // block first so the on-disk entry order is preserved.
         if is_directory {
-            // 7z represents directories via metadata-only entries.
+            if self.solid {
+                self.flush_solid_block()?;
+            }
+            let writer = self
+                .inner
+                .as_mut()
+                .ok_or(OtterzipError::InvalidArgument("7z writer already committed"))?;
             let mut entry = sevenz_rust2::ArchiveEntry::default();
             entry.name = entry_path.to_string();
             entry.is_directory = true;
@@ -967,12 +1039,48 @@ impl ArchiveWriter for SevenZWriterBackend {
             return Ok(());
         }
 
-        // sevenz-rust2 0.21's `push_archive_entry<R: Read>` accepts any
-        // `Read`. `&mut *data` re-borrows the `&mut dyn Read` we received,
-        // yielding `&mut &mut dyn Read` which implements `Read` directly —
-        // no `Vec<u8>` materialisation, no whole-file slurp. This removes
-        // the multi-GB RAM hazard the old `sevenz-rust = 0.6` code carried
-        // (writer.rs:914 in the previous revision).
+        // Solid: pack small entries into shared blocks; stream large ones.
+        if self.solid {
+            let size = size_hint.unwrap_or(0);
+            if size >= SOLID_BLOCK_CAP {
+                self.flush_solid_block()?;
+                let writer = self
+                    .inner
+                    .as_mut()
+                    .ok_or(OtterzipError::InvalidArgument("7z writer already committed"))?;
+                let mut entry = sevenz_rust2::ArchiveEntry::default();
+                entry.name = entry_path.to_string();
+                entry.size = size;
+                writer
+                    .push_archive_entry(entry, Some(&mut *data))
+                    .map_err(map_sevenz_err)?;
+                return Ok(());
+            }
+            let mut buf = Vec::with_capacity(size as usize);
+            data.read_to_end(&mut buf)?;
+            let actual = buf.len() as u64;
+            let mut entry = sevenz_rust2::ArchiveEntry::default();
+            entry.name = entry_path.to_string();
+            entry.size = actual;
+            // push_archive_entries trusts the entry's has_stream (unlike
+            // push_archive_entry, which sets it from the Some(reader)).
+            entry.has_stream = true;
+            self.pending_entries.push(entry);
+            self.pending_data.push(std::io::Cursor::new(buf));
+            self.pending_bytes += actual;
+            if self.pending_bytes >= SOLID_BLOCK_CAP {
+                self.flush_solid_block()?;
+            }
+            return Ok(());
+        }
+
+        // Non-solid: stream each entry immediately (no `Vec<u8>` slurp).
+        // `&mut *data` re-borrows the `&mut dyn Read` we received, yielding
+        // a `Read` that streams without materialising the whole file.
+        let writer = self
+            .inner
+            .as_mut()
+            .ok_or(OtterzipError::InvalidArgument("7z writer already committed"))?;
         let mut entry = sevenz_rust2::ArchiveEntry::default();
         entry.name = entry_path.to_string();
         if let Some(size) = size_hint {
@@ -985,10 +1093,11 @@ impl ArchiveWriter for SevenZWriterBackend {
     }
 
     fn commit(mut self: Box<Self>) -> Result<()> {
+        // Flush any trailing solid block before finalizing.
+        self.flush_solid_block()?;
         if let Some(writer) = self.inner.take() {
-            // sevenz-rust2 0.13 changed `finish()` to consume `self` and
-            // return the underlying writer (`io::Result<W>`). We discard
-            // the recovered `File` — Drop closes the handle.
+            // sevenz-rust2 0.13+ `finish()` consumes self and returns the
+            // underlying writer (`io::Result<W>`); discard — Drop closes it.
             let _file = writer.finish().map_err(OtterzipError::Io)?;
         }
         Ok(())
@@ -1757,4 +1866,103 @@ impl ArchiveWriter for ZipxWriterBackend {
 /// through the in-tree `ZipFileWriter` and never sees this.
 fn map_zip_err(e: zip::result::ZipError) -> OtterzipError {
     OtterzipError::BackendError(e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Encrypted ZIP writer (AES-256)
+// ---------------------------------------------------------------------------
+
+/// AES-256 encrypted ZIP writer. `open_writer` selects this only when a
+/// password is supplied for `ArchiveFormat::Zip` — the fast in-tree
+/// `ZipWriterBackend` has no encryption path, so encrypted writes route
+/// through the upstream `zip` crate's `ZipWriter` (same approach as
+/// `ZipxWriterBackend`). The encrypted path forgoes the in-tree
+/// rayon/libdeflater pipeline; an acceptable trade since encryption is
+/// opt-in and interop (readable in 7-Zip / WinRAR / Bandizip) dominates.
+/// AES-256 only — legacy ZipCrypto is refused.
+pub(crate) struct EncryptedZipWriterBackend {
+    inner: Option<zip::ZipWriter<BufWriter<File>>>,
+    method: zip::CompressionMethod,
+    level: Option<i64>,
+    /// Owned password copy — `with_aes_encryption` borrows it, so it must
+    /// outlive every `start_file`. Zeroized on drop.
+    password: Zeroizing<String>,
+}
+
+impl EncryptedZipWriterBackend {
+    fn create(
+        path: &Path,
+        opts: &CreateOptions,
+        password: Option<&Zeroizing<String>>,
+    ) -> Result<Self> {
+        if opts.encryption == crate::format::EncryptionMethod::ZipCrypto {
+            return Err(OtterzipError::FeatureDisabled(
+                "ZipCrypto write is disabled; OtterZip encrypts ZIP with AES-256",
+            ));
+        }
+        let pw = password.ok_or(OtterzipError::InvalidArgument(
+            "encrypted ZIP create requires a password",
+        ))?;
+        let method = match opts.compression {
+            CompressionMethod::Store => zip::CompressionMethod::Stored,
+            // AES is an encryption layer over the method; Deflate is the
+            // universally-readable ZIP baseline.
+            _ => zip::CompressionMethod::Deflated,
+        };
+        let level = match method {
+            zip::CompressionMethod::Stored => None,
+            _ => Some(if opts.compression_level == 0 {
+                6
+            } else {
+                i64::from(opts.compression_level.clamp(1, 9))
+            }),
+        };
+        let file = File::create(path)?;
+        let writer = zip::ZipWriter::new(BufWriter::new(file));
+        Ok(Self {
+            inner: Some(writer),
+            method,
+            level,
+            password: pw.clone(),
+        })
+    }
+}
+
+impl ArchiveWriter for EncryptedZipWriterBackend {
+    fn add_entry(
+        &mut self,
+        entry_path: &str,
+        data: &mut dyn Read,
+        _size_hint: Option<u64>,
+        is_directory: bool,
+    ) -> Result<()> {
+        if is_directory {
+            let opts = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
+            let writer = self.inner.as_mut().ok_or(OtterzipError::InvalidArgument(
+                "encrypted zip writer already committed",
+            ))?;
+            writer.add_directory(entry_path, opts).map_err(map_zip_err)?;
+            return Ok(());
+        }
+        // Build options borrowing only `self.password` (field-level), so the
+        // disjoint `&mut self.inner` borrow below is permitted by NLL.
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(self.method)
+            .compression_level(self.level)
+            .unix_permissions(0o644)
+            .with_aes_encryption(zip::AesMode::Aes256, self.password.as_str());
+        let writer = self.inner.as_mut().ok_or(OtterzipError::InvalidArgument(
+            "encrypted zip writer already committed",
+        ))?;
+        writer.start_file(entry_path, opts).map_err(map_zip_err)?;
+        std::io::copy(data, writer)?;
+        Ok(())
+    }
+
+    fn commit(mut self: Box<Self>) -> Result<()> {
+        if let Some(writer) = self.inner.take() {
+            writer.finish().map_err(map_zip_err)?;
+        }
+        Ok(())
+    }
 }

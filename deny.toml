@@ -14,7 +14,8 @@ allow = [
     "Unicode-3.0",
     "CC0-1.0",
     "Zlib",
-    "MPL-2.0",     # file-level copyleft만 — 검토 후 유지
+    "MPL-2.0",       # file-level copyleft만 — 검토 후 유지
+    "bzip2-1.0.6",   # bzip2/libbzip2 License (BSD류 permissive) — .bz2 코덱 백엔드(libbz2-rs-sys). 카피레프트 아님.
 ]
 # 본문 라이선스 전략상 GPL 계열은 거부
 # (AGPL/SSPL은 상업 배포 자체 차단)
@@ -27,6 +28,9 @@ exceptions = [
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# 워크스페이스 내부 path-dep(otterzip-core/ffi/cli/bench)은 version="*"가
+# 정상 — 외부 crate의 wildcard만 막고 내부 path는 허용.
+allow-wildcard-paths = true
 
 # cargo-deny 0.19+ 스펙: vulnerability/notice/unmaintained 키는
 # severity-based가 아니라 categorical로 변경됨.
@@ -34,6 +38,14 @@ wildcards = "deny"
 [advisories]
 yanked = "deny"
 unmaintained = "all"
+ignore = [
+    # aes 0.9.0 is yanked but pulled transitively by sevenz-rust2 0.21 (our
+    # 7z backend), which pins ^0.9 — and 0.9.0 is the only 0.9.x published,
+    # so there is no non-yanked version to move to. Not a security advisory
+    # (yank ≠ vulnerability); the locked build is unaffected. Revisit when
+    # sevenz-rust2 bumps its aes dependency.
+    { crate = "aes@0.9.0", reason = "transitive yank via sevenz-rust2 0.21; no non-yanked 0.9.x exists" },
+]
 # vulnerability / notice는 0.19에서 자동 처리 (모든 advisory가 default deny)
 
 [sources]

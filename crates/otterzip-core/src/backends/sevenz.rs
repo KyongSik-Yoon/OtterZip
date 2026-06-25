@@ -217,7 +217,7 @@ impl SevenZBackend {
                     std::fs::create_dir_all(parent).map_err(map_sevenz_err_io)?;
                 }
 
-                if out_path.exists() {
+                let out_path = if out_path.exists() {
                     match opts.overwrite {
                         OverwritePolicy::Never => {
                             return Err(sevenz_rust2::Error::Other(
@@ -228,13 +228,16 @@ impl SevenZBackend {
                                 .into(),
                             ));
                         }
-                        OverwritePolicy::Always => {}
+                        OverwritePolicy::Always => out_path,
+                        OverwritePolicy::Rename => crate::archive::unique_extract_path(&out_path),
                         OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
                             report_cell.borrow_mut().entries_skipped += 1;
                             return Ok(true);
                         }
                     }
-                }
+                } else {
+                    out_path
+                };
 
                 let file = File::create(&out_path).map_err(map_sevenz_err_io)?;
                 let mut writer = BufWriter::new(file);

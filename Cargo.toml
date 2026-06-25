@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.22.0"
+version = "0.22.33"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["OtterZip Contributors"]
@@ -38,7 +38,7 @@ tar         = "0.4"
 # write side (zip-rs feature-gates each codec). The read side picks
 # them up automatically; tests verify Bandizip / 7-Zip can decompress
 # the result.
-zip         = { version = "2", default-features = false, features = ["deflate-zlib-ng", "bzip2", "lzma"] }
+zip         = { version = "2", default-features = false, features = ["deflate-zlib-ng", "bzip2", "lzma", "aes-crypto"] }
 sevenz-rust2 = "0.21"
 num_cpus    = "1"
 unrar       = "0.5"
@@ -95,7 +95,14 @@ predicates = "3"
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# "unwind" (not "abort") so the FFI's per-call `catch_unwind` actually
+# works: a Rust panic unwinds, is caught at the C ABI boundary, mapped to
+# ErrorCode::Generic (-1) + "panic in FFI: …", and surfaced to C# as a
+# recoverable OtterzipException instead of hard-aborting the process. That
+# turns our own bugs into reportable Sentry events (category=bug) and keeps
+# the app alive (the operation fails, the window survives). Panics never
+# cross the extern "C" boundary, so unwinding stays sound.
+panic = "unwind"
 strip = "symbols"
 
 [profile.bench]

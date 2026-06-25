@@ -66,7 +66,8 @@ public sealed class ArchiveBuilder : IDisposable
         bool solid = false,
         bool excludeSystemMetadata = true,
         string? password = null,
-        EncryptionMethod encryption = EncryptionMethod.Aes256)
+        EncryptionMethod encryption = EncryptionMethod.Aes256,
+        ulong volumeSizeBytes = 0)
     {
         ArgumentException.ThrowIfNullOrEmpty(destinationPath);
         OtterzipLibrary.Initialize();
@@ -99,7 +100,7 @@ public sealed class ArchiveBuilder : IDisposable
                     Encryption = (uint)effectiveEncryption,
                     PasswordUtf8 = hasPassword ? pwd : null,
                     PasswordLen = (nuint)passwordBytes.Length,
-                    VolumeSizeBytes = 0,
+                    VolumeSizeBytes = volumeSizeBytes,
                     ThreadCount = 0,
                     ExcludeSystemMetadata = excludeSystemMetadata ? (byte)1 : (byte)0,
                 };
@@ -212,6 +213,8 @@ public sealed class ArchiveBuilder : IDisposable
         IProgress<ProgressUpdate>? progress = null,
         bool excludeSystemMetadata = true,
         string? password = null,
+        bool solid = false,
+        ulong volumeSizeBytes = 0,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(destinationPath);
@@ -224,9 +227,10 @@ public sealed class ArchiveBuilder : IDisposable
 
             using var builder = Create(
                 destinationPath, format, compression, compressionLevel,
-                solid: false,
+                solid: solid,
                 excludeSystemMetadata: excludeSystemMetadata,
-                password: password);
+                password: password,
+                volumeSizeBytes: volumeSizeBytes);
 
             // ABI v7: the native side now drives a real Progress sink that
             // reports entries / bytes per file and checks the cancel
@@ -237,21 +241,47 @@ public sealed class ArchiveBuilder : IDisposable
             builder.Commit();
 
             long elapsed = Environment.TickCount64 - startTicks;
-            ulong outputSize = 0;
-            try
-            {
-                outputSize = (ulong)new FileInfo(destinationPath).Length;
-            }
-            catch
-            {
-                // Non-fatal: caller can still see the file.
-            }
             return new ArchiveBuildReport
             {
                 ElapsedMs = (ulong)Math.Max(elapsed, 0),
-                BytesWritten = outputSize,
+                BytesWritten = OutputSize(destinationPath, volumeSizeBytes),
             };
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Size of the produced archive. In split mode the contiguous
+    /// <paramref name="destinationPath"/> does not exist — the deliverable
+    /// is the <c>.001/.002/…</c> set — so sum the segments instead.
+    /// </summary>
+    public static ulong OutputSize(string destinationPath, ulong volumeSizeBytes)
+    {
+        try
+        {
+            if (volumeSizeBytes == 0)
+            {
+                return (ulong)new FileInfo(destinationPath).Length;
+            }
+            ulong total = 0;
+            for (int idx = 1; idx <= 999; idx++)
+            {
+                var seg = $"{destinationPath}.{idx:000}";
+                if (!File.Exists(seg))
+                {
+                    break;
+                }
+                total += (ulong)new FileInfo(seg).Length;
+            }
+            return total;
+        }
+        catch (IOException)
+        {
+            return 0;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return 0;
+        }
     }
 
     public void Dispose()

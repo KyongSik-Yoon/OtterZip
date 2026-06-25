@@ -613,7 +613,7 @@ impl ZipBackend {
                 }
             }
 
-            if out_path.exists() {
+            let out_path = if out_path.exists() {
                 match opts.overwrite {
                     OverwritePolicy::Never => {
                         set_first_err(
@@ -626,13 +626,16 @@ impl ZipBackend {
                         );
                         return;
                     }
-                    OverwritePolicy::Always => {}
+                    OverwritePolicy::Always => out_path,
+                    OverwritePolicy::Rename => crate::archive::unique_extract_path(&out_path),
                     OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
                         entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         return;
                     }
                 }
-            }
+            } else {
+                out_path
+            };
 
             // Per-worker archive handle. Each rayon thread pays the
             // central-directory parse cost once via this construction —

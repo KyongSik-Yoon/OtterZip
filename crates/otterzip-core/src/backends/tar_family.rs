@@ -240,7 +240,7 @@ impl TarBackend {
                 std::fs::create_dir_all(parent)?;
             }
 
-            if out_path.exists() {
+            let out_path = if out_path.exists() {
                 match ctx.opts.overwrite {
                     OverwritePolicy::Never => {
                         return Err(OtterzipError::Io(io::Error::new(
@@ -248,13 +248,17 @@ impl TarBackend {
                             out_path.display().to_string(),
                         )));
                     }
-                    OverwritePolicy::Always => {}
+                    OverwritePolicy::Always => out_path,
+                    // Keep both: divert this file to `name (2).ext`.
+                    OverwritePolicy::Rename => crate::archive::unique_extract_path(&out_path),
                     OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
                         ctx.report.entries_skipped += 1;
                         continue;
                     }
                 }
-            }
+            } else {
+                out_path
+            };
 
             let file = File::create(&out_path)?;
             let mut writer = BufWriter::new(file);

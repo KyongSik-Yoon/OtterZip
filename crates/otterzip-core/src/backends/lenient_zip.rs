@@ -374,7 +374,7 @@ impl LenientZipBackend {
                         }
                     }
 
-                    if out_path.exists() {
+                    let out_path = if out_path.exists() {
                         match opts.overwrite {
                             OverwritePolicy::Never => {
                                 set_first_err(
@@ -387,14 +387,17 @@ impl LenientZipBackend {
                                 );
                                 return;
                             }
-                            OverwritePolicy::Always => {}
+                            OverwritePolicy::Always => out_path,
+                            OverwritePolicy::Rename => crate::archive::unique_extract_path(&out_path),
                             OverwritePolicy::IfNewer | OverwritePolicy::AskCallback => {
                                 entries_skipped
                                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 return;
                             }
                         }
-                    }
+                    } else {
+                        out_path
+                    };
 
                     let local_backend = match local_handle.as_mut() {
                         Some(b) => b,

@@ -47,9 +47,10 @@ crc32fast   = { workspace = true }
 proptest  = { workspace = true }
 criterion = { workspace = true }
 tempfile  = "3"
-# Enable the AES write side-channel of `zip` only for tests so we can build
-# an encrypted-ZIP fixture without polluting the production feature set.
-zip       = { version = "2", default-features = false, features = ["deflate-zlib-ng", "aes-crypto"] }
+zeroize   = { workspace = true }
+# `aes-crypto` is now a production feature on the workspace `zip` dep
+# (EncryptedZipWriterBackend uses with_aes_encryption), so the prior
+# dev-only override is no longer needed.
 
 [features]
 default = []
