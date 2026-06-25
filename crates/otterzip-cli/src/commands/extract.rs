@@ -45,7 +45,9 @@ fn extract_one(path: &Path, args: &ExtractArgs, flatten: bool, quiet: bool) -> R
         ..Default::default()
     };
 
-    let archive = open_archive(path, args.password.as_deref())?;
+    // `_merged` keeps the concatenated temp file alive (raw split inputs)
+    // until extraction finishes; it deletes itself at end of scope.
+    let (archive, _merged) = open_archive(path, args.password.as_deref())?;
     let mut sink = progress::make_sink(quiet);
     let report = archive.extract_all(&opts, Some(&mut sink))?;
     progress::finish(quiet);

@@ -25,7 +25,7 @@ pub fn run(args: &TestArgs) -> Result<i32> {
 }
 
 fn list_one(path: &Path, password: Option<&str>) -> Result<()> {
-    let archive = open_archive(path, password)?;
+    let (archive, _merged) = open_archive(path, password)?;
     let mut entries = Vec::new();
     for entry in archive.entries()? {
         entries.push(entry?);

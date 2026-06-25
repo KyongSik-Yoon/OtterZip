@@ -21,7 +21,7 @@ pub fn run(args: &TestArgs, quiet: bool) -> Result<i32> {
 }
 
 fn test_one(path: &Path, password: Option<&str>, quiet: bool) -> Result<i32> {
-    let archive = open_archive(path, password)?;
+    let (archive, _merged) = open_archive(path, password)?;
     let mut sink = progress::make_sink(quiet);
     let report = archive.test(Some(&mut sink))?;
     progress::finish(quiet);
