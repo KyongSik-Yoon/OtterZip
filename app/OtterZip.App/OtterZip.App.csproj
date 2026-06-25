@@ -25,11 +25,6 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 
-    <!-- [LibraryImport] (App.xaml.cs CoCreateInstance shell warm-up) emits a
-         source-generated unsafe stub, same as OtterZip.Interop. No hand-written
-         unsafe blocks. -->
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
 
