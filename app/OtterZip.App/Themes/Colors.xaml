@@ -25,8 +25,10 @@
                  active state, drop overlay border) so the app keeps a
                  distinct identity even when the user has changed their
                  Windows accent colour. -->
-            <Color x:Key="OtterzipBrandColor">#00A1AC</Color>
-            <Color x:Key="OtterzipBrandSoftColor">#1400B7C3</Color>
+            <!-- Brand accent = indigo (테마 리프레시). 라이트는 흰 배경에
+                 읽히도록 딥 인디고, soft는 ~8% 틴트(칩/선택 pill). -->
+            <Color x:Key="OtterzipBrandColor">#5566E0</Color>
+            <Color x:Key="OtterzipBrandSoftColor">#145566E0</Color>
 
             <!-- DropOverlay (rev 5 polish): nearly opaque so the panel
                  cards behind don't bleed through, with a faint brand tint.
@@ -70,6 +72,15 @@
             <SolidColorBrush x:Key="ArchiveFormatRarBrush" Color="{ThemeResource ArchiveFormatRarColor}" />
             <SolidColorBrush x:Key="ProgressRingTrackBrush" Color="{ThemeResource ProgressRingTrackColor}" />
 
+            <!-- ── 테마 리프레시 (클린 라이트) ──────────────────────────
+                 근백색 페이지 + 순백 카드 + 헤어라인 보더. WinUI 시스템
+                 브러시를 직접 오버라이드해 앱 전역에 적용. -->
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#FFFAFBFC" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#14000000" />
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#FFFFFFFF" />
+
         </ResourceDictionary>
 
         <!-- ============================================================ -->
@@ -78,8 +89,10 @@
         <ResourceDictionary x:Key="Dark">
 
             <!-- OtterZip brand — brighter cyan for dark Mica backdrop. -->
-            <Color x:Key="OtterzipBrandColor">#4DD0E1</Color>
-            <Color x:Key="OtterzipBrandSoftColor">#1F4DD0E1</Color>
+            <!-- Brand accent = indigo (테마 리프레시). 다크는 밝은 인디고로
+                 텍스트/아이콘/인디케이터 가독, soft는 ~16% 틴트 pill. -->
+            <Color x:Key="OtterzipBrandColor">#8AA0FF</Color>
+            <Color x:Key="OtterzipBrandSoftColor">#296D8BFF</Color>
 
             <!-- DropOverlay — dark variant. Slightly tinted toward brand,
                  nearly opaque so backing cards are obscured. -->
@@ -117,6 +130,18 @@
             <SolidColorBrush x:Key="ArchiveFormatRarBrush" Color="{ThemeResource ArchiveFormatRarColor}" />
             <SolidColorBrush x:Key="ProgressRingTrackBrush" Color="{ThemeResource ProgressRingTrackColor}" />
 
+            <!-- ── 테마 리프레시 (프리미엄 딥블랙) ──────────────────────
+                 딥블랙 페이지(#131519) + 한 단계 띄운 카드(#1C2024) +
+                 미세 보더 + 순백 대신 오프화이트 텍스트. 앱 전역 적용. -->
+            <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#FF131519" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#FF1C2024" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#FF1C2024" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#18FFFFFF" />
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#FF1C2024" />
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#FFECEEF0" />
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FFA2A8B0" />
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush" Color="#FF717783" />
+
         </ResourceDictionary>
 
         <!-- ============================================================ -->
@@ -144,5 +169,19 @@
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ================================================================ -->
+    <!--  브랜드 액센트 (teal) — 시스템 액센트 오버라이드                  -->
+    <!--  토글 On / AccentButton / 선택 / 포커스가 전부 brand teal로.      -->
+    <!--  WinUI는 라이트 테마에서 base/Dark1, 다크 테마에서 Light2/3 변형을  -->
+    <!--  accent fill로 사용 → 양 테마 모두 teal로 읽힘. 테마 무관 Color.   -->
+    <!-- ================================================================ -->
+    <Color x:Key="SystemAccentColor">#FF5566E0</Color>
+    <Color x:Key="SystemAccentColorLight1">#FF6979EC</Color>
+    <Color x:Key="SystemAccentColorLight2">#FF6D8BFF</Color>
+    <Color x:Key="SystemAccentColorLight3">#FF97ABFF</Color>
+    <Color x:Key="SystemAccentColorDark1">#FF4655C4</Color>
+    <Color x:Key="SystemAccentColorDark2">#FF3A47A6</Color>
+    <Color x:Key="SystemAccentColorDark3">#FF2C3784</Color>
 
 </ResourceDictionary>

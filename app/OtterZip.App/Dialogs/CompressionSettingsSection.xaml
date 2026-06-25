@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Settings → Compression tab. (Phase 6+ rev 3)
-  9 items: defaultFormat, defaultMethod, saveLocation, useParentFolderName,
-           excludeSystemMeta, verifyAfterCompress, alwaysPromptPassword,
-           playSound, reveal+deleteSource (paired toggles).
+  Settings → Compression tab. (UI rev: Fluent settings cards + 고급 Expander)
+  A안(카드) 기본 + B안(점진적 노출) 하이브리드. 각 설정 = 아이콘 칩 +
+  제목/설명 + 우측 컨트롤. 그룹: 기본값 / 파일 이름 / 압축 후 / [고급 Expander].
+  코드비하인드 계약(x:Name·이벤트) 보존. 토글은 ToggleSwitch(IsOn/Toggled).
+  모든 문자열 x:Uid+.resw, 색은 {ThemeResource}.
 -->
 <UserControl
     x:Class="OtterZip.App.Dialogs.CompressionSettingsSection"
@@ -14,170 +15,327 @@
     mc:Ignorable="d">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
-        <StackPanel Spacing="{StaticResource SpacingSValue}"
-                    Padding="{StaticResource SpacingL}">
+        <StackPanel Padding="{StaticResource SpacingL}" Spacing="6">
 
-            <Grid ColumnSpacing="{StaticResource SpacingMValue}"
-                  RowSpacing="{StaticResource SpacingSValue}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+            <!-- ===== 기본값 ===== -->
+            <TextBlock x:Uid="Settings_GroupDefaults"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,0,0,2" />
 
-                <!-- Default format -->
-                <TextBlock Grid.Row="0" Grid.Column="0"
-                           x:Uid="Settings_DefaultFormatLabel"
-                           VerticalAlignment="Center"
-                           Style="{StaticResource BodyTextStyle}" />
-                <!--
-                  Reuse the ConfigPanel_Format* resource keys so Settings
-                  and the main window agree on the format labels (and so
-                  the eight new locales added in this commit get one
-                  translation per format, not two).
-                -->
-                <ComboBox Grid.Row="0" Grid.Column="1"
-                          x:Name="DefaultFormatCombo"
-                          HorizontalAlignment="Stretch"
-                          SelectionChanged="OnDefaultFormatChanged">
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatZip"     Tag="ZIP" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ"  Tag="7z" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatTar"     Tag="tar" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz"   Tag="tar.gz" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2"  Tag="tar.bz2" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz"   Tag="tar.xz" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatXz"      Tag="xz" />
-                    <ComboBoxItem x:Uid="ConfigPanel_FormatZipx"    Tag="zipx" />
-                </ComboBox>
+            <!-- 기본 형식 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE8B7;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_DefaultFormatLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_DefaultFormatDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2"
+                              x:Name="DefaultFormatCombo"
+                              MinWidth="150"
+                              VerticalAlignment="Center"
+                              SelectionChanged="OnDefaultFormatChanged">
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatZip"     Tag="ZIP" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ"  Tag="7z" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatTar"     Tag="tar" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz"   Tag="tar.gz" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2"  Tag="tar.bz2" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz"   Tag="tar.xz" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatXz"      Tag="xz" />
+                        <ComboBoxItem x:Uid="ConfigPanel_FormatZipx"    Tag="zipx" />
+                    </ComboBox>
+                </Grid>
+            </Border>
 
-                <!-- Default method -->
-                <TextBlock Grid.Row="1" Grid.Column="0"
-                           x:Uid="Settings_DefaultMethodLabel"
-                           VerticalAlignment="Center"
-                           Style="{StaticResource BodyTextStyle}" />
-                <ComboBox Grid.Row="1" Grid.Column="1"
-                          x:Name="DefaultMethodCombo"
-                          HorizontalAlignment="Stretch"
-                          SelectionChanged="OnDefaultMethodChanged">
-                    <ComboBoxItem x:Uid="Settings_MethodStore"  Tag="0" />
-                    <ComboBoxItem x:Uid="Settings_MethodFast"   Tag="1" />
-                    <ComboBoxItem x:Uid="Settings_MethodNormal" Tag="2" />
-                    <ComboBoxItem x:Uid="Settings_MethodBest"   Tag="3" />
-                </ComboBox>
+            <!-- 기본 압축 방식 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE9D9;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_DefaultMethodLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_DefaultMethodDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2"
+                              x:Name="DefaultMethodCombo"
+                              MinWidth="150"
+                              VerticalAlignment="Center"
+                              SelectionChanged="OnDefaultMethodChanged">
+                        <ComboBoxItem x:Uid="Settings_MethodStore"  Tag="0" />
+                        <ComboBoxItem x:Uid="Settings_MethodFast"   Tag="1" />
+                        <ComboBoxItem x:Uid="Settings_MethodNormal" Tag="2" />
+                        <ComboBoxItem x:Uid="Settings_MethodBest"   Tag="3" />
+                    </ComboBox>
+                </Grid>
+            </Border>
 
-                <!-- Save location -->
-                <TextBlock Grid.Row="2" Grid.Column="0"
-                           x:Uid="Settings_SaveLocationLabel"
-                           VerticalAlignment="Top"
-                           Margin="0,8,0,0"
-                           Style="{StaticResource BodyTextStyle}" />
-                <StackPanel Grid.Row="2" Grid.Column="1"
-                            Spacing="{StaticResource SpacingXSValue}">
+            <!-- 저장 위치 (라디오 + 사용자 지정 경로) -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE74E;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock x:Uid="Settings_SaveLocationLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                            <TextBlock x:Uid="Settings_SaveLocationDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                        </StackPanel>
+                    </Grid>
                     <RadioButtons x:Name="SaveLocationRadios"
                                   MaxColumns="1"
+                                  Margin="44,0,0,0"
                                   SelectionChanged="OnSaveLocationChanged">
                         <RadioButton x:Uid="Settings_SaveLocationSame"   Tag="same" />
                         <RadioButton x:Uid="Settings_SaveLocationCustom" Tag="custom" />
                     </RadioButtons>
                     <Grid x:Name="SaveLocationCustomRow"
-                          ColumnSpacing="{StaticResource SpacingSValue}">
+                          Margin="44,0,0,0"
+                          ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0"
-                                 x:Name="SaveLocationPathBox"
-                                 IsReadOnly="True" />
+                        <TextBox Grid.Column="0" x:Name="SaveLocationPathBox" IsReadOnly="True" />
                         <Button Grid.Column="1"
                                 x:Uid="Settings_BrowseButton"
                                 Click="OnBrowseSaveLocation" />
                     </Grid>
                 </StackPanel>
-            </Grid>
+            </Border>
 
-            <!-- Section break -->
-            <Border Margin="0,8,0,0" />
+            <!-- ===== 파일 이름 ===== -->
+            <TextBlock x:Uid="Settings_GroupFileName"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,12,0,2" />
 
-            <CheckBox x:Name="UseParentFolderNameCheck"
-                      x:Uid="Settings_UseParentFolderName"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_UseParentFolderName" />
+            <!-- 부모 폴더 이름 사용 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE8F4;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_UseParentFolderName"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="UseParentFolderNameCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_UseParentFolderName"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <!-- Filename template (PR-7B) -->
-            <StackPanel Spacing="2"
-                        Margin="0,8,0,0">
-                <TextBlock x:Uid="Settings_FilenameTemplateLabel"
-                           Style="{StaticResource BodyTextStyle}" />
-                <TextBox x:Name="FilenameTemplateBox"
-                         x:Uid="Settings_FilenameTemplatePlaceholder"
-                         TextChanged="OnFilenameTemplateChanged" />
-                <TextBlock x:Uid="Settings_FilenameTemplateSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           TextWrapping="Wrap"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </StackPanel>
+            <!-- 파일명 템플릿 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="8">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE8AC;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock x:Uid="Settings_FilenameTemplateLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                            <TextBlock x:Uid="Settings_FilenameTemplateSub" Style="{StaticResource SettingsCardDescStyle}" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBox x:Name="FilenameTemplateBox"
+                             x:Uid="Settings_FilenameTemplatePlaceholder"
+                             Margin="44,0,0,0"
+                             TextChanged="OnFilenameTemplateChanged" />
+                </StackPanel>
+            </Border>
 
-            <StackPanel>
-                <CheckBox x:Name="ExcludeSystemMetadataCheck"
-                          x:Uid="Settings_ExcludeSystemMetadata"
-                          MinHeight="0"
-                          Checked="OnToggle"
-                          Unchecked="OnToggle"
-                          Tag="Settings_ExcludeSystemMetadata" />
-                <TextBlock x:Uid="Settings_ExcludeSystemMetadataSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           Margin="28,0,0,2"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </StackPanel>
+            <!-- ===== 압축 후 ===== -->
+            <TextBlock x:Uid="Settings_GroupAfterCompress"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,12,0,2" />
 
-            <CheckBox x:Name="VerifyAfterCompressCheck"
-                      x:Uid="Settings_VerifyAfterCompress"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_VerifyAfterCompress" />
+            <!-- 완료 사운드 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE767;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_PlaySoundOnCompress" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_PlaySoundOnCompressDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="PlaySoundOnCompressCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_PlaySoundOnCompress"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <CheckBox x:Name="AlwaysPromptPasswordCheck"
-                      x:Uid="Settings_AlwaysPromptPassword"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_AlwaysPromptPassword" />
+            <!-- 탐색기에서 보기 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE838;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_RevealAfterCompress"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="RevealAfterCompressCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_RevealAfterCompress"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <Border Margin="0,8,0,0" />
+            <!-- 원본 삭제 (휴지통) — 위험 동작이라 칩을 critical 색으로 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0"
+                            Style="{StaticResource SettingsIconChipStyle}"
+                            Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}">
+                        <FontIcon Glyph="&#xE74D;"
+                                  Style="{StaticResource SettingsCardIconStyle}"
+                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_DeleteSourceAfterCompress" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_DeleteSourceDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="DeleteSourceAfterCompressCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_DeleteSourceAfterCompress"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <!-- Hidden until completion-sound assets land. The checkbox
-                 stays in the visual tree so SettingsService writes from
-                 previous installs are still loaded/saved without churn;
-                 only the user-facing toggle is suppressed. Re-enable by
-                 dropping the Visibility attribute once sounds are wired. -->
-            <CheckBox x:Name="PlaySoundOnCompressCheck"
-                      x:Uid="Settings_PlaySoundOnCompress"
-                      MinHeight="0"
-                      Visibility="Collapsed"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_PlaySoundOnCompress" />
+            <!-- ===== 고급 (점진적 노출) ===== -->
+            <Expander HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch"
+                      Margin="0,12,0,0">
+                <Expander.Header>
+                    <Grid ColumnSpacing="12" Padding="0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE713;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   x:Uid="Settings_GroupAdvanced"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource SettingsCardTitleStyle}" />
+                    </Grid>
+                </Expander.Header>
+                <StackPanel Spacing="6" Padding="0,4,0,4">
+                    <!-- 시스템 메타데이터 제외 -->
+                    <Border Style="{StaticResource CompactCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                                <FontIcon Glyph="&#xE894;" Style="{StaticResource SettingsCardIconStyle}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock x:Uid="Settings_ExcludeSystemMetadata" Style="{StaticResource SettingsCardTitleStyle}" />
+                                <TextBlock x:Uid="Settings_ExcludeSystemMetadataSub" Style="{StaticResource SettingsCardDescStyle}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2"
+                                          x:Name="ExcludeSystemMetadataCheck"
+                                          Style="{StaticResource SettingsCardToggleStyle}"
+                                          Tag="Settings_ExcludeSystemMetadata"
+                                          Toggled="OnToggle" />
+                        </Grid>
+                    </Border>
 
-            <CheckBox x:Name="RevealAfterCompressCheck"
-                      x:Uid="Settings_RevealAfterCompress"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_RevealAfterCompress" />
+                    <!-- 압축 후 무결성 검사 -->
+                    <Border Style="{StaticResource CompactCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                                <FontIcon Glyph="&#xE73E;" Style="{StaticResource SettingsCardIconStyle}" />
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       x:Uid="Settings_VerifyAfterCompress"
+                                       Style="{StaticResource SettingsCardTitleStyle}" />
+                            <ToggleSwitch Grid.Column="2"
+                                          x:Name="VerifyAfterCompressCheck"
+                                          Style="{StaticResource SettingsCardToggleStyle}"
+                                          Tag="Settings_VerifyAfterCompress"
+                                          Toggled="OnToggle" />
+                        </Grid>
+                    </Border>
 
-            <CheckBox x:Name="DeleteSourceAfterCompressCheck"
-                      x:Uid="Settings_DeleteSourceAfterCompress"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_DeleteSourceAfterCompress" />
+                    <!-- 항상 비밀번호 입력 -->
+                    <Border Style="{StaticResource CompactCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                                <FontIcon Glyph="&#xE192;" Style="{StaticResource SettingsCardIconStyle}" />
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       x:Uid="Settings_AlwaysPromptPassword"
+                                       Style="{StaticResource SettingsCardTitleStyle}" />
+                            <ToggleSwitch Grid.Column="2"
+                                          x:Name="AlwaysPromptPasswordCheck"
+                                          Style="{StaticResource SettingsCardToggleStyle}"
+                                          Tag="Settings_AlwaysPromptPassword"
+                                          Toggled="OnToggle" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Expander>
+
         </StackPanel>
     </ScrollViewer>
 </UserControl>

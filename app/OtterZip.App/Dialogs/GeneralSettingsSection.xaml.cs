@@ -87,8 +87,8 @@ public sealed partial class GeneralSettingsSection : UserControl
         // Toggles — defaults match settings-catalog §3.1 rev 3.
         // QuitWhenLastClosed was retired in rev 6 (no system tray, no
         // sensible OFF semantics — see catalog §3.4 OUT).
-        ConfirmExitCheck.IsChecked = SettingsService.Get<bool>("Settings_ConfirmExitWhileBusy", true);
-        ShowToastCheck.IsChecked   = SettingsService.Get<bool>("Settings_ShowToast", true);
+        ConfirmExitCheck.IsOn = SettingsService.Get<bool>("Settings_ConfirmExitWhileBusy", true);
+        ShowToastCheck.IsOn   = SettingsService.Get<bool>("Settings_ShowToast", true);
 
         // Concurrent jobs — JobQueue reads this at MainWindow ctor.
         int concurrency = Math.Clamp(
@@ -150,9 +150,9 @@ public sealed partial class GeneralSettingsSection : UserControl
 
     private void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is CheckBox cb && cb.Tag is string key)
+        if (sender is ToggleSwitch ts && ts.Tag is string key)
         {
-            SettingsService.Set(key, cb.IsChecked.GetValueOrDefault());
+            SettingsService.Set(key, ts.IsOn);
         }
     }
 

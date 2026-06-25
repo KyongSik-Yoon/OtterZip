@@ -31,12 +31,22 @@ public sealed partial class ExtractionSettingsSection : UserControl
 
         // Default OFF — Keka-style immediate extract. Hold Ctrl/Alt at
         // drop time for one-shot panel access without flipping this.
-        AskBeforeExtractCheck.IsChecked         = SettingsService.Get<bool>("Settings_AskBeforeExtract", false);
-        AlwaysExtractToSubfolderCheck.IsChecked = SettingsService.Get<bool>("Settings_AlwaysExtractToSubfolder", true);
-        PreserveZoneIdCheck.IsChecked           = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
-        PlaySoundOnExtractCheck.IsChecked       = SettingsService.Get<bool>("Settings_PlaySoundOnExtract", true);
-        RevealAfterExtractCheck.IsChecked       = SettingsService.Get<bool>("Settings_RevealAfterExtract", true);
-        DeleteArchiveAfterExtractCheck.IsChecked = SettingsService.Get<bool>("Settings_DeleteArchiveAfterExtract", false);
+        AskBeforeExtractCheck.IsOn         = SettingsService.Get<bool>("Settings_AskBeforeExtract", false);
+        AlwaysExtractToSubfolderCheck.IsOn = SettingsService.Get<bool>("Settings_AlwaysExtractToSubfolder", true);
+
+        // OverwritePolicy enum int → radio index. Default 4 (Rename/keep-both).
+        // Radio order: 0=Rename(4), 1=Always(1), 2=Skip/IfNewer(2), 3=Reject/Never(0).
+        int overwrite = SettingsService.Get<int>("Settings_OverwritePolicy", 4);
+        OverwritePolicyRadios.SelectedIndex = overwrite switch { 1 => 1, 2 => 2, 0 => 3, _ => 0 };
+
+        // Double-click action: 0=dialog (default), 1=extract here, 2=smart.
+        // Tag order matches the value, so index == value.
+        int doubleClick = SettingsService.Get<int>("Settings_DoubleClickAction", 0);
+        DoubleClickActionRadios.SelectedIndex = (doubleClick is >= 0 and <= 2) ? doubleClick : 0;
+        PreserveZoneIdCheck.IsOn           = SettingsService.Get<bool>("Settings_PreserveZoneIdentifier", true);
+        PlaySoundOnExtractCheck.IsOn       = SettingsService.Get<bool>("Settings_PlaySoundOnExtract", true);
+        RevealAfterExtractCheck.IsOn       = SettingsService.Get<bool>("Settings_RevealAfterExtract", true);
+        DeleteArchiveAfterExtractCheck.IsOn = SettingsService.Get<bool>("Settings_DeleteArchiveAfterExtract", false);
     }
 
     private void OnExtractLocationChanged(object sender, SelectionChangedEventArgs e)
@@ -47,6 +57,26 @@ public sealed partial class ExtractionSettingsSection : UserControl
             ExtractLocationCustomRow.Visibility =
                 string.Equals(tag, "custom", StringComparison.Ordinal)
                     ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void OnOverwritePolicyChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (OverwritePolicyRadios.SelectedItem is RadioButton rb
+            && rb.Tag is string tag
+            && int.TryParse(tag, System.Globalization.CultureInfo.InvariantCulture, out int policy))
+        {
+            SettingsService.Set("Settings_OverwritePolicy", policy);
+        }
+    }
+
+    private void OnDoubleClickActionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DoubleClickActionRadios.SelectedItem is RadioButton rb
+            && rb.Tag is string tag
+            && int.TryParse(tag, System.Globalization.CultureInfo.InvariantCulture, out int action))
+        {
+            SettingsService.Set("Settings_DoubleClickAction", action);
         }
     }
 
@@ -65,9 +95,9 @@ public sealed partial class ExtractionSettingsSection : UserControl
 
     private void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is CheckBox cb && cb.Tag is string key)
+        if (sender is ToggleSwitch ts && ts.Tag is string key)
         {
-            SettingsService.Set(key, cb.IsChecked.GetValueOrDefault());
+            SettingsService.Set(key, ts.IsOn);
         }
     }
 }

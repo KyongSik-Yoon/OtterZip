@@ -155,6 +155,48 @@
     </Style>
 
     <!-- ================================================================ -->
+    <!--  Fluent settings card (A안 + B안 하이브리드)                      -->
+    <!--  CompactCard Border + [아이콘 칩 | 제목·설명 | 컨트롤] 그리드.     -->
+    <!--  브랜드 틴트 칩은 라이트/다크/고대비 3테마 모두 정의된 브러시 사용. -->
+    <!-- ================================================================ -->
+
+    <!-- 32x32 브랜드 틴트 아이콘 칩 (카드 선두 아이콘 배경) -->
+    <Style x:Key="SettingsIconChipStyle" TargetType="Border">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{ThemeResource OtterzipBrandSoftBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 칩 내부 FontIcon (브랜드 색) -->
+    <Style x:Key="SettingsCardIconStyle" TargetType="FontIcon">
+        <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{ThemeResource OtterzipBrandBrush}" />
+    </Style>
+
+    <!-- 카드 우측 토글 — On/Off 라벨 제거(카드 제목이 라벨), 폭 최소화.
+         On 색은 시스템 액센트 유지(윈도우 네이티브 + 아이콘 액센트 철학). -->
+    <Style x:Key="SettingsCardToggleStyle" TargetType="ToggleSwitch">
+        <Setter Property="OnContent" Value="" />
+        <Setter Property="OffContent" Value="" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <!-- 카드 제목 / 설명 (기존 Row 스타일 재사용 가능하나, 카드 컨텍스트
+         전용 별칭으로 의미를 명확히 — 값은 동일 위계). -->
+    <Style x:Key="SettingsCardTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextStyle}">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="SettingsCardDescStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- ================================================================ -->
     <!--  Browser list header cell                                         -->
     <!-- ================================================================ -->
 

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Settings → Integration tab. (Phase 6+ rev 3)
-  3 items: master toggle / submenu mode / extract-here as default.
-  All three are gated on Sprint S body availability — disabled in MVP.
+  Settings → Integration tab. (UI rev: Fluent settings cards + 고급 Expander)
+  그룹 "탐색기 메뉴"(메뉴 사용·표시 방식·여기에 풀기 기본) + 고급 Expander(진행 창 자동 닫기).
+  코드비하인드 계약(x:Name·이벤트) 보존. 토글은 ToggleSwitch(IsOn/Toggled).
 -->
 <UserControl
     x:Class="OtterZip.App.Dialogs.IntegrationSettingsSection"
@@ -13,65 +13,105 @@
     mc:Ignorable="d">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
-        <StackPanel Spacing="{StaticResource SpacingMValue}"
-                    Padding="{StaticResource SpacingL}">
+        <StackPanel Padding="{StaticResource SpacingL}" Spacing="6">
 
-            <!-- PR-7E: ShellMenuEnabled is now wired end-to-end (C++
-                 GetState reads LocalSettings under a 5s cache). The
-                 mode + default-action toggles save state but their
-                 effect is manifest-driven — see ShellExtractHere
-                 GetFlags comment for why ECF flags can't bold a verb
-                 at runtime. -->
-            <StackPanel>
-                <CheckBox x:Name="ShellMenuEnabledCheck"
-                          x:Uid="Settings_ShellMenuEnabled"
-                          MinHeight="0"
-                          Checked="OnToggle"
-                          Unchecked="OnToggle"
-                          Tag="Settings_ShellMenuEnabled" />
-                <TextBlock x:Uid="Settings_ShellMenuEnabledSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           Margin="28,0,0,2"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </StackPanel>
+            <!-- ===== 탐색기 메뉴 ===== -->
+            <TextBlock x:Uid="Settings_GroupShellMenu"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,0,0,2" />
 
-            <Grid ColumnSpacing="{StaticResource SpacingMValue}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           x:Uid="Settings_ShellMenuModeLabel"
-                           VerticalAlignment="Top"
-                           Margin="0,8,0,0"
-                           Style="{StaticResource BodyTextStyle}" />
-                <RadioButtons Grid.Column="1"
-                              x:Name="ShellMenuModeRadios"
-                              MaxColumns="1"
-                              SelectionChanged="OnShellMenuModeChanged">
-                    <RadioButton x:Uid="Settings_ShellMenuModeFlat"   Tag="flat" />
-                    <RadioButton x:Uid="Settings_ShellMenuModeNested" Tag="nested" />
-                </RadioButtons>
-            </Grid>
+            <!-- 우클릭 메뉴 사용 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE71D;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_ShellMenuEnabled" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_ShellMenuEnabledSub" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="ShellMenuEnabledCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_ShellMenuEnabled"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <CheckBox x:Name="ExtractHereDefaultCheck"
-                      x:Uid="Settings_ShellExtractHereAsDefault"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_ShellExtractHereAsDefault" />
+            <!-- 메뉴 표시 방식 (평면 / 하위 메뉴) -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xEA37;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   x:Uid="Settings_ShellMenuModeLabel"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource SettingsCardTitleStyle}" />
+                    </Grid>
+                    <RadioButtons x:Name="ShellMenuModeRadios"
+                                  MaxColumns="1"
+                                  Margin="44,0,0,0"
+                                  SelectionChanged="OnShellMenuModeChanged">
+                        <RadioButton x:Uid="Settings_ShellMenuModeFlat"   Tag="flat" />
+                        <RadioButton x:Uid="Settings_ShellMenuModeNested" Tag="nested" />
+                    </RadioButtons>
+                </StackPanel>
+            </Border>
 
-            <!-- Quick-compress progress dialog auto-close. Default off:
-                 Bandizip / 7-Zip / WinRAR all leave the progress window
-                 open after success so the user can see the elapsed time
-                 and click 닫기 at their leisure. Power users who fire
-                 dozens of quick-compress per hour opt in here. -->
-            <CheckBox x:Name="QuickProgressAutoCloseCheck"
-                      x:Uid="Settings_QuickProgressAutoClose"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_QuickProgressAutoClose" />
+            <!-- ===== 고급 (점진적 노출) ===== -->
+            <Expander HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch"
+                      Margin="0,12,0,0">
+                <Expander.Header>
+                    <Grid ColumnSpacing="12" Padding="0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE713;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   x:Uid="Settings_GroupAdvanced"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource SettingsCardTitleStyle}" />
+                    </Grid>
+                </Expander.Header>
+                <StackPanel Spacing="6" Padding="0,4,0,4">
+                    <!-- 빠른 압축 진행 창 자동 닫기 -->
+                    <Border Style="{StaticResource CompactCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                                <FontIcon Glyph="&#xE916;" Style="{StaticResource SettingsCardIconStyle}" />
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       x:Uid="Settings_QuickProgressAutoClose"
+                                       Style="{StaticResource SettingsCardTitleStyle}" />
+                            <ToggleSwitch Grid.Column="2"
+                                          x:Name="QuickProgressAutoCloseCheck"
+                                          Style="{StaticResource SettingsCardToggleStyle}"
+                                          Tag="Settings_QuickProgressAutoClose"
+                                          Toggled="OnToggle" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

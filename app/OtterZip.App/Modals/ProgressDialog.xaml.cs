@@ -56,14 +56,20 @@ public sealed partial class ProgressDialog : Window
         ArgumentNullException.ThrowIfNull(request);
         InitializeComponent();
         _request = request;
+        // Follow the app's theme setting (not just the system) so the body
+        // and the title bar agree — matches SettingsWindow / OnboardingWindow.
+        if (Content is FrameworkElement themeRoot)
+        {
+            ThemeService.Apply(themeRoot, ThemeService.Load());
+        }
         _dispatcher = DispatcherQueue.GetForCurrentThread()
                       ?? throw new InvalidOperationException("ProgressDialog requires a UI dispatcher.");
         _jobQueue = new JobQueue(_dispatcher, concurrentLimit: 1);
         _jobQueue.JobSettled += OnJobSettled;
 
-        // 500×260 dev pixels. Sized to fit mascot header + status row
-        // + two-button action bar without crowding.
-        TrySizeWindow(500, 260);
+        // 500×240 dev pixels. Compact mascot header (now with a source /
+        // current-file subline) + status row + two-button action bar.
+        TrySizeWindow(500, 240);
         _stopwatch.Start();
         AppWindow.Closing += OnAppWindowClosing;
         _ = StartCompressAsync();
@@ -91,6 +97,9 @@ public sealed partial class ProgressDialog : Window
 
             string basename = Path.GetFileName(plan.Destination);
             ArchiveNameText.Text = basename;
+            // Show which inputs are going into the archive; the live current
+            // file (RunWorkAsync) overrides this while a large entry streams.
+            CurrentFileText.Text = ComposeSourceSummary(_request.Paths);
             Title = string.Format(CultureInfo.CurrentCulture,
                 _strings.GetString("ProgressDialog_TitleCompressFormat/Text"), basename);
 
@@ -135,18 +144,36 @@ public sealed partial class ProgressDialog : Window
             {
                 overallProgress.Report(Math.Clamp(frac, 0.0, 1.0));
             }
+            // Surface the file currently being compressed (only populated on
+            // the large-file streaming path; small/chunked entries leave the
+            // source summary in place).
+            if (!string.IsNullOrEmpty(p.CurrentEntry))
+            {
+                string entryName = Path.GetFileName(p.CurrentEntry);
+                _dispatcher.TryEnqueue(() =>
+                {
+                    if (!_settled && !string.IsNullOrEmpty(entryName))
+                    {
+                        CurrentFileText.Text = entryName;
+                    }
+                });
+            }
         });
 
         try
         {
+            var workTimer = System.Diagnostics.Stopwatch.StartNew();
             var report = await CompressEngine.RunAsync(plan, sources, password, richProgress, ct).ConfigureAwait(false);
+            workTimer.Stop();
+            ulong originalBytes = OperationSummary.TotalInputBytes(sources);
+            string summary = OperationSummary.Compress(originalBytes, report.BytesWritten, workTimer.Elapsed);
             await CompressEngine.MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
             CompressEngine.MaybeRecycleSources(sources);
             _dispatcher.TryEnqueue(() =>
             {
                 item.ResultPath = plan.Destination;
                 item.Progress = 1.0;
-                item.StatusText = FormatByteSize(report.BytesWritten);
+                item.StatusText = summary;
             });
         }
         catch (OperationCanceledException)
@@ -180,6 +207,7 @@ public sealed partial class ProgressDialog : Window
         _settled = true;
         _stopwatch.Stop();
         _settlementWait?.TrySetResult(true);
+        SoundService.MaybePlayCompletion(item);
         _dispatcher.TryEnqueue(() => RenderSettledUi(item));
     }
 
@@ -244,16 +272,10 @@ public sealed partial class ProgressDialog : Window
                 item.StatusText ?? string.Empty),
             _ => string.Empty,
         };
-        if (item.State == JobState.Done && !string.IsNullOrEmpty(_destinationPath))
+        if (item.State == JobState.Done && !string.IsNullOrEmpty(item.StatusText))
         {
-            try
-            {
-                var info = new FileInfo(_destinationPath);
-                string size = FormatByteSize((ulong)info.Length);
-                string elapsed = FormatElapsed(_stopwatch.Elapsed);
-                return $"{baseMessage}  ·  {size}  ·  {elapsed}";
-            }
-            catch (IOException) { /* file may have been moved/locked */ }
+            // item.StatusText already carries "<archive size> · NN%↓ · NN MB/s".
+            return $"{baseMessage}  ·  {item.StatusText}";
         }
         return baseMessage;
     }
@@ -296,24 +318,25 @@ public sealed partial class ProgressDialog : Window
         }
     }
 
-    private static string FormatElapsed(TimeSpan elapsed)
+    /// <summary>
+    /// Short human label for the inputs being compressed — the first item's
+    /// name plus a "(+N)" count when there are more. Language-neutral, so no
+    /// resw entry is needed.
+    /// </summary>
+    private static string ComposeSourceSummary(IReadOnlyList<string> sources)
     {
-        if (elapsed.TotalMinutes >= 1)
+        if (sources is null || sources.Count == 0)
         {
-            return $"{(int)elapsed.TotalMinutes}분 {elapsed.Seconds}초";
+            return string.Empty;
         }
-        return $"{elapsed.TotalSeconds:0.0}초";
-    }
-
-    private static string FormatByteSize(ulong bytes)
-    {
-        const ulong KB = 1024;
-        const ulong MB = KB * 1024;
-        const ulong GB = MB * 1024;
-        if (bytes >= GB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} GB", bytes / (double)GB);
-        if (bytes >= MB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} MB", bytes / (double)MB);
-        if (bytes >= KB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} KB", bytes / (double)KB);
-        return string.Format(CultureInfo.CurrentCulture, "{0} B", bytes);
+        string first = Path.GetFileName(sources[0].TrimEnd('\\', '/'));
+        if (string.IsNullOrEmpty(first))
+        {
+            first = sources[0];
+        }
+        return sources.Count == 1
+            ? first
+            : string.Format(CultureInfo.CurrentCulture, "{0}  (+{1})", first, sources.Count - 1);
     }
 
     private void SwitchActionToClose()
@@ -387,6 +410,7 @@ public sealed partial class ProgressDialog : Window
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
             MainWindow.TrySetWindowIcon(appWindow);
+            WindowChrome.ApplyTitleBarTheme(appWindow);
 
             uint dpi = GetDpiForWindow(hwnd);
             double scale = dpi / 96.0;

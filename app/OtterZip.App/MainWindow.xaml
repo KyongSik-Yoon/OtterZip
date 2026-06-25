@@ -21,7 +21,7 @@
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid"
-          Background="Transparent"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
           AllowDrop="True">
 
         <Grid.RowDefinitions>

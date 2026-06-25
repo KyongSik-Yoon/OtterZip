@@ -142,11 +142,36 @@ public sealed class JobQueue : IDisposable
         catch (Exception ex)
         {
             MarkError(item, ex.Message);
+            // Central choke point for every queued compress/extract failure.
+            // The classifier separates our bugs (Rust panic / invalid arg)
+            // from expected user errors (wrong password / corrupt / disk).
+            OtterZip.Interop.OtterzipTelemetry.ReportOperationFailure(
+                item.Kind == JobKind.Compress ? "compress" : "extract",
+                ex,
+                OperationFormatHint(item));
         }
         finally
         {
             _slots.Release();
         }
+    }
+
+    /// <summary>
+    /// Best-effort archive-format hint for telemetry — the file EXTENSION
+    /// only (e.g. "zip", "7z"); the path itself is never sent. Compress
+    /// reads the destination, extract the source archive.
+    /// </summary>
+    private static string? OperationFormatHint(JobItem item)
+    {
+        string? path = item.Kind == JobKind.Compress
+            ? (item.ResultPath ?? item.DisplayName)
+            : item.SourcePath;
+        if (string.IsNullOrEmpty(path))
+        {
+            return null;
+        }
+        string ext = System.IO.Path.GetExtension(path);
+        return string.IsNullOrEmpty(ext) ? null : ext.TrimStart('.').ToUpperInvariant();
     }
 
     private async Task<bool> WaitForSlotAsync(JobItem item)

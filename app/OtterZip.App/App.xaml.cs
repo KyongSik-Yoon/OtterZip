@@ -34,16 +34,174 @@ public partial class App : Application
         {
             System.Diagnostics.Debug.WriteLine(
                 "[OtterZip] UnhandledException: " + e.Message + "\n" + e.Exception);
+            // Sentry auto-hooks AppDomain / unobserved-task exceptions but NOT
+            // the WinUI UI-thread Application.UnhandledException, so forward it
+            // here (no-op until the user opts in). Capture before Handled=true.
+            OtterzipTelemetry.CaptureException(e.Exception);
             e.Handled = true;
         };
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        InitializeAppServices();
+
+        // Sprint 5: shell extension routes context-menu verbs through
+        // `OtterZip.exe --invoke <verb> --files "..."`. We parse the
+        // command line up front so the invoking workflow can complete
+        // without showing the main window when appropriate.
+        var invokeRequest = ParseInvokeArgs(Environment.GetCommandLineArgs());
+
+        // Headless shell verbs skip MainWindow entirely and route to a
+        // standalone modal (a small dialog instead of the full app surface).
+        if (TryRouteHeadlessInvoke(invokeRequest))
+        {
+            return;
+        }
+
+        // "Open with" / default-app activation: Explorer launches us with
+        // the archive file(s) through the WinAppSDK activation args (NOT
+        // argv), so a plain `OnLaunched` would otherwise drop them and show
+        // an empty window. Route them through the same pipeline as dragged
+        // files (extract archives / compress other inputs).
+        var openFiles = TryGetFileActivationPaths();
+
+        // Double-click / "Open with" on archive(s) → extract per the
+        // Settings_DoubleClickAction preference (dialog / here / smart). May
+        // rewrite invokeRequest to a quick-extract verb for the MainWindow.
+        if (invokeRequest is null && TryRouteArchiveActivation(openFiles, ref invokeRequest))
+        {
+            return;
+        }
+
+        _mainWindow = new MainWindow();
+        HostWindow = _mainWindow;
+        if (invokeRequest is not null)
+        {
+            ((MainWindow)_mainWindow).PreloadInvoke(invokeRequest);
+        }
+        else if (openFiles.Count > 0)
+        {
+            ((MainWindow)_mainWindow).PreloadFiles(openFiles);
+        }
+        _mainWindow.Activate();
+
+        // First-run onboarding — only on a plain launch (not a shell verb
+        // or "open with" file activation, where the user is mid-task). No-op
+        // once completed/skipped.
+        if (invokeRequest is null && openFiles.Count == 0)
+        {
+            OnboardingService.ShowIfFirstRun(_mainWindow.DispatcherQueue);
+        }
+    }
+
+    /// <summary>
+    /// Headless shell verbs skip MainWindow and route to a standalone modal
+    /// (each owns its own JobQueue + dispatcher; the process exits when the
+    /// last window closes). Returns <c>true</c> when it took over the launch.
+    ///   * compress-zip / compress-7z  → ProgressDialog (quick, no form)
+    ///   * compress (no QuickFormat)    → CompressOptionsDialog
+    ///   * extract-dialog               → ExtractOptionsDialog
+    /// </summary>
+    private bool TryRouteHeadlessInvoke(InvokeRequest? invokeRequest)
+    {
+        if (invokeRequest is not { IsHeadless: true })
+        {
+            return false;
+        }
+        Window dialog = invokeRequest switch
+        {
+            { Verb: "extract-dialog" } =>
+                new OtterZip.App.Modals.ExtractOptionsDialog(invokeRequest),
+            { Verb: "compress", QuickFormat: null } =>
+                new OtterZip.App.Modals.CompressOptionsDialog(invokeRequest),
+            _ => new OtterZip.App.Modals.ProgressDialog(invokeRequest),
+        };
+        HostWindow = dialog;
+        dialog.Activate();
+        return true;
+    }
+
+    /// <summary>
+    /// Decide how a double-click / "Open with" on archive(s) opens, per the
+    /// <c>Settings_DoubleClickAction</c> preference:
+    /// <list type="bullet">
+    ///   <item>0 (default) — the focused <see cref="OtterZip.App.Modals.ExtractOptionsDialog"/>
+    ///   (handles one or many archives sequentially); takes over the launch.</item>
+    ///   <item>1 / 2 — quick "extract here" / "smart extract": rewrites
+    ///   <paramref name="request"/> to the matching verb and falls through to
+    ///   the MainWindow extract path.</item>
+    /// </list>
+    /// Returns <c>true</c> only when it fully handled the launch (the dialog).
+    /// Non-archive inputs leave <paramref name="request"/> untouched.
+    /// </summary>
+    private bool TryRouteArchiveActivation(IReadOnlyList<string> openFiles, ref InvokeRequest? request)
+    {
+        if (openFiles.Count == 0 || !openFiles.All(MainWindow.IsKnownArchive))
+        {
+            return false;
+        }
+        int action = SettingsService.Get<int>("Settings_DoubleClickAction", 0);
+        if (action == 0)
+        {
+            var extractRequest = new InvokeRequest(
+                "extract-dialog", openFiles, QuickFormat: null, IsHeadless: true);
+            Window extractDialog = new OtterZip.App.Modals.ExtractOptionsDialog(extractRequest);
+            HostWindow = extractDialog;
+            extractDialog.Activate();
+            return true;
+        }
+        // Quick extract: route through the MainWindow shell-verb path (1=here,
+        // 2=smart). Not headless — MainWindow's verb dispatch performs it.
+        string verb = action == 2 ? "extract-smart" : "extract-here";
+        request = new InvokeRequest(verb, openFiles, QuickFormat: null, IsHeadless: false);
+        return false;
+    }
+
+    /// <summary>
+    /// Paths of files opened via a file association / "Open with", or empty
+    /// when this launch wasn't a file activation. Windows delivers the
+    /// opened files through <c>AppInstance.GetActivatedEventArgs</c> (the
+    /// command line stays empty), so reading argv alone would miss them.
+    /// </summary>
+    private static IReadOnlyList<string> TryGetFileActivationPaths()
+    {
+        try
+        {
+            var activated = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent()?.GetActivatedEventArgs();
+            if (activated?.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.File
+                && activated.Data is Windows.ApplicationModel.Activation.IFileActivatedEventArgs fileArgs)
+            {
+                return fileArgs.Files
+                    .Select(item => item.Path)
+                    .Where(p => !string.IsNullOrEmpty(p))
+                    .ToList();
+            }
+        }
+        catch (Exception)
+        {
+            // Activation introspection is best-effort — fall back to a
+            // normal empty-window launch rather than crashing.
+        }
+        return Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// One-time process initialization shared by every launch path
+    /// (MainWindow + the headless dialogs). Extracted from
+    /// <see cref="OnLaunched"/> to keep that method under the MA0051
+    /// 60-line cap.
+    /// </summary>
+    private static void InitializeAppServices()
+    {
         OtterzipLibrary.Initialize();
         // Phase 7 (PR-7F): telemetry pipeline. Honors the persisted user
         // preference first; OTTERZIP_TELEMETRY=1 env var inside Initialize()
         // is a fallback for CI / power users. Default is OFF.
+        // Anonymous per-install id (random GUID, generated once) so a user can
+        // request deletion of their crash reports — see PRIVACY.md. Set before
+        // Initialize so it tags every event from the first one.
+        OtterzipTelemetry.SetInstallId(GetOrCreateInstallId());
         OtterzipTelemetry.Initialize();
         if (SettingsService.Get<bool>("Settings_TelemetryEnabled", false))
         {
@@ -57,43 +215,34 @@ public partial class App : Application
 
         // Phase 6+: honor saved language preference before any UI loads
         // resources. Empty string keeps system default, "ko" / "en" override.
-        //
-        // ApplicationLanguages.PrimaryLanguageOverride throws
-        // `InvalidOperationException` ("Operation is not valid due to the
-        // current state of the object") in unpackaged WinUI 3 contexts —
-        // the API is package-identity gated. Our csproj currently runs
-        // unpackaged (WindowsPackageType=None) so swallow and fall back
-        // to the system locale.
+        // PrimaryLanguageOverride is package-identity gated and throws in
+        // unpackaged dev runs — ApplyLanguageOverride swallows that.
         ApplyLanguageOverride();
 
-        // Sprint 5: shell extension routes context-menu verbs through
-        // `OtterZip.exe --invoke <verb> --files "..."`. We parse the
-        // command line up front so the invoking workflow can complete
-        // without showing the main window when appropriate.
-        var invokeRequest = ParseInvokeArgs(Environment.GetCommandLineArgs());
+        // Mirror shell settings + localized verb strings into the package
+        // LocalState so the shell handler's menu-build path reads them with
+        // pure Win32 (no AppX activation context) — fixes the cold-boot
+        // first-right-click verb miss. After the language override so the
+        // cached strings match the active locale. Best-effort; never throws.
+        ShellMenuCache.Refresh();
+    }
 
-        // Bandizip-style quick verbs (`compress-zip` / `compress-7z`)
-        // land here with IsHeadless=true. We skip MainWindow entirely
-        // and route to a standalone ProgressDialog so the user gets
-        // the small modal experience instead of the full app surface.
-        // The dialog owns its own JobQueue + dispatcher; WinUI keeps
-        // the app alive until the last window closes, so when the
-        // dialog hits its Close button the process exits naturally.
-        if (invokeRequest is { IsHeadless: true })
+    /// <summary>
+    /// Get (or create on first run) the anonymous install id — a random GUID
+    /// persisted in LocalSettings. It is NOT tied to any user identity; it
+    /// exists only so a user who opted into crash reporting can ask us to
+    /// delete their reports (PRIVACY.md → "Your choices"). Shown in
+    /// Settings → Info → Build.
+    /// </summary>
+    private static string GetOrCreateInstallId()
+    {
+        string id = SettingsService.Get<string>("Settings_InstallId", string.Empty);
+        if (string.IsNullOrEmpty(id))
         {
-            var dialog = new OtterZip.App.Modals.ProgressDialog(invokeRequest);
-            HostWindow = dialog;
-            dialog.Activate();
-            return;
+            id = Guid.NewGuid().ToString("N");
+            SettingsService.Set("Settings_InstallId", id);
         }
-
-        _mainWindow = new MainWindow();
-        HostWindow = _mainWindow;
-        if (invokeRequest is not null)
-        {
-            ((MainWindow)_mainWindow).PreloadInvoke(invokeRequest);
-        }
-        _mainWindow.Activate();
+        return id;
     }
 
     /// <summary>
@@ -196,22 +345,26 @@ public partial class App : Application
     /// the ProgressDialog builds a single CompressEngine plan, so to
     /// produce one archive per item we must route through
     /// MainWindow.DispatchInvokeAsync's per-path loop.</item>
-    /// <item><c>extract-smart</c> / <c>extract-to-subfolder</c> /
-    /// <c>extract-dialog</c> — all EXTRACT operations. NOT headless:
-    /// the headless ProgressDialog only knows how to compress
-    /// (CompressEngine), so an extract verb sent there would silently
-    /// COMPRESS the archive instead of unpacking it (the 2026-06-17
-    /// bug). They route through MainWindow.DispatchInvokeAsync →
-    /// ExtractAsync with the appropriate ShellExtractMode.</item>
+    /// <item><c>extract-smart</c> / <c>extract-to-subfolder</c> — EXTRACT
+    /// operations that pick their destination silently. NOT headless: the
+    /// ProgressDialog only knows how to compress (CompressEngine), so an
+    /// extract verb sent there would silently COMPRESS the archive instead
+    /// of unpacking it (the 2026-06-17 bug). They route through
+    /// MainWindow.DispatchInvokeAsync → ExtractAsync with the appropriate
+    /// ShellExtractMode.</item>
+    /// <item><c>compress</c> (plain, no QuickFormat) / <c>extract-dialog</c>
+    /// — the "...(O)" / "...(B)" option verbs. Headless: v0.22 routes them
+    /// to the dedicated <c>CompressOptionsDialog</c> /
+    /// <c>ExtractOptionsDialog</c> (see <see cref="OnLaunched"/>), each of
+    /// which owns its option form + an embedded JobProgressView. They no
+    /// longer open the full MainWindow surface.</item>
     /// <item>Unrecognised → returned verbatim so MainWindow dispatch
     /// can produce a useful error.</item>
     /// </list>
     ///
-    /// Headless == true is reserved for verbs the standalone
-    /// ProgressDialog can fully service today, which is only the two
-    /// single-archive quick-compress verbs. Everything else needs
-    /// MainWindow's richer dispatch. v0.22's dedicated
-    /// Compress/Extract option dialogs will revisit this split.
+    /// Headless == true now covers the two quick-compress verbs plus the
+    /// two v0.22 option verbs; OnLaunched's verb switch picks the matching
+    /// dialog. Everything else needs MainWindow's richer dispatch.
     /// </para>
     /// </summary>
     private static (string canonical, string? quickFormat, bool isHeadless) NormalizeVerb(string verb)
@@ -242,7 +395,15 @@ public partial class App : Application
         }
         if (string.Equals(verb, "extract-dialog", StringComparison.OrdinalIgnoreCase))
         {
-            return ("extract-dialog", null, false);
+            // v0.22: headless → ExtractOptionsDialog (no QuickFormat).
+            return ("extract-dialog", null, true);
+        }
+        if (string.Equals(verb, "compress", StringComparison.OrdinalIgnoreCase))
+        {
+            // v0.22: plain compress (no quick-format tag) → headless
+            // CompressOptionsDialog. The quick verbs above return earlier
+            // with QuickFormat set, so this only catches the "...(O)" verb.
+            return ("compress", null, true);
         }
         return (verb, null, false);
     }

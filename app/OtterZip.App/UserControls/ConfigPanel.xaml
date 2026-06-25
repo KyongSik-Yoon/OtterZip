@@ -41,21 +41,24 @@
                 BorderThickness="1"
                 CornerRadius="14"
                 Tapped="OnDropHintTapped">
+            <!-- icon + title + subtitle are one group, centered as a unit.
+                 No bottom margin: a margin would be folded into the centering
+                 box and push the whole group visibly upward. -->
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="10"
-                        Padding="20,56,20,20"
-                        Margin="0,0,0,120">
+                        Spacing="6"
+                        Padding="20,20,20,20">
                 <Image Source="ms-appx:///Assets/ShellMascot.png"
-                       Width="104" Height="104"
-                       Opacity="0.95"
+                       Width="64" Height="64"
+                       Opacity="0.9"
+                       Margin="0,0,0,2"
                        HorizontalAlignment="Center" />
                 <TextBlock x:Uid="ConfigPanel_DropHintTitle"
-                           Style="{StaticResource SubtitleTextStyle}"
+                           Style="{StaticResource BodyStrongTextStyle}"
                            HorizontalAlignment="Center"
                            TextAlignment="Center" />
                 <TextBlock x:Uid="ConfigPanel_DropHintSubtitle"
-                           Style="{StaticResource BodyTextStyle}"
+                           Style="{StaticResource CaptionTextStyle}"
                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                            HorizontalAlignment="Center"
                            TextAlignment="Center" />
@@ -93,17 +96,13 @@
                         <StackPanel Width="320"
                                     Spacing="14">
 
-                            <!--
-                              Split-output is hidden until the Rust writer
-                              backends honour CreateOptions.volume_size_bytes
-                              (currently the FFI propagates the field but no
-                              backend reads it — ArchiveBuilder.cs hardcodes
-                              VolumeSizeBytes = 0). Keeping the markup +
-                              code-behind wiring intact so re-enabling is a
-                              single Visibility tweak once the backend lands.
-                            -->
-                            <StackPanel Spacing="4"
-                                        Visibility="Collapsed">
+                            <!-- Split into volumes (.001/.002…). In the
+                                 "압축 옵션" flyout next to password — off the
+                                 simple main surface, but available when wanted.
+                                 7z / ZIP only (disabled for other formats by
+                                 ApplyFormatConstraints). Custom size lives in
+                                 the full right-click options dialog. -->
+                            <StackPanel Spacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
                                               Glyph="&#xE8C6;"
@@ -125,7 +124,6 @@
                                     <ComboBoxItem x:Uid="ConfigPanel_Split700Mb" Tag="734003200" />
                                     <ComboBoxItem x:Uid="ConfigPanel_Split1Gb" Tag="1073741824" />
                                     <ComboBoxItem x:Uid="ConfigPanel_Split47Gb" Tag="5046586573" />
-                                    <ComboBoxItem x:Uid="ConfigPanel_SplitCustom" Tag="-1" />
                                 </ComboBox>
                             </StackPanel>
 

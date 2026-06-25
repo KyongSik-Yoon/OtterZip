@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>OtterZip</title>
+<style>
+  /* ── Brand tokens mirror app/OtterZip.App/Themes/Colors.xaml ──────────
+     Strings come from .resw via window.OTTERZIP (single i18n source);
+     only colours/layout live here. Default = dark; JS flips data-theme. */
+  :root {
+    --bg:#131519; --card:#1C2024; --stroke:rgba(255,255,255,.09);
+    --text:#ECEEF0; --text2:#A2A8B0; --text3:#717783;
+    --accent:#8AA0FF; --accent-soft:rgba(109,139,255,.16); --on-accent:#0F1320;
+  }
+  html[data-theme="light"] {
+    --bg:#FAFBFC; --card:#FFFFFF; --stroke:rgba(0,0,0,.08);
+    --text:#1B1F24; --text2:#5C6470; --text3:#8A909C;
+    --accent:#5566E0; --accent-soft:rgba(85,102,224,.09); --on-accent:#FFFFFF;
+  }
+  * { box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body { height:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* progress dots */
+  .dots { display:flex; gap:7px; justify-content:center; padding:22px 0 4px; }
+  .dots i {
+    width:7px; height:7px; border-radius:99px; background:var(--text3);
+    opacity:.4; transition:all .28s ease;
+  }
+  .dots i.on { width:22px; opacity:1; background:var(--accent); }
+
+  /* stage / steps */
+  .stage { position:relative; flex:1; }
+  .step {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    padding:8px 40px 4px; gap:14px;
+    opacity:0; transform:translateY(8px); pointer-events:none;
+    transition:opacity .26s ease, transform .26s ease;
+  }
+  .step.active { opacity:1; transform:none; pointer-events:auto; }
+
+  .logo { width:92px; height:92px; }
+  h1 { font-size:24px; font-weight:700; margin:0; letter-spacing:-.01em; }
+  h2 { font-size:21px; font-weight:700; margin:0 0 2px; letter-spacing:-.01em; }
+  p  { margin:0; color:var(--text2); font-size:14px; line-height:1.55; max-width:420px; }
+
+  /* feature cards */
+  .cards { display:flex; flex-direction:column; gap:10px; width:100%; max-width:400px; }
+  .card {
+    display:flex; align-items:center; gap:13px; text-align:left;
+    background:var(--card); border:1px solid var(--stroke);
+    border-radius:12px; padding:13px 15px;
+  }
+  .chip {
+    flex:0 0 auto; width:40px; height:40px; border-radius:10px;
+    background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .chip.lg { width:56px; height:56px; border-radius:15px; }
+  .chip svg { width:22px; height:22px; }
+  .chip.lg svg { width:28px; height:28px; }
+  .ct .t { font-size:14.5px; font-weight:600; color:var(--text); }
+  .ct .d { font-size:12.5px; color:var(--text2); margin-top:2px; line-height:1.4; }
+
+  /* crash opt-in row */
+  .optrow {
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    width:100%; max-width:400px; margin-top:2px;
+    background:var(--card); border:1px solid var(--stroke);
+    border-radius:12px; padding:14px 16px;
+  }
+  .optrow .lbl { font-size:14px; font-weight:600; text-align:left; }
+  .switch { position:relative; flex:0 0 auto; width:44px; height:24px; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider {
+    position:absolute; inset:0; border-radius:99px; cursor:pointer;
+    background:var(--text3); opacity:.5; transition:.2s;
+  }
+  .slider::before {
+    content:""; position:absolute; height:18px; width:18px; left:3px; top:3px;
+    border-radius:50%; background:#fff; transition:.2s;
+  }
+  .switch input:checked + .slider { background:var(--accent); opacity:1; }
+  .switch input:checked + .slider::before { transform:translateX(20px); }
+
+  /* footer */
+  .footer {
+    display:flex; align-items:center; gap:8px;
+    padding:16px 26px 24px;
+  }
+  .footer .spacer { flex:1; }
+  .btn {
+    appearance:none; font:inherit; font-size:14px; cursor:pointer;
+    padding:9px 18px; border-radius:8px; border:1px solid var(--stroke);
+    background:transparent; color:var(--text); transition:background .15s, opacity .15s;
+  }
+  .btn:hover { background:var(--accent-soft); }
+  .btn.ghost { border-color:transparent; color:var(--text2); }
+  .btn.ghost:hover { background:var(--accent-soft); color:var(--text); }
+  .btn.primary {
+    background:var(--accent); color:var(--on-accent);
+    border-color:transparent; font-weight:600; min-width:118px;
+  }
+  .btn.primary:hover { background:var(--accent); opacity:.9; }
+  .btn[hidden] { visibility:hidden; }
+</style>
+</head>
+<body>
+  <div class="dots"><i></i><i></i><i></i><i></i><i></i></div>
+
+  <div class="stage">
+    <!-- 1 · Welcome -->
+    <section class="step">
+      <img class="logo" src="/Square150x150Logo.png" alt="" />
+      <h1 id="welcomeTitle"></h1>
+      <p id="tagline"></p>
+    </section>
+
+    <!-- 2 · Features -->
+    <section class="step">
+      <h2 id="featuresTitle"></h2>
+      <div class="cards">
+        <div class="card">
+          <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="13" height="18" rx="2.5"/><line x1="7.5" y1="8" x2="13.5" y2="8"/><line x1="7.5" y1="12" x2="13.5" y2="12"/><line x1="7.5" y1="16" x2="11" y2="16"/></svg></div>
+          <div class="ct"><div class="t" id="featRightClickTitle"></div><div class="d" id="featRightClickDesc"></div></div>
+        </div>
+        <div class="card">
+          <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
+          <div class="ct"><div class="t" id="featDragTitle"></div><div class="d" id="featDragDesc"></div></div>
+        </div>
+        <div class="card">
+          <div class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l12 6-5 1.8L11.5 19z"/><path d="M4.5 4.5l1.4 1.4M4 9.5h2M9.5 4h0M9 9"/></svg></div>
+          <div class="ct"><div class="t" id="featDoubleClickTitle"></div><div class="d" id="featDoubleClickDesc"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 · Default app -->
+    <section class="step">
+      <div class="chip lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h6a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9.5 13l2 2 3.5-4" /></svg></div>
+      <h2 id="defaultTitle"></h2>
+      <p id="defaultDesc"></p>
+      <button class="btn primary" id="openDefault"></button>
+    </section>
+
+    <!-- 4 · Crash reports -->
+    <section class="step">
+      <div class="chip lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="16.6" r=".6" fill="currentColor" stroke="none"/></svg></div>
+      <h2 id="crashTitle"></h2>
+      <p id="crashDesc"></p>
+      <div class="optrow">
+        <div class="lbl" id="crashToggle"></div>
+        <label class="switch"><input type="checkbox" id="crash" /><span class="slider"></span></label>
+      </div>
+    </section>
+
+    <!-- 5 · Done -->
+    <section class="step">
+      <img class="logo" src="/Square150x150Logo.png" alt="" />
+      <h2 id="doneTitle"></h2>
+      <p id="doneDesc"></p>
+    </section>
+  </div>
+
+  <div class="footer">
+    <button class="btn ghost" id="skip"></button>
+    <span class="spacer"></span>
+    <button class="btn" id="back"></button>
+    <button class="btn primary" id="next"></button>
+  </div>
+
+<script>
+(function () {
+  var data = window.OTTERZIP || { theme: "dark", crashOptIn: false, strings: {} };
+  var S = data.strings || {};
+  document.documentElement.setAttribute("data-theme", data.theme === "light" ? "light" : "dark");
+
+  function set(id, val) { var el = document.getElementById(id); if (el) { el.textContent = val || ""; } }
+  ["welcomeTitle","tagline","featuresTitle",
+   "featRightClickTitle","featRightClickDesc","featDragTitle","featDragDesc",
+   "featDoubleClickTitle","featDoubleClickDesc","defaultTitle","defaultDesc",
+   "crashTitle","crashDesc","crashToggle","doneTitle","doneDesc","skip","back"
+  ].forEach(function (k) { set(k, S[k]); });
+  set("openDefault", S.openDefaultApps);
+  document.getElementById("crash").checked = !!data.crashOptIn;
+
+  var steps = document.querySelectorAll(".step");
+  var dots = document.querySelectorAll(".dots i");
+  var last = steps.length - 1;
+  var cur = 0;
+
+  function render() {
+    for (var i = 0; i < steps.length; i++) {
+      steps[i].classList.toggle("active", i === cur);
+      if (dots[i]) { dots[i].classList.toggle("on", i === cur); }
+    }
+    document.getElementById("back").hidden = cur === 0;
+    document.getElementById("skip").hidden = cur === last;
+    document.getElementById("next").textContent =
+      cur === 0 ? S.start : (cur === last ? S.finish : S.next);
+  }
+
+  function post(o) { try { window.chrome.webview.postMessage(JSON.stringify(o)); } catch (e) {} }
+  function done() { post({ action: "close", crash: document.getElementById("crash").checked }); }
+
+  document.getElementById("next").onclick = function () { if (cur < last) { cur++; render(); } else { done(); } };
+  document.getElementById("back").onclick = function () { if (cur > 0) { cur--; render(); } };
+  document.getElementById("skip").onclick = done;
+  document.getElementById("openDefault").onclick = function () { post({ action: "openDefaultApps" }); };
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { done(); }
+    else if (e.key === "Enter") { document.getElementById("next").click(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

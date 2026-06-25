@@ -31,7 +31,9 @@ internal static class CompressEngine
         string Destination,
         ArchiveFormat Format,
         CompressionMethod Method,
-        byte Level);
+        byte Level,
+        bool Solid = false,
+        ulong VolumeSizeBytes = 0);
 
     /// <summary>
     /// Build a <see cref="CompressPlan"/> from a multi-selection.
@@ -94,6 +96,8 @@ internal static class CompressEngine
                 plan.Level, progress: progress,
                 excludeSystemMetadata: excludeMeta,
                 password: password,
+                solid: plan.Solid,
+                volumeSizeBytes: plan.VolumeSizeBytes,
                 cancellationToken: ct);
         }
         return Task.Run(() => CompressMixedSources(plan, sources, excludeMeta, password, ct), ct);
@@ -113,9 +117,10 @@ internal static class CompressEngine
     {
         using var builder = ArchiveBuilder.Create(
             plan.Destination, plan.Format, plan.Method, plan.Level,
-            solid: false,
+            solid: plan.Solid,
             excludeSystemMetadata: excludeSystemMetadata,
-            password: password);
+            password: password,
+            volumeSizeBytes: plan.VolumeSizeBytes);
         foreach (string src in sources)
         {
             ct.ThrowIfCancellationRequested();
@@ -129,10 +134,10 @@ internal static class CompressEngine
             }
         }
         builder.Commit();
-        ulong size = 0;
-        try { size = (ulong)new FileInfo(plan.Destination).Length; }
-        catch (IOException) { }
-        return new ArchiveBuildReport { BytesWritten = size };
+        return new ArchiveBuildReport
+        {
+            BytesWritten = ArchiveBuilder.OutputSize(plan.Destination, plan.VolumeSizeBytes),
+        };
     }
 
     /// <summary>

@@ -27,9 +27,9 @@ public sealed partial class PasswordSettingsSection : UserControl
         // Manager). Falls back to empty when the vault is unavailable
         // (unpackaged dev) or no credential is stored.
         DefaultPasswordBox.Password = CredentialStore.Get();
-        OnCompressCheck.IsChecked   = SettingsService.Get<bool>("Settings_DefaultPasswordOnCompress", false);
-        OnExtractCheck.IsChecked    = SettingsService.Get<bool>("Settings_DefaultPasswordOnExtract", false);
-        AuthBeforeUseCheck.IsChecked = SettingsService.Get<bool>("Settings_AuthBeforeUseDefaultPassword", false);
+        OnCompressCheck.IsOn   = SettingsService.Get<bool>("Settings_DefaultPasswordOnCompress", false);
+        OnExtractCheck.IsOn    = SettingsService.Get<bool>("Settings_DefaultPasswordOnExtract", false);
+        AuthBeforeUseCheck.IsOn = SettingsService.Get<bool>("Settings_AuthBeforeUseDefaultPassword", false);
     }
 
     private void OnPasswordChanged(object sender, RoutedEventArgs e)
@@ -41,9 +41,9 @@ public sealed partial class PasswordSettingsSection : UserControl
 
     private void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is CheckBox cb && cb.Tag is string key)
+        if (sender is ToggleSwitch ts && ts.Tag is string key)
         {
-            SettingsService.Set(key, cb.IsChecked.GetValueOrDefault());
+            SettingsService.Set(key, ts.IsOn);
         }
     }
 }

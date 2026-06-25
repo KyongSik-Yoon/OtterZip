@@ -40,14 +40,14 @@ public sealed partial class CompressionSettingsSection : UserControl
             string.Equals(saveLoc, "custom", StringComparison.Ordinal)
                 ? Visibility.Visible : Visibility.Collapsed;
 
-        UseParentFolderNameCheck.IsChecked       = SettingsService.Get<bool>("Settings_UseParentFolderName", true);
-        FilenameTemplateBox.Text                 = SettingsService.Get<string>("Settings_FilenameTemplate", "");
-        ExcludeSystemMetadataCheck.IsChecked     = SettingsService.Get<bool>("Settings_ExcludeSystemMetadata", true);
-        VerifyAfterCompressCheck.IsChecked       = SettingsService.Get<bool>("Settings_VerifyAfterCompress", false);
-        AlwaysPromptPasswordCheck.IsChecked      = SettingsService.Get<bool>("Settings_AlwaysPromptPassword", false);
-        PlaySoundOnCompressCheck.IsChecked       = SettingsService.Get<bool>("Settings_PlaySoundOnCompress", true);
-        RevealAfterCompressCheck.IsChecked       = SettingsService.Get<bool>("Settings_RevealAfterCompress", true);
-        DeleteSourceAfterCompressCheck.IsChecked = SettingsService.Get<bool>("Settings_DeleteSourceAfterCompress", false);
+        UseParentFolderNameCheck.IsOn       = SettingsService.Get<bool>("Settings_UseParentFolderName", true);
+        FilenameTemplateBox.Text            = SettingsService.Get<string>("Settings_FilenameTemplate", "");
+        ExcludeSystemMetadataCheck.IsOn     = SettingsService.Get<bool>("Settings_ExcludeSystemMetadata", true);
+        VerifyAfterCompressCheck.IsOn       = SettingsService.Get<bool>("Settings_VerifyAfterCompress", false);
+        AlwaysPromptPasswordCheck.IsOn      = SettingsService.Get<bool>("Settings_AlwaysPromptPassword", false);
+        PlaySoundOnCompressCheck.IsOn       = SettingsService.Get<bool>("Settings_PlaySoundOnCompress", true);
+        RevealAfterCompressCheck.IsOn       = SettingsService.Get<bool>("Settings_RevealAfterCompress", true);
+        DeleteSourceAfterCompressCheck.IsOn = SettingsService.Get<bool>("Settings_DeleteSourceAfterCompress", false);
     }
 
     private static int SelectFormatIndex(string format)
@@ -104,9 +104,9 @@ public sealed partial class CompressionSettingsSection : UserControl
 
     private void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is CheckBox cb && cb.Tag is string key)
+        if (sender is ToggleSwitch ts && ts.Tag is string key)
         {
-            SettingsService.Set(key, cb.IsChecked.GetValueOrDefault());
+            SettingsService.Set(key, ts.IsOn);
         }
     }
 

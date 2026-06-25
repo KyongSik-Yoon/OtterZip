@@ -12,7 +12,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid" Background="Transparent">
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
@@ -49,6 +49,35 @@
                         IsPaneToggleButtonVisible="False"
                         IsTitleBarAutoPaddingEnabled="False"
                         SelectionChanged="OnNavSelectionChanged">
+            <!--
+              Brand-teal selection so the sidebar matches the new card
+              accents (selected pill = OtterzipBrandSoft tint, indicator
+              bar = OtterzipBrand). Per-theme dictionaries so the alias
+              resolves to the right Light/Dark/HighContrast brush.
+            -->
+            <NavigationView.Resources>
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Light">
+                            <StaticResource x:Key="NavigationViewSelectionIndicatorForeground" ResourceKey="OtterzipBrandBrush" />
+                            <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="OtterzipBrandSoftBrush" />
+                            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="OtterzipBrandSoftBrush" />
+                            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="OtterzipBrandSoftBrush" />
+                            <StaticResource x:Key="NavigationViewItemForegroundSelected" ResourceKey="OtterzipBrandBrush" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Dark">
+                            <StaticResource x:Key="NavigationViewSelectionIndicatorForeground" ResourceKey="OtterzipBrandBrush" />
+                            <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="OtterzipBrandSoftBrush" />
+                            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="OtterzipBrandSoftBrush" />
+                            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="OtterzipBrandSoftBrush" />
+                            <StaticResource x:Key="NavigationViewItemForegroundSelected" ResourceKey="OtterzipBrandBrush" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="HighContrast">
+                            <StaticResource x:Key="NavigationViewSelectionIndicatorForeground" ResourceKey="OtterzipBrandBrush" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
+            </NavigationView.Resources>
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Uid="Settings_NavGeneral" Tag="general">
                     <NavigationViewItem.Icon>

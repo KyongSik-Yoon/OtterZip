@@ -17,9 +17,8 @@ public sealed partial class IntegrationSettingsSection : UserControl
         InitializeComponent();
         Loaded += (_, _) =>
         {
-            ShellMenuEnabledCheck.IsChecked       = SettingsService.Get<bool>("Settings_ShellMenuEnabled", true);
-            ExtractHereDefaultCheck.IsChecked     = SettingsService.Get<bool>("Settings_ShellExtractHereAsDefault", true);
-            QuickProgressAutoCloseCheck.IsChecked = SettingsService.Get<bool>("Settings_QuickProgressAutoClose", false);
+            ShellMenuEnabledCheck.IsOn       = SettingsService.Get<bool>("Settings_ShellMenuEnabled", true);
+            QuickProgressAutoCloseCheck.IsOn = SettingsService.Get<bool>("Settings_QuickProgressAutoClose", false);
             // 2026-05-15: default flipped "nested" → "flat" so the
             // Bandizip-style quick verbs surface at Explorer's top
             // level by default. Mirrors ShellSettings.cpp on the C++
@@ -41,9 +40,9 @@ public sealed partial class IntegrationSettingsSection : UserControl
 
     private void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is CheckBox cb && cb.Tag is string key)
+        if (sender is ToggleSwitch ts && ts.Tag is string key)
         {
-            SettingsService.Set(key, cb.IsChecked.GetValueOrDefault());
+            SettingsService.Set(key, ts.IsOn);
         }
     }
 }

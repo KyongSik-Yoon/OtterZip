@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Settings → Extraction tab. (Phase 6+ rev 3)
-  6 items: extractLocation, alwaysSubfolder, MOTW, sound, reveal, deleteArchive.
+  Settings → Extraction tab. (UI rev: Fluent settings cards + 고급 Expander)
+  그룹: 기본값(추출 위치·하위 폴더·덮어쓰기 정책) / 압축 해제 후(사운드·탐색기·아카이브 삭제)
+        + 고급 Expander(묻고 추출·Zone.Identifier 보존).
+  코드비하인드 계약(x:Name·이벤트) 보존. 토글은 ToggleSwitch(IsOn/Toggled).
 -->
 <UserControl
     x:Class="OtterZip.App.Dialogs.ExtractionSettingsSection"
@@ -12,110 +14,273 @@
     mc:Ignorable="d">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
-        <StackPanel Spacing="{StaticResource SpacingSValue}"
-                    Padding="{StaticResource SpacingL}">
+        <StackPanel Padding="{StaticResource SpacingL}" Spacing="6">
 
-            <Grid ColumnSpacing="{StaticResource SpacingMValue}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           x:Uid="Settings_ExtractLocationLabel"
-                           VerticalAlignment="Top"
-                           Margin="0,8,0,0"
-                           Style="{StaticResource BodyTextStyle}" />
-                <StackPanel Grid.Column="1"
-                            Spacing="{StaticResource SpacingXSValue}">
+            <!-- ===== 기본값 ===== -->
+            <TextBlock x:Uid="Settings_GroupDefaults"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,0,0,2" />
+
+            <!-- 압축 해제 위치 (라디오 + 사용자 지정 경로) -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE838;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock x:Uid="Settings_ExtractLocationLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                            <TextBlock x:Uid="Settings_ExtractLocationDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                        </StackPanel>
+                    </Grid>
                     <RadioButtons x:Name="ExtractLocationRadios"
                                   MaxColumns="1"
+                                  Margin="44,0,0,0"
                                   SelectionChanged="OnExtractLocationChanged">
                         <RadioButton x:Uid="Settings_ExtractLocationSame"   Tag="same" />
                         <RadioButton x:Uid="Settings_ExtractLocationCustom" Tag="custom" />
                     </RadioButtons>
                     <Grid x:Name="ExtractLocationCustomRow"
-                          ColumnSpacing="{StaticResource SpacingSValue}">
+                          Margin="44,0,0,0"
+                          ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0"
-                                 x:Name="ExtractLocationPathBox"
-                                 IsReadOnly="True" />
+                        <TextBox Grid.Column="0" x:Name="ExtractLocationPathBox" IsReadOnly="True" />
                         <Button Grid.Column="1"
                                 x:Uid="Settings_BrowseButton"
                                 Click="OnBrowseExtractLocation" />
                     </Grid>
                 </StackPanel>
-            </Grid>
+            </Border>
 
-            <Border Margin="0,8,0,0" />
+            <!-- 항상 하위 폴더에 풀기 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE8F4;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_AlwaysExtractToSubfolder"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="AlwaysExtractToSubfolderCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_AlwaysExtractToSubfolder"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <!-- Keka-style toggle: when off (default), drops extract
-                 immediately to the configured location. When on, opens
-                 the inline ExtractPanel asking for destination. The
-                 panel-based override via Ctrl/Alt during drop works
-                 either way. -->
-            <StackPanel>
-                <CheckBox x:Name="AskBeforeExtractCheck"
-                          x:Uid="Settings_AskBeforeExtract"
-                          MinHeight="0"
-                          Checked="OnToggle"
-                          Unchecked="OnToggle"
-                          Tag="Settings_AskBeforeExtract" />
-                <TextBlock x:Uid="Settings_AskBeforeExtractSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           TextWrapping="Wrap"
-                           Margin="28,0,0,2"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </StackPanel>
+            <!-- 덮어쓰기 정책 (같은 이름 파일 처리) -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE777;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock x:Uid="Settings_OverwritePolicyLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                            <TextBlock x:Uid="Settings_OverwritePolicyDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                        </StackPanel>
+                    </Grid>
+                    <RadioButtons x:Name="OverwritePolicyRadios"
+                                  MaxColumns="1"
+                                  Margin="44,0,0,0"
+                                  SelectionChanged="OnOverwritePolicyChanged">
+                        <RadioButton x:Uid="Settings_OverwriteRename" Tag="4" />
+                        <RadioButton x:Uid="Settings_OverwriteAlways" Tag="1" />
+                        <RadioButton x:Uid="Settings_OverwriteSkip"   Tag="2" />
+                        <RadioButton x:Uid="Settings_OverwriteReject" Tag="0" />
+                    </RadioButtons>
+                </StackPanel>
+            </Border>
 
-            <CheckBox x:Name="AlwaysExtractToSubfolderCheck"
-                      x:Uid="Settings_AlwaysExtractToSubfolder"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_AlwaysExtractToSubfolder" />
+            <!-- 더블클릭 동작 (파일 연결로 아카이브 열 때) -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE8B7;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock x:Uid="Settings_DoubleClickActionLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                            <TextBlock x:Uid="Settings_DoubleClickActionDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                        </StackPanel>
+                    </Grid>
+                    <RadioButtons x:Name="DoubleClickActionRadios"
+                                  MaxColumns="1"
+                                  Margin="44,0,0,0"
+                                  SelectionChanged="OnDoubleClickActionChanged">
+                        <RadioButton x:Uid="Settings_DoubleClickDialog" Tag="0" />
+                        <RadioButton x:Uid="Settings_DoubleClickHere"   Tag="1" />
+                        <RadioButton x:Uid="Settings_DoubleClickSmart"  Tag="2" />
+                    </RadioButtons>
+                </StackPanel>
+            </Border>
 
-            <StackPanel>
-                <CheckBox x:Name="PreserveZoneIdCheck"
-                          x:Uid="Settings_PreserveZoneIdentifier"
-                          MinHeight="0"
-                          Checked="OnToggle"
-                          Unchecked="OnToggle"
-                          Tag="Settings_PreserveZoneIdentifier" />
-                <TextBlock x:Uid="Settings_PreserveZoneIdentifierSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           TextWrapping="Wrap"
-                           Margin="28,0,0,2"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </StackPanel>
+            <!-- ===== 압축 해제 후 ===== -->
+            <TextBlock x:Uid="Settings_GroupAfterExtract"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,12,0,2" />
 
-            <Border Margin="0,8,0,0" />
+            <!-- 완료 사운드 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE767;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_PlaySoundOnExtract" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_PlaySoundOnExtractDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="PlaySoundOnExtractCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_PlaySoundOnExtract"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <!-- Hidden until completion-sound assets land. See the
-                 matching note in CompressionSettingsSection.xaml. -->
-            <CheckBox x:Name="PlaySoundOnExtractCheck"
-                      x:Uid="Settings_PlaySoundOnExtract"
-                      MinHeight="0"
-                      Visibility="Collapsed"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_PlaySoundOnExtract" />
+            <!-- 탐색기에서 보기 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE8DA;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_RevealAfterExtract"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="RevealAfterExtractCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_RevealAfterExtract"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <CheckBox x:Name="RevealAfterExtractCheck"
-                      x:Uid="Settings_RevealAfterExtract"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_RevealAfterExtract" />
+            <!-- 압축 해제 후 아카이브 삭제 (휴지통) -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0"
+                            Style="{StaticResource SettingsIconChipStyle}"
+                            Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}">
+                        <FontIcon Glyph="&#xE74D;"
+                                  Style="{StaticResource SettingsCardIconStyle}"
+                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_DeleteArchiveAfterExtract" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_DeleteArchiveDesc" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="DeleteArchiveAfterExtractCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_DeleteArchiveAfterExtract"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <CheckBox x:Name="DeleteArchiveAfterExtractCheck"
-                      x:Uid="Settings_DeleteArchiveAfterExtract"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_DeleteArchiveAfterExtract" />
+            <!-- ===== 고급 (점진적 노출) ===== -->
+            <Expander HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch"
+                      Margin="0,12,0,0">
+                <Expander.Header>
+                    <Grid ColumnSpacing="12" Padding="0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE713;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   x:Uid="Settings_GroupAdvanced"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource SettingsCardTitleStyle}" />
+                    </Grid>
+                </Expander.Header>
+                <StackPanel Spacing="6" Padding="0,4,0,4">
+                    <!-- 풀기 전에 묻기 -->
+                    <Border Style="{StaticResource CompactCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                                <FontIcon Glyph="&#xE897;" Style="{StaticResource SettingsCardIconStyle}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock x:Uid="Settings_AskBeforeExtract" Style="{StaticResource SettingsCardTitleStyle}" />
+                                <TextBlock x:Uid="Settings_AskBeforeExtractSub" Style="{StaticResource SettingsCardDescStyle}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2"
+                                          x:Name="AskBeforeExtractCheck"
+                                          Style="{StaticResource SettingsCardToggleStyle}"
+                                          Tag="Settings_AskBeforeExtract"
+                                          Toggled="OnToggle" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Zone.Identifier(MOTW) 보존 -->
+                    <Border Style="{StaticResource CompactCardStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                                <FontIcon Glyph="&#xE83D;" Style="{StaticResource SettingsCardIconStyle}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock x:Uid="Settings_PreserveZoneIdentifier" Style="{StaticResource SettingsCardTitleStyle}" />
+                                <TextBlock x:Uid="Settings_PreserveZoneIdentifierSub" Style="{StaticResource SettingsCardDescStyle}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2"
+                                          x:Name="PreserveZoneIdCheck"
+                                          Style="{StaticResource SettingsCardToggleStyle}"
+                                          Tag="Settings_PreserveZoneIdentifier"
+                                          Toggled="OnToggle" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Expander>
+
         </StackPanel>
     </ScrollViewer>
 </UserControl>

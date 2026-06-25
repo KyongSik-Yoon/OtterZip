@@ -33,35 +33,39 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="24,24,24,16" RowSpacing="14">
+        <Grid Grid.Row="0" Padding="20,16,20,10" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- Header row: mascot avatar + filename + status glyph.
-                 Mascot pulled from the same Square150x150Logo asset the
-                 manifest references, so it stays in sync with the app's
-                 brand icon without a separate asset entry. -->
-            <Grid Grid.Row="0" ColumnSpacing="14">
+            <!-- Header row: mascot avatar + archive name (over a secondary
+                 line that shows the source summary, then the live current
+                 file while a large entry streams) + status glyph. -->
+            <Grid Grid.Row="0" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="48" />
+                    <ColumnDefinition Width="40" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Image Grid.Column="0"
-                       Width="48"
-                       Height="48"
+                       Width="40"
+                       Height="40"
                        VerticalAlignment="Center"
                        Source="ms-appx:///Assets/Square150x150Logo.png" />
 
-                <TextBlock Grid.Column="1"
-                           x:Name="ArchiveNameText"
-                           Style="{StaticResource SubtitleTextBlockStyle}"
-                           TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                    <TextBlock x:Name="ArchiveNameText"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextTrimming="CharacterEllipsis" />
+                    <!-- Source summary / live current file. Set in code. -->
+                    <TextBlock x:Name="CurrentFileText"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
 
                 <!-- Status glyph: hidden during work, shows ✓ on done /
                      ✗ on cancel / ⚠ on error after settle. Color via
@@ -69,7 +73,7 @@
                 <FontIcon Grid.Column="2"
                           x:Name="StatusGlyph"
                           FontFamily="Segoe Fluent Icons"
-                          FontSize="28"
+                          FontSize="22"
                           VerticalAlignment="Center"
                           Visibility="Collapsed" />
             </Grid>
@@ -80,7 +84,8 @@
                          x:Name="OverallBar"
                          IsIndeterminate="True"
                          Maximum="100"
-                         Height="6" />
+                         Height="8"
+                         CornerRadius="4" />
 
             <!-- Status line. During work: percent text composed in
                  code-behind. On settle: full summary (size + elapsed)
@@ -97,7 +102,7 @@
         <StackPanel Grid.Row="1"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
-                    Padding="0,0,24,20"
+                    Padding="0,0,20,16"
                     Spacing="8">
             <Button x:Name="OpenFolderButton"
                     x:Uid="ProgressDialog_OpenFolderButton"

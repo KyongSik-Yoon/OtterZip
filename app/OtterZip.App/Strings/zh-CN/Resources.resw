@@ -61,8 +61,8 @@
   <data name="Settings_DefaultActionAuto.Content"><value>自动（按文件类型决定）</value></data>
   <data name="Settings_DefaultActionCompress.Content"><value>始终压缩</value></data>
   <data name="Settings_DefaultActionExtract.Content"><value>始终解压</value></data>
-  <data name="Settings_ConfirmExitWhileBusy.Content"><value>有任务进行中时退出前确认</value></data>
-  <data name="Settings_ShowToast.Content"><value>显示通知</value></data>
+  <data name="Settings_ConfirmExitWhileBusy.Text"><value>有任务进行中时退出前确认</value></data>
+  <data name="Settings_ShowToast.Text"><value>显示通知</value></data>
   <data name="Settings_ConcurrentJobsLabel.Text"><value>并发任务数</value></data>
   <data name="Settings_ConcurrentJobsSub.Text"><value>可同时运行的压缩/解压任务数。重启后生效。</value></data>
 
@@ -83,25 +83,25 @@
   <data name="Settings_OpenDefaultApps.Content"><value>将 OtterZip 设为默认应用</value></data>
 
   <!-- Compression tab -->
-  <data name="Settings_UseParentFolderName.Content"><value>压缩多个文件时使用父文件夹名称</value></data>
+  <data name="Settings_UseParentFolderName.Text"><value>压缩多个文件时使用父文件夹名称</value></data>
   <data name="Settings_FilenameTemplateLabel.Text"><value>文件名模板</value></data>
   <data name="Settings_FilenameTemplatePlaceholder.PlaceholderText"><value>{name}</value></data>
   <data name="Settings_FilenameTemplateSub.Text"><value>占位符：{name} {date} {time} {count} {parent}。留空则使用默认规则。</value></data>
-  <data name="Settings_AlwaysPromptPassword.Content"><value>压缩时始终提示输入密码</value></data>
+  <data name="Settings_AlwaysPromptPassword.Text"><value>压缩时始终提示输入密码</value></data>
 
   <!-- Extraction tab -->
   <data name="Settings_ExtractLocationLabel.Text"><value>解压位置</value></data>
   <data name="Settings_ExtractLocationSame.Content"><value>与压缩包相同</value></data>
   <data name="Settings_ExtractLocationCustom.Content"><value>指定文件夹…</value></data>
-  <data name="Settings_PreserveZoneIdentifier.Content"><value>保留下载隔离标记 (MOTW)</value></data>
+  <data name="Settings_PreserveZoneIdentifier.Text"><value>保留下载隔离标记 (MOTW)</value></data>
   <data name="Settings_PreserveZoneIdentifierSub.Text"><value>将原压缩包的 Zone.Identifier 安全标记应用到解压后的文件。</value></data>
 
   <!-- Password tab -->
   <data name="Settings_DefaultPasswordLabel.Text"><value>默认密码</value></data>
   <data name="Settings_DefaultPasswordPlaceholder.PlaceholderText"><value>未设置</value></data>
-  <data name="Settings_DefaultPasswordOnCompress.Content"><value>自动应用到新压缩包</value></data>
-  <data name="Settings_DefaultPasswordOnExtract.Content"><value>解压时自动尝试</value></data>
-  <data name="Settings_AuthBeforeUseDefaultPassword.Content"><value>使用保存的密码前需要身份验证</value></data>
+  <data name="Settings_DefaultPasswordOnCompress.Text"><value>自动应用到新压缩包</value></data>
+  <data name="Settings_DefaultPasswordOnExtract.Text"><value>解压时自动尝试</value></data>
+  <data name="Settings_AuthBeforeUseDefaultPassword.Text"><value>使用保存的密码前需要身份验证</value></data>
   <data name="Settings_AuthBeforeUseDefaultPasswordSub.Text"><value>使用保存的密码前需要 Windows Hello（指纹 / 面部 / PIN）验证。</value></data>
 
   <!-- Hello prompt reasons -->
@@ -112,8 +112,7 @@
   <data name="Settings_ShellMenuModeLabel.Text"><value>子菜单模式</value></data>
   <data name="Settings_ShellMenuModeFlat.Content"><value>扁平（顶级菜单）</value></data>
   <data name="Settings_ShellMenuModeNested.Content"><value>嵌套（OtterZip 子菜单内）</value></data>
-  <data name="Settings_ShellExtractHereAsDefault.Content"><value>将"解压到此处"设为默认操作</value></data>
-  <data name="Settings_QuickProgressAutoClose.Content"><value>快速压缩完成后自动关闭进度窗口</value></data>
+  <data name="Settings_QuickProgressAutoClose.Text"><value>快速压缩完成后自动关闭进度窗口</value></data>
 
   <!-- ProgressDialog (Bandizip-style quick-compress modal) -->
   <data name="ProgressDialog_TitleCompressFormat.Text"><value>正在压缩 {0}</value></data>
@@ -145,6 +144,24 @@
   <data name="Theme_Dark.Content"><value>深色</value></data>
   <data name="Theme_System.Content"><value>跟随系统</value></data>
   <data name="Settings_DefaultFormatLabel.Text"><value>默认压缩格式</value></data>
+  <data name="Settings_GroupAutoApply.Text"><value>自动应用</value></data>
+  <data name="Settings_GroupShellMenu.Text"><value>资源管理器菜单</value></data>
+  <data name="Settings_DefaultPasswordDesc.Text"><value>保存并自动使用的密码</value></data>
+  <data name="Settings_GroupNotifications.Text"><value>通知</value></data>
+  <data name="Settings_GroupAfterExtract.Text"><value>解压后</value></data>
+  <data name="Settings_ExtractLocationDesc.Text"><value>解压目标位置</value></data>
+  <data name="Settings_OverwritePolicyDesc.Text"><value>存在同名文件时</value></data>
+  <data name="Settings_PlaySoundOnExtractDesc.Text"><value>任务完成时播放提示音</value></data>
+  <data name="Settings_DeleteArchiveDesc.Text"><value>成功后将压缩包移至回收站</value></data>
+  <data name="Settings_GroupDefaults.Text"><value>默认值</value></data>
+  <data name="Settings_GroupFileName.Text"><value>文件名</value></data>
+  <data name="Settings_GroupAfterCompress.Text"><value>压缩后</value></data>
+  <data name="Settings_GroupAdvanced.Text"><value>高级</value></data>
+  <data name="Settings_DefaultFormatDesc.Text"><value>新建压缩文件的默认容器</value></data>
+  <data name="Settings_DefaultMethodDesc.Text"><value>速度与体积的平衡</value></data>
+  <data name="Settings_SaveLocationDesc.Text"><value>压缩结果的保存位置</value></data>
+  <data name="Settings_PlaySoundOnCompressDesc.Text"><value>任务完成时播放提示音</value></data>
+  <data name="Settings_DeleteSourceDesc.Text"><value>成功后将原文件移至回收站</value></data>
   <data name="Settings_DefaultMethodLabel.Text"><value>默认压缩方法</value></data>
   <data name="Settings_MethodStore.Content"><value>仅存储</value></data>
   <data name="Settings_MethodFast.Content"><value>快速</value></data>
@@ -158,21 +175,21 @@
   <!-- Section 2: Behavior -->
   <data name="Settings_SectionBehavior.Text"><value>行为</value></data>
   <data name="Settings_CompressGroupLabel.Text"><value>压缩之后</value></data>
-  <data name="Settings_PlaySoundOnCompress.Content"><value>播放声音</value></data>
-  <data name="Settings_RevealAfterCompress.Content"><value>在资源管理器中显示结果</value></data>
-  <data name="Settings_DeleteSourceAfterCompress.Content"><value>将源文件移到回收站</value></data>
+  <data name="Settings_PlaySoundOnCompress.Text"><value>播放声音</value></data>
+  <data name="Settings_RevealAfterCompress.Text"><value>在资源管理器中显示结果</value></data>
+  <data name="Settings_DeleteSourceAfterCompress.Text"><value>将源文件移到回收站</value></data>
   <data name="Settings_ExtractGroupLabel.Text"><value>解压之后</value></data>
-  <data name="Settings_PlaySoundOnExtract.Content"><value>播放声音</value></data>
-  <data name="Settings_RevealAfterExtract.Content"><value>在资源管理器中显示结果</value></data>
-  <data name="Settings_DeleteArchiveAfterExtract.Content"><value>将压缩包移到回收站</value></data>
-  <data name="Settings_AlwaysExtractToSubfolder.Content"><value>始终解压到子文件夹</value></data>
-  <data name="Settings_VerifyAfterCompress.Content"><value>压缩后验证完整性</value></data>
-  <data name="Settings_ExcludeSystemMetadata.Content"><value>排除系统元数据文件</value></data>
+  <data name="Settings_PlaySoundOnExtract.Text"><value>播放声音</value></data>
+  <data name="Settings_RevealAfterExtract.Text"><value>在资源管理器中显示结果</value></data>
+  <data name="Settings_DeleteArchiveAfterExtract.Text"><value>将压缩包移到回收站</value></data>
+  <data name="Settings_AlwaysExtractToSubfolder.Text"><value>始终解压到子文件夹</value></data>
+  <data name="Settings_VerifyAfterCompress.Text"><value>压缩后验证完整性</value></data>
+  <data name="Settings_ExcludeSystemMetadata.Text"><value>排除系统元数据文件</value></data>
   <data name="Settings_ExcludeSystemMetadataSub.Text"><value>.DS_Store · Thumbs.db · desktop.ini · $RECYCLE.BIN</value></data>
 
   <!-- Section 3: Integration -->
   <data name="Settings_SectionIntegration.Text"><value>集成</value></data>
-  <data name="Settings_ShellMenuEnabled.Content"><value>在 Windows 资源管理器右键菜单中显示 OtterZip</value></data>
+  <data name="Settings_ShellMenuEnabled.Text"><value>在 Windows 资源管理器右键菜单中显示 OtterZip</value></data>
   <data name="Settings_ShellMenuEnabledSub.Text"><value>禁用后需要重启 Windows 才能使菜单消失。</value></data>
 
   <!-- Section 4: Info -->
@@ -181,15 +198,40 @@
   <data name="Settings_OpenLicense.Content"><value>查看许可证</value></data>
   <data name="Settings_OpenThirdParty.Content"><value>第三方声明</value></data>
   <data name="Settings_Info_Tagline.Text"><value>适用于 Windows 的快速归档工具</value></data>
+  <data name="Onboarding_Title.Text"><value>OtterZip</value></data>
+  <data name="Onboarding_WelcomeTitle.Text"><value>欢迎使用 OtterZip</value></data>
+  <data name="Onboarding_FeaturesTitle.Text"><value>使用方法</value></data>
+  <data name="Onboarding_FeatRightClickTitle.Text"><value>右键菜单</value></data>
+  <data name="Onboarding_FeatRightClickDesc.Text"><value>右键点击文件即可快速压缩或解压</value></data>
+  <data name="Onboarding_FeatDragTitle.Text"><value>拖放</value></data>
+  <data name="Onboarding_FeatDragDesc.Text"><value>将文件拖到窗口即可压缩或解压</value></data>
+  <data name="Onboarding_FeatDoubleClickTitle.Text"><value>双击打开</value></data>
+  <data name="Onboarding_FeatDoubleClickDesc.Text"><value>双击压缩包，OtterZip 会打开它</value></data>
+  <data name="Onboarding_DefaultTitle.Text"><value>设为默认压缩程序</value></data>
+  <data name="Onboarding_DefaultDesc.Text"><value>将 OtterZip 设为默认应用，双击 .zip、.7z 等文件即可用它打开。</value></data>
+  <data name="Onboarding_CrashTitle.Text"><value>崩溃报告</value></data>
+  <data name="Onboarding_CrashDesc.Text"><value>出现问题时，发送匿名诊断信息有助于我们更快修复。文件路径、内容和密码会在发送前自动移除。默认关闭。</value></data>
+  <data name="Onboarding_CrashToggle.Text"><value>发送匿名崩溃报告</value></data>
+  <data name="Onboarding_DoneTitle.Text"><value>准备就绪！</value></data>
+  <data name="Onboarding_DoneDesc.Text"><value>你可以随时在设置 › 信息中重新查看本指南。</value></data>
+  <data name="Onboarding_SkipButton.Content"><value>跳过</value></data>
+  <data name="Onboarding_BackButton.Content"><value>上一步</value></data>
+  <data name="Onboarding_StartButton.Text"><value>开始</value></data>
+  <data name="Onboarding_NextButton.Text"><value>下一步</value></data>
+  <data name="Onboarding_FinishButton.Text"><value>完成</value></data>
+  <data name="Settings_Info_ShowOnboarding.Content"><value>重新查看引导</value></data>
+  <data name="Settings_Info_ReportIssue.Content"><value>反馈问题 (GitHub)</value></data>
+  <data name="Settings_Info_PrivacyPolicy.Content"><value>隐私政策</value></data>
   <data name="Settings_Info_BuildLabel.Text"><value>构建</value></data>
-  <data name="Settings_Info_Copyright.Text"><value>© 2026 OtterZip</value></data>  <data name="Settings_UnrarNotice.Text"><value>本产品使用 Alexander Roshal 的 unrar 源代码进行 RAR 压缩包解压。© Alexander Roshal。仅授权用于 RAR 解压 — 禁止创建 RAR 压缩包。</value></data>
+  <data name="Settings_Info_Copyright.Text"><value>© 2026 LumiBear Studio. All rights reserved.</value></data>  <data name="Settings_UnrarNotice.Text"><value>本产品使用 Alexander Roshal 的 unrar 源代码进行 RAR 压缩包解压。© Alexander Roshal。仅授权用于 RAR 解压 — 禁止创建 RAR 压缩包。</value></data>
 
   <!-- Telemetry -->
-  <data name="Settings_TelemetryEnabled.Content"><value>发送匿名崩溃报告</value></data>
+  <data name="Settings_TelemetryEnabled.Text"><value>发送匿名崩溃报告</value></data>
   <data name="Settings_TelemetryEnabledSub.Text"><value>将崩溃诊断信息转发给开发者。传输前会移除个人信息、文件内容和密码。默认关闭。</value></data>
 
   <!-- Close button -->
   <data name="Settings_CloseButton.Text"><value>关闭</value></data>
+  <data name="Settings_DocUnavailableFormat.Text"><value>{0} 未包含在此版本中。</value></data>
 
   <!-- ConfigPanel -->
   <data name="ConfigPanel_Region.AutomationProperties.Name"><value>压缩设置面板</value></data>
@@ -257,7 +299,7 @@
   <data name="ExtractDialog_SecondaryButton.Content"><value>解压到此处</value></data>
   <data name="ExtractDialog_CancelButton.Content"><value>取消</value></data>
   <data name="Error_WrongPassword.Text"><value>密码错误，请重试。</value></data>
-  <data name="Settings_AskBeforeExtract.Content"><value>提取前询问位置</value></data>
+  <data name="Settings_AskBeforeExtract.Text"><value>提取前询问位置</value></data>
   <data name="Settings_AskBeforeExtractSub.Text"><value>默认关闭 — 拖放后立即解压到配置的位置。按住 Ctrl 或 Alt 拖放可临时询问。</value></data>
   <!-- Shell extension IExplorerCommand titles + tooltips (2026-05-18) -->
   <data name="Shell_ExtractHere_Title"><value>解压到当前位置(&amp;X)</value></data>
@@ -282,4 +324,33 @@
   <!-- Multi-select "each" extract verbs (2026-06-17) -->
   <data name="Shell_ExtractSmartEach_Title"><value>分别智能解压(&amp;Z)</value></data>
   <data name="Shell_ExtractToSubfolderEach_Title"><value>分别解压到各自的文件夹(&amp;E)</value></data>
+  <!-- v0.22 Compress/Extract option dialogs -->
+  <data name="CompressOptionsDialog_Title.Text"><value>压缩</value></data>
+  <data name="CompressOptionsDialog_SummaryFormat.Text"><value>压缩 {0} 个项目</value></data>
+  <data name="CompressOptionsDialog_FormatLabel.Text"><value>格式</value></data>
+  <data name="CompressOptionsDialog_LevelLabel.Text"><value>压缩级别</value></data>
+  <data name="CompressOptionsDialog_DestinationLabel.Text"><value>保存位置</value></data>
+  <data name="CompressOptionsDialog_CompressButton.Content"><value>压缩</value></data>
+  <data name="CompressOptionsDialog_ErrorNoDestination.Text"><value>请输入保存位置。</value></data>
+  <data name="CompressOptionsDialog_SolidCheck.Content"><value>固实压缩 (Solid, 7z)</value></data>
+  <data name="CompressOptionsDialog_SplitCheck.Content"><value>分卷压缩</value></data>
+  <data name="CompressOptionsDialog_SplitSizeLabel.Text"><value>分卷大小 (MB)</value></data>
+  <data name="CompressOptionsDialog_SplitZipNote.Text"><value>ZIP 分卷为 .001 原始格式，请用 OtterZip 或 7-Zip 合并解压。</value></data>
+  <data name="ExtractOptionsDialog_TitleFormat.Text"><value>解压 {0}</value></data>
+  <data name="ExtractOptionsDialog_TitleExtractingFormat.Text"><value>正在解压 {0}</value></data>
+  <data name="ProgressDialog_StatusExtractSuccess.Text"><value>解压成功。</value></data>
+  <!-- Open OtterZip (empty-space launch verb, 2026-06-18) -->
+  <data name="Shell_OpenApp_Title"><value>打开 OtterZip</value></data>
+  <data name="Shell_OpenApp_Tooltip"><value>打开 OtterZip 窗口。</value></data>
+  <!-- Extract overwrite policy (Settings → Extraction) -->
+  <data name="Settings_OverwritePolicyLabel.Text"><value>如果文件已存在</value></data>
+  <data name="Settings_DoubleClickActionLabel.Text"><value>双击操作</value></data>
+  <data name="Settings_DoubleClickActionDesc.Text"><value>双击存档或用 OtterZip 打开时</value></data>
+  <data name="Settings_DoubleClickDialog.Content"><value>打开选项窗口（选择目标）</value></data>
+  <data name="Settings_DoubleClickHere.Content"><value>立即解压到此处</value></data>
+  <data name="Settings_DoubleClickSmart.Content"><value>智能解压（自动子文件夹）</value></data>
+  <data name="Settings_OverwriteAlways.Content"><value>覆盖</value></data>
+  <data name="Settings_OverwriteSkip.Content"><value>跳过</value></data>
+  <data name="Settings_OverwriteReject.Content"><value>中止解压</value></data>
+  <data name="Settings_OverwriteRename.Content"><value>重命名保留两者</value></data>
 </root>

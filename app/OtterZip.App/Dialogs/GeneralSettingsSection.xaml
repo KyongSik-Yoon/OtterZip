@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Settings → General tab. (Phase 6+ rev 3)
-  7 items: Language, Theme, DefaultAction, ConfirmExitWhileBusy, ShowToast,
-           QuitWhenLastClosed, "Set as default app" button.
-  Form-style: 200px label column + stretching control column.
+  Settings → General tab. (UI rev: Fluent settings cards + groups)
+  그룹: 기본값(언어·테마·기본 동작·동시 작업 수) / 알림(종료 확인·Toast) + 기본 프로그램 버튼.
+  코드비하인드 계약(x:Name·이벤트) 보존. 토글은 ToggleSwitch(IsOn/Toggled).
 -->
 <UserControl
     x:Class="OtterZip.App.Dialogs.GeneralSettingsSection"
@@ -14,139 +13,182 @@
     mc:Ignorable="d">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
-        <Grid ColumnSpacing="{StaticResource SpacingMValue}"
-              RowSpacing="{StaticResource SpacingSValue}"
-              Padding="{StaticResource SpacingL}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+        <StackPanel Padding="{StaticResource SpacingL}" Spacing="6">
 
-            <!-- Language -->
-            <TextBlock Grid.Row="0" Grid.Column="0"
-                       x:Uid="Settings_LanguageLabel"
-                       VerticalAlignment="Center"
-                       Style="{StaticResource BodyTextStyle}" />
-            <ComboBox Grid.Row="0" Grid.Column="1"
-                      x:Name="LanguageCombo"
-                      HorizontalAlignment="Stretch"
-                      SelectionChanged="OnLanguageChanged">
-                <!--
-                  Language picker - 10 locales matching the .resw set we
-                  ship under Strings/. Tag is the short language code we
-                  persist in Settings_Language; the .cs handler maps it
-                  to the full IETF tag (e.g. "ko" -> "ko-KR") before
-                  handing to ApplicationLanguages.PrimaryLanguageOverride
-                  so Windows resolves the right locale resources.
-                  Native names (한국어 / 日本語 / etc) are identical
-                  across all locales so users can find their language in
-                  any UI language.
-                -->
-                <ComboBoxItem x:Uid="Settings_LanguageSystem" Tag="" />
-                <ComboBoxItem x:Uid="Settings_LanguageKo"     Tag="ko" />
-                <ComboBoxItem x:Uid="Settings_LanguageEn"     Tag="en" />
-                <ComboBoxItem x:Uid="Settings_LanguageZh"     Tag="zh" />
-                <ComboBoxItem x:Uid="Settings_LanguageJa"     Tag="ja" />
-                <ComboBoxItem x:Uid="Settings_LanguageDe"     Tag="de" />
-                <ComboBoxItem x:Uid="Settings_LanguageFr"     Tag="fr" />
-                <ComboBoxItem x:Uid="Settings_LanguageEs"     Tag="es" />
-                <ComboBoxItem x:Uid="Settings_LanguagePt"     Tag="pt" />
-                <ComboBoxItem x:Uid="Settings_LanguageRu"     Tag="ru" />
-                <ComboBoxItem x:Uid="Settings_LanguageIt"     Tag="it" />
-            </ComboBox>
+            <!-- ===== 기본값 ===== -->
+            <TextBlock x:Uid="Settings_GroupDefaults"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,0,0,2" />
 
-            <!-- Theme -->
-            <TextBlock Grid.Row="1" Grid.Column="0"
-                       x:Uid="Settings_ThemeSectionLabel"
-                       VerticalAlignment="Top"
-                       Margin="0,8,0,0"
-                       Style="{StaticResource BodyTextStyle}" />
-            <RadioButtons Grid.Row="1" Grid.Column="1"
-                          x:Name="ThemeRadioButtons"
-                          MaxColumns="1"
-                          SelectionChanged="OnThemeSelectionChanged">
-                <RadioButton x:Uid="Theme_System" Tag="0" />
-                <RadioButton x:Uid="Theme_Light"  Tag="1" />
-                <RadioButton x:Uid="Theme_Dark"   Tag="2" />
-            </RadioButtons>
+            <!-- 언어 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xF2B7;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_LanguageLabel"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ComboBox Grid.Column="2"
+                              x:Name="LanguageCombo"
+                              MinWidth="170"
+                              VerticalAlignment="Center"
+                              SelectionChanged="OnLanguageChanged">
+                        <ComboBoxItem x:Uid="Settings_LanguageSystem" Tag="" />
+                        <ComboBoxItem x:Uid="Settings_LanguageKo"     Tag="ko" />
+                        <ComboBoxItem x:Uid="Settings_LanguageEn"     Tag="en" />
+                        <ComboBoxItem x:Uid="Settings_LanguageZh"     Tag="zh" />
+                        <ComboBoxItem x:Uid="Settings_LanguageJa"     Tag="ja" />
+                        <ComboBoxItem x:Uid="Settings_LanguageDe"     Tag="de" />
+                        <ComboBoxItem x:Uid="Settings_LanguageFr"     Tag="fr" />
+                        <ComboBoxItem x:Uid="Settings_LanguageEs"     Tag="es" />
+                        <ComboBoxItem x:Uid="Settings_LanguagePt"     Tag="pt" />
+                        <ComboBoxItem x:Uid="Settings_LanguageRu"     Tag="ru" />
+                        <ComboBoxItem x:Uid="Settings_LanguageIt"     Tag="it" />
+                    </ComboBox>
+                </Grid>
+            </Border>
 
-            <!-- Default action -->
-            <TextBlock Grid.Row="2" Grid.Column="0"
-                       x:Uid="Settings_DefaultActionLabel"
-                       VerticalAlignment="Center"
-                       Style="{StaticResource BodyTextStyle}" />
-            <ComboBox Grid.Row="2" Grid.Column="1"
-                      x:Name="DefaultActionCombo"
-                      HorizontalAlignment="Stretch"
-                      SelectionChanged="OnDefaultActionChanged">
-                <ComboBoxItem x:Uid="Settings_DefaultActionAuto"     Tag="auto" />
-                <ComboBoxItem x:Uid="Settings_DefaultActionCompress" Tag="compress" />
-                <ComboBoxItem x:Uid="Settings_DefaultActionExtract"  Tag="extract" />
-            </ComboBox>
+            <!-- 테마 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                            <FontIcon Glyph="&#xE771;" Style="{StaticResource SettingsCardIconStyle}" />
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   x:Uid="Settings_ThemeSectionLabel"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource SettingsCardTitleStyle}" />
+                    </Grid>
+                    <RadioButtons x:Name="ThemeRadioButtons"
+                                  MaxColumns="1"
+                                  Margin="44,0,0,0"
+                                  SelectionChanged="OnThemeSelectionChanged">
+                        <RadioButton x:Uid="Theme_System" Tag="0" />
+                        <RadioButton x:Uid="Theme_Light"  Tag="1" />
+                        <RadioButton x:Uid="Theme_Dark"   Tag="2" />
+                    </RadioButtons>
+                </StackPanel>
+            </Border>
 
-            <!-- Single-line toggles span both columns visually. -->
-            <CheckBox Grid.Row="3" Grid.ColumnSpan="2"
-                      x:Name="ConfirmExitCheck"
-                      x:Uid="Settings_ConfirmExitWhileBusy"
-                      MinHeight="0"
-                      Margin="0,8,0,0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_ConfirmExitWhileBusy" />
+            <!-- 기본 동작 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE7C4;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_DefaultActionLabel"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ComboBox Grid.Column="2"
+                              x:Name="DefaultActionCombo"
+                              MinWidth="170"
+                              VerticalAlignment="Center"
+                              SelectionChanged="OnDefaultActionChanged">
+                        <ComboBoxItem x:Uid="Settings_DefaultActionAuto"     Tag="auto" />
+                        <ComboBoxItem x:Uid="Settings_DefaultActionCompress" Tag="compress" />
+                        <ComboBoxItem x:Uid="Settings_DefaultActionExtract"  Tag="extract" />
+                    </ComboBox>
+                </Grid>
+            </Border>
 
-            <CheckBox Grid.Row="4" Grid.ColumnSpan="2"
-                      x:Name="ShowToastCheck"
-                      x:Uid="Settings_ShowToast"
-                      MinHeight="0"
-                      Checked="OnToggle"
-                      Unchecked="OnToggle"
-                      Tag="Settings_ShowToast" />
+            <!-- 동시 작업 수 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE9D9;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_ConcurrentJobsLabel" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_ConcurrentJobsSub" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2"
+                              x:Name="ConcurrentJobsCombo"
+                              MinWidth="100"
+                              VerticalAlignment="Center"
+                              SelectionChanged="OnConcurrentJobsChanged">
+                        <ComboBoxItem Content="1" Tag="1" />
+                        <ComboBoxItem Content="2" Tag="2" />
+                        <ComboBoxItem Content="3" Tag="3" />
+                        <ComboBoxItem Content="4" Tag="4" />
+                    </ComboBox>
+                </Grid>
+            </Border>
 
-            <!-- Concurrent jobs (Phase 3 setting surfaced here). The
-                 JobQueue reads this at MainWindow ctor; changes take
-                 effect on the next launch. -->
-            <TextBlock Grid.Row="5" Grid.Column="0"
-                       x:Uid="Settings_ConcurrentJobsLabel"
-                       VerticalAlignment="Center"
-                       Margin="0,8,0,0"
-                       Style="{StaticResource BodyTextStyle}" />
-            <StackPanel Grid.Row="5" Grid.Column="1"
-                        Margin="0,8,0,0"
-                        Spacing="2">
-                <ComboBox x:Name="ConcurrentJobsCombo"
-                          HorizontalAlignment="Stretch"
-                          SelectionChanged="OnConcurrentJobsChanged">
-                    <ComboBoxItem Content="1" Tag="1" />
-                    <ComboBoxItem Content="2" Tag="2" />
-                    <ComboBoxItem Content="3" Tag="3" />
-                    <ComboBoxItem Content="4" Tag="4" />
-                </ComboBox>
-                <TextBlock x:Uid="Settings_ConcurrentJobsSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                           TextWrapping="Wrap" />
-            </StackPanel>
+            <!-- ===== 알림 ===== -->
+            <TextBlock x:Uid="Settings_GroupNotifications"
+                       Style="{StaticResource SettingsSectionHeaderStyle}"
+                       Margin="0,12,0,2" />
 
-            <!-- "Quit when all windows closed" 옵션은 트레이 시스템이
-                 있어야 의미가 있음. OtterZip은 셸 확장 + 일회성 윈도우
-                 패턴이라 트레이 거주 자체를 안 함 — 옵션 제거. -->
+            <!-- 진행 중 종료 확인 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE7BA;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_ConfirmExitWhileBusy"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="ConfirmExitCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_ConfirmExitWhileBusy"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
 
-            <!-- Set as default — Windows ms-settings deep link. -->
-            <Button Grid.Row="6" Grid.ColumnSpan="2"
-                    x:Uid="Settings_OpenDefaultApps"
+            <!-- 알림(Toast) 사용 -->
+            <Border Style="{StaticResource CompactCardStyle}">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xEA8F;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               x:Uid="Settings_ShowToast"
+                               Style="{StaticResource SettingsCardTitleStyle}" />
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="ShowToastCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Tag="Settings_ShowToast"
+                                  Toggled="OnToggle" />
+                </Grid>
+            </Border>
+
+            <!-- 기본 프로그램 설정 (Windows 기본 앱 딥링크) -->
+            <Button x:Uid="Settings_OpenDefaultApps"
                     Margin="0,16,0,0"
                     HorizontalAlignment="Left"
                     Click="OnOpenDefaultApps" />
-        </Grid>
+        </StackPanel>
     </ScrollViewer>
 </UserControl>

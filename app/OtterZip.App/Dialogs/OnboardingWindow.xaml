@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  First-run onboarding — WebView2-hosted HTML walkthrough.
+  The HTML lives at Assets/Onboarding/index.html and is served via a
+  virtual-host folder mapping; all user-facing strings are injected from
+  .resw (window.OTTERZIP) so the single i18n source still drives 10 locales.
+  The window is borderless (no min/max/close); navigation is in the HTML.
+  RootGrid background matches the page colour so there is no load flash.
+-->
+<Window
+    x:Class="OtterZip.App.Dialogs.OnboardingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <WebView2 x:Name="WebView" DefaultBackgroundColor="Transparent" />
+    </Grid>
+</Window>

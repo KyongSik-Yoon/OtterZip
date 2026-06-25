@@ -261,6 +261,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OnJobSettled(object? sender, JobItem item)
     {
+        SoundService.MaybePlayCompletion(item);
         if (item.State != JobState.Done || string.IsNullOrEmpty(item.ResultPath))
         {
             return;
@@ -453,6 +454,21 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() =>
         {
             _ = DispatchInvokeAsync(request);
+        });
+    }
+
+    /// <summary>
+    /// Route files opened via a file association / "Open with" into the
+    /// same drop pipeline as dragged files (extract archives, compress
+    /// other inputs). Unlike <see cref="PreloadInvoke"/> this is a normal
+    /// user-initiated open from Explorer, so the usual reveal-after /
+    /// sound settings apply (no shell-invoke suppression).
+    /// </summary>
+    internal void PreloadFiles(IReadOnlyList<string> paths)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _ = ForwardPathsAsync(paths);
         });
     }
 
@@ -754,7 +770,9 @@ public sealed partial class MainWindow : Window
         return DropClassification.CompressBatch;
     }
 
-    private static bool IsKnownArchive(string path)
+    // internal: App.OnLaunched classifies file-activation inputs with this
+    // to route archive double-clicks to the focused ExtractOptionsDialog.
+    internal static bool IsKnownArchive(string path)
     {
         try
         {
@@ -1337,7 +1355,7 @@ public sealed partial class MainWindow : Window
             DebugLog.Info("RunInlineExtractWorkAsync: calling ExtractAllAsync, destination=" + destination);
             var extractStart = System.Diagnostics.Stopwatch.StartNew();
             var report = await archive
-                .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                .ExtractAllAsync(destination, ExtractDefaults.ResolveOverwrite(), progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
             DebugLog.Info("RunInlineExtractWorkAsync: ExtractAllAsync done in " + extractStart.ElapsedMilliseconds + "ms (entries=" + report.EntriesExtracted + ", bytes=" + report.BytesWritten + ")");
@@ -1648,7 +1666,7 @@ public sealed partial class MainWindow : Window
                 var progressBridge = new Progress<ProgressUpdate>(p =>
                     progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
                 var report = await archive
-                    .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                    .ExtractAllAsync(destination, ExtractDefaults.ResolveOverwrite(), progressBridge,
                         preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                     .ConfigureAwait(false);
                 TryFlattenRedundantWrapper(destination, destExistedBefore);
@@ -1741,7 +1759,7 @@ public sealed partial class MainWindow : Window
             var progressBridge = new Progress<ProgressUpdate>(p =>
                 progress.Report(Math.Clamp(p.FractionComplete, 0.0, 1.0)));
             var report = await archive
-                .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                .ExtractAllAsync(destination, ExtractDefaults.ResolveOverwrite(), progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
             TryFlattenRedundantWrapper(destination, destExistedBefore);
@@ -1820,7 +1838,7 @@ public sealed partial class MainWindow : Window
             var progressBridge = new Progress<ProgressUpdate>(p =>
                 progress.Report(0.4 + Math.Clamp(p.FractionComplete, 0.0, 1.0) * 0.6));
             var report = await archive
-                .ExtractAllAsync(destination, OverwritePolicy.Always, progressBridge,
+                .ExtractAllAsync(destination, ExtractDefaults.ResolveOverwrite(), progressBridge,
                     preserveZoneIdentifier: preserveMotw, cancellationToken: ct)
                 .ConfigureAwait(false);
             TryFlattenRedundantWrapper(destination, destExistedBefore);
@@ -2079,14 +2097,25 @@ public sealed partial class MainWindow : Window
 
         try
         {
+            var workTimer = System.Diagnostics.Stopwatch.StartNew();
             var report = await RunCompressAsync(plan, sources, password, richProgress, ct).ConfigureAwait(false);
-            await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
+            workTimer.Stop();
+            ulong originalBytes = OperationSummary.TotalInputBytes(sources);
+            string summary = OperationSummary.Compress(originalBytes, report.BytesWritten, workTimer.Elapsed);
+            // Split output is a .NNN set with no single archive to re-open, so
+            // skip CRC verify there (the slices are byte-faithful — see the
+            // core split round-trip tests); reveal/open targets the .001.
+            if (plan.VolumeSizeBytes == 0)
+            {
+                await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
+            }
             MaybeRecycleSources(sources);
+            string resultPath = plan.VolumeSizeBytes > 0 ? plan.Destination + ".001" : plan.Destination;
             await DispatchUiAndWaitAsync(() =>
             {
-                item.ResultPath = plan.Destination;
+                item.ResultPath = resultPath;
                 item.Progress = 1.0;
-                item.StatusText = FormatByteSize(report.BytesWritten);
+                item.StatusText = summary;
             }).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -2165,7 +2194,13 @@ public sealed partial class MainWindow : Window
         => CompressEngine.MaybeVerifyAsync(archivePath, ct);
 
     private CompressEngine.CompressPlan PlanCompress(IReadOnlyList<string> sources)
-        => CompressEngine.BuildPlan(sources, ConfigPanel.SelectedFormat);
+    {
+        var plan = CompressEngine.BuildPlan(sources, ConfigPanel.SelectedFormat);
+        // The "압축 옵션" flyout exposes preset volume sizes; thread it into the
+        // plan (0 / negative-custom → a single archive).
+        long split = ConfigPanel.SplitSizeBytes;
+        return split > 0 ? plan with { VolumeSizeBytes = (ulong)split } : plan;
+    }
 
     private static Task<ArchiveBuildReport> RunCompressAsync(
         CompressEngine.CompressPlan plan,

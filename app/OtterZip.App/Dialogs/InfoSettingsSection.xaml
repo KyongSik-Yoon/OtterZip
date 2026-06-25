@@ -104,6 +104,17 @@
                 <Button x:Uid="Settings_OpenThirdParty" Click="OnOpenThirdParty" />
             </StackPanel>
 
+            <!-- Re-open the first-run onboarding walkthrough on demand. -->
+            <HyperlinkButton x:Uid="Settings_Info_ShowOnboarding"
+                             Click="OnShowOnboarding"
+                             Margin="0,2,0,0" />
+
+            <!-- Support — opens the GitHub issue board in the default browser.
+                 NavigateUri is a fixed config URL (not a localized string);
+                 only the label is localized via x:Uid. -->
+            <HyperlinkButton x:Uid="Settings_Info_ReportIssue"
+                             NavigateUri="https://github.com/LumiBearStudio/OtterZip/issues" />
+
             <!-- ====================================================== -->
             <!--  4. Unrar notice                                       -->
             <!-- ====================================================== -->
@@ -113,20 +124,35 @@
                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
 
             <!-- ====================================================== -->
-            <!--  5. Telemetry opt-in (PR-7F)                           -->
+            <!--  5. Telemetry opt-in (PR-7F) — toggle card             -->
             <!-- ====================================================== -->
-            <StackPanel Margin="0,8,0,0">
-                <CheckBox x:Name="TelemetryEnabledCheck"
-                          x:Uid="Settings_TelemetryEnabled"
-                          MinHeight="0"
-                          Checked="OnTelemetryToggle"
-                          Unchecked="OnTelemetryToggle" />
-                <TextBlock x:Uid="Settings_TelemetryEnabledSub"
-                           Style="{StaticResource CaptionTextStyle}"
-                           TextWrapping="Wrap"
-                           Margin="28,0,0,2"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </StackPanel>
+            <Border Style="{StaticResource CompactCardStyle}" Margin="0,8,0,0">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SettingsIconChipStyle}">
+                        <FontIcon Glyph="&#xE9D9;" Style="{StaticResource SettingsCardIconStyle}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Uid="Settings_TelemetryEnabled" Style="{StaticResource SettingsCardTitleStyle}" />
+                        <TextBlock x:Uid="Settings_TelemetryEnabledSub" Style="{StaticResource SettingsCardDescStyle}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2"
+                                  x:Name="TelemetryEnabledCheck"
+                                  Style="{StaticResource SettingsCardToggleStyle}"
+                                  Toggled="OnTelemetryToggle" />
+                </Grid>
+            </Border>
+
+            <!-- Privacy policy — surfaced right by the data-collection toggle.
+                 Fixed config URL (the same blob the Store listing points at);
+                 only the label is localized via x:Uid. -->
+            <HyperlinkButton x:Uid="Settings_Info_PrivacyPolicy"
+                             NavigateUri="https://github.com/LumiBearStudio/OtterZip/blob/master/PRIVACY.md"
+                             Margin="0,2,0,0" />
 
         </StackPanel>
     </ScrollViewer>

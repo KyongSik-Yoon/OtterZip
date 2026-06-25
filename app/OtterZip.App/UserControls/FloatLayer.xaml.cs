@@ -48,6 +48,19 @@ public sealed partial class FloatLayer : UserControl
         {
             AddCard(item);
         }
+        UpdateInteractivity();
+    }
+
+    /// <summary>
+    /// The layer must be click-through when it holds no cards so the
+    /// canvas drop-hint ("또는 클릭해서 직접 선택") still receives the tap —
+    /// otherwise the full-area ScrollViewer swallows center clicks even
+    /// while empty. Becomes hit-testable only when cards are present so
+    /// each card stays individually clickable (reveal / cancel).
+    /// </summary>
+    private void UpdateInteractivity()
+    {
+        IsHitTestVisible = _cards.Count > 0;
     }
 
     private void OnJobsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -75,6 +88,7 @@ public sealed partial class FloatLayer : UserControl
             case NotifyCollectionChangedAction.Reset:
                 CardsHost.Items.Clear();
                 _cards.Clear();
+                UpdateInteractivity();
                 break;
         }
     }
@@ -87,6 +101,7 @@ public sealed partial class FloatLayer : UserControl
         card.Bind(item, _queue);
         _cards[item] = card;
         CardsHost.Items.Add(card);
+        UpdateInteractivity();
         // Wait for the new card to lay out, then scroll the stack so it
         // peeks above the viewport bottom. Without this the new card
         // gets created off-screen when the stack already overflows.
@@ -112,6 +127,7 @@ public sealed partial class FloatLayer : UserControl
         {
             CardsHost.Items.Remove(card);
             _cards.Remove(item);
+            UpdateInteractivity();
         }
     }
 

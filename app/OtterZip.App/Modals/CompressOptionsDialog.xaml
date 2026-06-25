@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v0.22 dedicated compress-options dialog. Reached from the shell verb
+  "OtterZip으로 압축...(O)" (CompressCommand, verb "compress" with no
+  QuickFormat). Collects format / level / destination / password, then
+  flips in-place to an embedded JobProgressView to run the compress —
+  one window, Bandizip-style, instead of the full MainWindow surface.
+
+  All user-visible strings via x:Uid → .resw; all brushes via
+  {ThemeResource} (CLAUDE.md §0.5). Reuses ConfigPanel_* / Settings_* /
+  ExtractDialog_* keys where they already exist; only the dialog-chrome
+  labels are new (CompressOptionsDialog_*).
+-->
+<Window
+    x:Class="OtterZip.App.Modals.CompressOptionsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:modals="using:OtterZip.App.Modals"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Options form (scrolls; the action bar is pinned below so the
+             Cancel / Compress buttons are never clipped). -->
+        <ScrollViewer x:Name="OptionsRoot"
+                      Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Disabled">
+            <Grid Padding="24,24,24,8" RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Header: mascot + item summary -->
+                <Grid Grid.Row="0" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Image Grid.Column="0"
+                           Width="40" Height="40"
+                           VerticalAlignment="Center"
+                           Source="ms-appx:///Assets/Square150x150Logo.png" />
+                    <TextBlock Grid.Column="1"
+                               x:Name="SummaryText"
+                               Style="{StaticResource BodyStrongTextStyle}"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                </Grid>
+
+                <!-- Format + level -->
+                <Grid Grid.Row="1" ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock x:Uid="CompressOptionsDialog_FormatLabel"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ComboBox x:Name="FormatCombo"
+                                  HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnFormatChanged">
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatZip" Tag="ZIP" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ" Tag="7z" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatTar" Tag="tar" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz" Tag="tar.gz" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2" Tag="tar.bz2" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz" Tag="tar.xz" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatXz" Tag="xz" />
+                            <ComboBoxItem x:Uid="ConfigPanel_FormatZipx" Tag="zipx" />
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <TextBlock x:Uid="CompressOptionsDialog_LevelLabel"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ComboBox x:Name="LevelCombo"
+                                  HorizontalAlignment="Stretch"
+                                  SelectedIndex="2">
+                            <ComboBoxItem x:Uid="Settings_MethodStore" />
+                            <ComboBoxItem x:Uid="Settings_MethodFast" />
+                            <ComboBoxItem x:Uid="Settings_MethodNormal" />
+                            <ComboBoxItem x:Uid="Settings_MethodBest" />
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Destination -->
+                <StackPanel Grid.Row="2" Spacing="4">
+                    <TextBlock x:Uid="CompressOptionsDialog_DestinationLabel"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Grid ColumnSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="180" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" x:Name="DestinationField" />
+                        <Button Grid.Column="1"
+                                x:Name="BrowseButton"
+                                x:Uid="ExtractDialog_BrowseButton"
+                                MinWidth="92"
+                                Click="OnBrowseClick" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Password -->
+                <StackPanel Grid.Row="3" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                  Glyph="&#xE192;"
+                                  FontSize="12"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource OtterzipBrandBrush}" />
+                        <TextBlock x:Uid="ConfigPanel_PasswordLabel"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Grid ColumnSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <PasswordBox Grid.Column="0"
+                                     x:Name="PasswordInput"
+                                     x:Uid="ConfigPanel_PasswordPlaceholder" />
+                        <ToggleButton Grid.Column="1"
+                                      x:Name="RevealButton"
+                                      x:Uid="ConfigPanel_PasswordRevealButton"
+                                      Style="{StaticResource IconToggleButtonStyle}"
+                                      MinWidth="32" MinHeight="32"
+                                      Padding="4"
+                                      Checked="OnRevealToggled"
+                                      Unchecked="OnRevealToggled">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE7B3;"
+                                      FontSize="{StaticResource IconSizeS}" />
+                        </ToggleButton>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Advanced: Solid block (7z) + split into volumes (7z/ZIP) -->
+                <StackPanel Grid.Row="4" Spacing="8">
+                    <CheckBox x:Name="SolidCheck"
+                              x:Uid="CompressOptionsDialog_SolidCheck"
+                              MinHeight="0" />
+                    <CheckBox x:Name="SplitCheck"
+                              x:Uid="CompressOptionsDialog_SplitCheck"
+                              MinHeight="0"
+                              Checked="OnSplitToggled"
+                              Unchecked="OnSplitToggled" />
+                    <StackPanel x:Name="SplitSizeRow"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                Margin="28,0,0,0"
+                                Visibility="Collapsed">
+                        <TextBlock x:Uid="CompressOptionsDialog_SplitSizeLabel"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <NumberBox x:Name="SplitSizeBox"
+                                   Value="100"
+                                   Minimum="1"
+                                   SmallChange="10"
+                                   LargeChange="100"
+                                   SpinButtonPlacementMode="Compact"
+                                   Width="160" />
+                    </StackPanel>
+                    <TextBlock x:Name="SplitZipNote"
+                               x:Uid="CompressOptionsDialog_SplitZipNote"
+                               Style="{StaticResource CaptionTextStyle}"
+                               TextWrapping="Wrap"
+                               Margin="28,0,0,0"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+
+                <!-- Error caption -->
+                <TextBlock Grid.Row="5"
+                           x:Name="ErrorText"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Top"
+                           Visibility="Collapsed" />
+
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Pinned action bar — always visible so Cancel / Compress are
+             never clipped, however tall the options form grows. -->
+        <Grid x:Name="ActionBar"
+              Grid.Row="1"
+              ColumnSpacing="8"
+              Padding="24,12,24,18"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+              BorderThickness="0,1,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0"
+                    x:Name="CancelButton"
+                    x:Uid="ExtractDialog_CancelButton"
+                    MinWidth="96"
+                    Click="OnCancelClick" />
+            <Button Grid.Column="2"
+                    x:Name="CompressButton"
+                    x:Uid="CompressOptionsDialog_CompressButton"
+                    Style="{StaticResource AccentButtonStyle}"
+                    MinWidth="120"
+                    Click="OnCompressClick" />
+        </Grid>
+
+        <!-- Progress phase (shown after Compress is clicked) — overlays
+             both rows. -->
+        <modals:JobProgressView x:Name="Progress"
+                                Grid.Row="0"
+                                Grid.RowSpan="2"
+                                Visibility="Collapsed" />
+    </Grid>
+</Window>
