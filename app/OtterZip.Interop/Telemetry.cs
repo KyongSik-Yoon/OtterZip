@@ -231,39 +231,7 @@ public static partial class OtterzipTelemetry
         }
         try
         {
-            s_sentryHandle = SentrySdk.Init(o =>
-            {
-                o.Dsn = dsn;
-                // OTTERZIP_TELEMETRY_DEBUG=1 turns on Sentry's local debug log
-                // so a user can inspect exactly what would be sent before it
-                // leaves the device (documented in PRIVACY.md → "Your choices").
-                o.Debug = string.Equals(
-                    Environment.GetEnvironmentVariable("OTTERZIP_TELEMETRY_DEBUG"),
-                    "1", StringComparison.Ordinal);
-                o.AutoSessionTracking = false;
-                // Never send IP / username / machine identity. (The Sentry
-                // project should ALSO enable "Prevent Storing of IP Addresses"
-                // server-side — see docs/08-deployment/sentry-privacy.md.)
-                o.SendDefaultPii = false;
-                // Report a constant instead of the SDK default
-                // (Environment.MachineName) so the user's hostname never leaks.
-                o.ServerName = "OtterZip";
-                // Accurate, disclosed version reporting (PRIVACY.md collects
-                // "app version") + a fixed environment label.
-                o.Release = "otterzip@" + AppVersion();
-                o.Environment = "production";
-                // Anonymous per-install id so reports can be located for a
-                // deletion request. Not tied to any identity.
-                if (!string.IsNullOrEmpty(s_installId))
-                {
-                    o.DefaultTags["install_id"] = s_installId!;
-                }
-                o.AttachStacktrace = true;
-                o.MaxBreadcrumbs = 50;
-                // PII scrub: strip Windows file paths and obvious password
-                // patterns before any payload leaves the process.
-                o.SetBeforeSend(SanitizeEvent);
-            });
+            s_sentryHandle = SentrySdk.Init(o => ConfigureSentryOptions(o, dsn));
         }
         catch (Exception)
         {
@@ -272,6 +240,47 @@ public static partial class OtterzipTelemetry
             s_sentryHandle = null;
             s_enabled = false;
         }
+    }
+
+    /// <summary>
+    /// Configure the Sentry SDK for privacy-first, opt-in crash reporting.
+    /// Extracted from <see cref="StartSentry"/> so each stays under the
+    /// MA0051 method-length cap.
+    /// </summary>
+    private static void ConfigureSentryOptions(SentryOptions o, string dsn)
+    {
+        o.Dsn = dsn;
+        // OTTERZIP_TELEMETRY_DEBUG=1 turns on Sentry's local debug log so a user
+        // can inspect exactly what would be sent before it leaves the device
+        // (documented in PRIVACY.md → "Your choices").
+        o.Debug = string.Equals(
+            Environment.GetEnvironmentVariable("OTTERZIP_TELEMETRY_DEBUG"),
+            "1", StringComparison.Ordinal);
+        o.AutoSessionTracking = false;
+        // Never send IP / username / machine identity. (The Sentry project
+        // should ALSO enable "Prevent Storing of IP Addresses" server-side —
+        // see docs/08-deployment/sentry-privacy.md.)
+        o.SendDefaultPii = false;
+        // Report a constant instead of the SDK default (Environment.MachineName)
+        // so the user's hostname never leaks.
+        o.ServerName = "OtterZip";
+        // Accurate, disclosed version reporting + a fixed environment label.
+        o.Release = "otterzip@" + AppVersion();
+        o.Environment = "production";
+        // Anonymous per-install id so reports can be located for a deletion
+        // request. Not tied to any identity.
+        if (!string.IsNullOrEmpty(s_installId))
+        {
+            o.DefaultTags["install_id"] = s_installId!;
+        }
+        o.AttachStacktrace = true;
+        // Breadcrumbs are NOT reachable from SetBeforeSend's scrub (the event's
+        // breadcrumb collection is read-only in the hook), so an auto-captured
+        // log / HTTP breadcrumb would bypass PII scrubbing. Disable them
+        // entirely — OtterZip writes none of its own.
+        o.MaxBreadcrumbs = 0;
+        // PII scrub: strip paths + password tokens before any payload leaves.
+        o.SetBeforeSend(SanitizeEvent);
     }
 
     private static void StopSentry()
@@ -324,10 +333,22 @@ public static partial class OtterzipTelemetry
         {
             foreach (var sentryEx in evt.SentryExceptions)
             {
-                if (sentryEx.Value is string exVal)
+                if (sentryEx.Value is not string exVal)
                 {
-                    sentryEx.Value = Scrub(exVal);
+                    continue;
                 }
+                // OtterzipException messages are built verbatim from the native
+                // OtterzipError Display strings, which embed archive ENTRY names
+                // and relative / UNC paths (e.g. "entry not found: Clients/Acme/
+                // contract.pdf", "path traversal rejected: ../secret.xlsx") that
+                // the drive-path regex below cannot match. Redact those wholesale
+                // — the error_code / error_category tags keep the actionable
+                // signal without leaking the user's filenames.
+                sentryEx.Value =
+                    sentryEx.Type is string t
+                    && t.Contains("OtterzipException", StringComparison.Ordinal)
+                        ? "<redacted>"
+                        : Scrub(exVal);
             }
         }
         return evt;
@@ -337,6 +358,8 @@ public static partial class OtterzipTelemetry
     {
         // Drive paths: C:\Users\foo\... → <path>
         string s = WindowsPathRegex().Replace(input, "<path>");
+        // UNC paths: \\server\share\... → <path>
+        s = UncPathRegex().Replace(s, "<path>");
         // Naive password=… pattern: password=... → password=<redacted>
         s = PasswordRegex().Replace(s, "password=<redacted>");
         return s;
@@ -344,6 +367,9 @@ public static partial class OtterzipTelemetry
 
     [GeneratedRegex(@"[A-Za-z]:\\[^\s""']+", RegexOptions.Compiled)]
     private static partial Regex WindowsPathRegex();
+
+    [GeneratedRegex(@"\\\\[^\s""']+", RegexOptions.Compiled)]
+    private static partial Regex UncPathRegex();
 
     [GeneratedRegex(@"(?i)password\s*[:=]\s*\S+", RegexOptions.Compiled)]
     private static partial Regex PasswordRegex();
