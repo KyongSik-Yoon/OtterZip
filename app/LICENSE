@@ -1,9 +1,9 @@
-SpanZIP Application — Proprietary License
-Copyright (c) 2026 SpanZIP. All Rights Reserved.
+OtterZip Application — Proprietary License
+Copyright (c) 2026 LumiBear Studio. All Rights Reserved.
 
 ================================================================================
 
-이 라이선스는 SpanZIP 저장소의 `app/` 디렉터리 하위에 있는 모든 소스 코드,
+이 라이선스는 OtterZip 저장소의 `app/` 디렉터리 하위에 있는 모든 소스 코드,
 XAML, 에셋, 아이콘, 브랜드 자산, 구성 파일, 문서(이하 "본 소프트웨어")에
 적용됩니다.
 
@@ -28,9 +28,9 @@ XAML, 에셋, 아이콘, 브랜드 자산, 구성 파일, 문서(이하 "본 소
    구성요소에는 적용되지 않습니다.
 
 4. 상표
-   "SpanZIP"이라는 명칭, 관련 로고, 아이콘은 저작권자의 상표이며, 본 라이선스에
+   "OtterZip"이라는 명칭, 관련 로고, 아이콘은 저작권자의 상표이며, 본 라이선스에
    의해 사용 권한이 부여되지 않습니다. Rust 코어를 오픈소스 라이선스에 따라
-   포크하여 파생 제품을 만드는 경우에도 "SpanZIP" 명칭 및 이와 혼동될 수 있는
+   포크하여 파생 제품을 만드는 경우에도 "OtterZip" 명칭 및 이와 혼동될 수 있는
    명칭의 사용은 허가되지 않습니다.
 
 5. 무보증
@@ -43,12 +43,12 @@ XAML, 에셋, 아이콘, 브랜드 자산, 구성 파일, 문서(이하 "본 소
    라이선스가 필요한 경우 저작권자에게 문의하십시오.
 
 ================================================================================
-SpanZIP Application — Proprietary License
-Copyright (c) 2026 SpanZIP. All Rights Reserved.
+OtterZip Application — Proprietary License
+Copyright (c) 2026 LumiBear Studio. All Rights Reserved.
 
 This license applies to all source code, XAML, assets, icons, brand materials,
 configuration files, and documentation located under the `app/` directory of
-the SpanZIP repository (collectively, the "Software").
+the OtterZip repository (collectively, the "Software").
 
 1. Reservation of Rights
    All copyrights, trade secrets, patents, trademarks, and other intellectual
@@ -72,9 +72,9 @@ the SpanZIP repository (collectively, the "Software").
    such third-party open-source components.
 
 4. Trademarks
-   "SpanZIP" and associated logos and icons are trademarks of the copyright
+   "OtterZip" and associated logos and icons are trademarks of the copyright
    holder. No trademark rights are granted by this License. Use of the
-   "SpanZIP" name (or confusingly similar names) in any fork or derivative
+   "OtterZip" name (or confusingly similar names) in any fork or derivative
    work — even one based solely on the openly licensed Rust core — is not
    permitted.
 

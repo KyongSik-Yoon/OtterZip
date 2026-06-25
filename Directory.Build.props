@@ -15,10 +15,11 @@
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
 
     <!-- Source metadata -->
-    <Authors>OtterZip Contributors</Authors>
-    <Copyright>Copyright 짤 2026 OtterZip. All Rights Reserved.</Copyright>
+    <Authors>LumiBear Studio</Authors>
+    <Company>LumiBear Studio</Company>
+    <Copyright>© 2026 LumiBear Studio. All rights reserved.</Copyright>
     <Product>OtterZip</Product>
-    <Version>0.22.0</Version>
+    <Version>0.22.33</Version>
   </PropertyGroup>
 
   <PropertyGroup>

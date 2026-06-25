@@ -25,7 +25,7 @@ When you opt in to crash reporting in **Settings → Info → "Send anonymous
 crash reports"**, OtterZip uses [Sentry](https://sentry.io) to collect:
 
 - Stack traces from unhandled exceptions
-- App version (e.g. 0.1.0)
+- App version (e.g. 0.22.0)
 - Operating system version
 - CPU architecture (always x64 for OtterZip)
 - A randomly generated install ID (per-installation, not per-user)
@@ -88,7 +88,7 @@ OtterZip은 컴퓨터에서 완전히 로컬로 동작하는 압축/해제 도�
 [Sentry](https://sentry.io)를 통해 다음을 수집합니다.
 
 - 처리되지 않은 예외의 스택 트레이스
-- 앱 버전 (예: 0.1.0)
+- 앱 버전 (예: 0.22.0)
 - 운영체제 버전
 - CPU 아키텍처 (OtterZip은 항상 x64)
 - 무작위로 생성된 설치 ID (사용자가 아닌 설치 단위)

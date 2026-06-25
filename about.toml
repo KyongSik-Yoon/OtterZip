@@ -1,0 +1,37 @@
+# cargo-about configuration — generates THIRD-PARTY-NOTICES.md for the
+# open-source components bundled in the shipped OtterZip Rust core
+# (otterzip-ffi.dll). Regenerate with tools/gen-notices.ps1 before a release.
+#
+# Only the actual ship target is considered so unix-only transitive deps
+# don't pollute the notice file.
+targets = ["x86_64-pc-windows-msvc"]
+
+# We ignore dev-dependencies (test/bench crates are never shipped).
+ignore-dev-dependencies = true
+
+# Workspace crates are first-party (proprietary app / our own Rust); the
+# notice file is for *third-party* OSS only.
+ignore-transitive-dependencies = false
+
+# SPDX license ids we accept in the bundled binary. cargo-about fails if a
+# dependency carries a license not on this list — that failure is the signal
+# to review the new dependency before it ships.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "BSL-1.0",
+    "Unlicense",
+    "0BSD",
+    # bzip2 reference library license (BSD-style, permissive) — id used by
+    # the bzip2-sys crate that backs our .bz2 codec.
+    "bzip2-1.0.6",
+]
