@@ -72,6 +72,17 @@ public sealed partial class InfoSettingsSection : UserControl
         {
             content = ex.Message;
         }
+        // MonoFontFamily is declared as an x:String ("Cascadia Code, …"); a
+        // direct (FontFamily) cast of that string throws InvalidCastException
+        // (XAML applies a string→FontFamily type converter, C# does not). In an
+        // async void click handler that exception is swallowed by
+        // App.UnhandledException, leaving the button silently dead — so build
+        // the FontFamily from the string, with a safe fallback if the key is
+        // ever missing.
+        var monoFont = Application.Current.Resources.TryGetValue("MonoFontFamily", out var fontRes)
+            && fontRes is string fontStr
+                ? new Microsoft.UI.Xaml.Media.FontFamily(fontStr)
+                : new Microsoft.UI.Xaml.Media.FontFamily("Consolas");
         var dialog = new ContentDialog
         {
             Title = fileName,
@@ -82,7 +93,7 @@ public sealed partial class InfoSettingsSection : UserControl
                 {
                     Text = content,
                     TextWrapping = TextWrapping.Wrap,
-                    FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["MonoFontFamily"],
+                    FontFamily = monoFont,
                     FontSize = 12,
                 },
             },
