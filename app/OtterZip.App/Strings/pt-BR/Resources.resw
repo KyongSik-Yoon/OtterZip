@@ -325,4 +325,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>Ignorar</value></data>
   <data name="Settings_OverwriteReject.Content"><value>Interromper extração</value></data>
   <data name="Settings_OverwriteRename.Content"><value>Manter ambos (renomear)</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}min {1}s</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}s</value></data>
 </root>

@@ -288,12 +288,18 @@ public sealed partial class JobProgressView : UserControl
         return await _settlementWait.Task.ConfigureAwait(true);
     }
 
-    private static string FormatElapsed(TimeSpan elapsed)
+    private string FormatElapsed(TimeSpan elapsed)
     {
+        // Localized time units via .resw (hard rule §3.8 — the previous
+        // hardcoded "분/초" leaked Korean into all 9 non-ko locales).
         if (elapsed.TotalMinutes >= 1)
         {
-            return $"{(int)elapsed.TotalMinutes}분 {elapsed.Seconds}초";
+            return string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("Job_ElapsedMinutesSecondsFormat/Text"),
+                (int)elapsed.TotalMinutes, elapsed.Seconds);
         }
-        return $"{elapsed.TotalSeconds:0.0}초";
+        return string.Format(CultureInfo.CurrentCulture,
+            _strings.GetString("Job_ElapsedSecondsFormat/Text"),
+            elapsed.TotalSeconds);
     }
 }

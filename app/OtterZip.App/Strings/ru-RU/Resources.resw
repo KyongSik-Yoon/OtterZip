@@ -325,4 +325,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>Пропустить</value></data>
   <data name="Settings_OverwriteReject.Content"><value>Прервать извлечение</value></data>
   <data name="Settings_OverwriteRename.Content"><value>Сохранить оба (переименовать)</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0} мин {1} с</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0} с</value></data>
 </root>

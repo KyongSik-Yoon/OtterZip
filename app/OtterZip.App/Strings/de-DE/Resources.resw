@@ -325,4 +325,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>Überspringen</value></data>
   <data name="Settings_OverwriteReject.Content"><value>Entpacken abbrechen</value></data>
   <data name="Settings_OverwriteRename.Content"><value>Beide behalten (umbenennen)</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0} Min. {1} Sek.</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0} Sek.</value></data>
 </root>

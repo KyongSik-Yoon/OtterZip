@@ -403,4 +403,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>건너뛰기</value></data>
   <data name="Settings_OverwriteReject.Content"><value>추출 중단</value></data>
   <data name="Settings_OverwriteRename.Content"><value>이름 바꿔 풀기</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}분 {1}초</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}초</value></data>
 </root>

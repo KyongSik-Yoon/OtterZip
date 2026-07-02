@@ -356,4 +356,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>Skip</value></data>
   <data name="Settings_OverwriteReject.Content"><value>Stop extraction</value></data>
   <data name="Settings_OverwriteRename.Content"><value>Keep both (rename)</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}m {1}s</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}s</value></data>
 </root>

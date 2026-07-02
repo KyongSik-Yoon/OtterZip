@@ -325,4 +325,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>スキップ</value></data>
   <data name="Settings_OverwriteReject.Content"><value>展開を中止</value></data>
   <data name="Settings_OverwriteRename.Content"><value>名前を変えて両方残す</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}分{1}秒</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}秒</value></data>
 </root>

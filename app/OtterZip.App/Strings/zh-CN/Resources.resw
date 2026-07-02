@@ -353,4 +353,6 @@
   <data name="Settings_OverwriteSkip.Content"><value>跳过</value></data>
   <data name="Settings_OverwriteReject.Content"><value>中止解压</value></data>
   <data name="Settings_OverwriteRename.Content"><value>重命名保留两者</value></data>
+  <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}分{1}秒</value></data>
+  <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}秒</value></data>
 </root>

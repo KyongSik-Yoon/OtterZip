@@ -295,8 +295,20 @@ public sealed partial class CompressOptionsDialog : Window
         {
             return 0;
         }
+        // NumberBox only commits typed text into Value on focus loss / Enter,
+        // so "type 30 → click 압축" reads a STALE Value (live-reproduced
+        // 2026-07-01: a 30 MB split silently ran with the previous 100 MB).
+        // Prefer the box's current text when it parses; fall back to Value.
         double mb = SplitSizeBox.Value;
-        if (double.IsNaN(mb) || mb < 1)
+        if (double.TryParse(
+                SplitSizeBox.Text,
+                NumberStyles.Float | NumberStyles.AllowThousands,
+                CultureInfo.CurrentCulture,
+                out double typed))
+        {
+            mb = typed;
+        }
+        if (!double.IsFinite(mb) || mb < 1)
         {
             mb = 1;
         }
