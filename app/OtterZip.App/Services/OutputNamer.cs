@@ -141,6 +141,60 @@ internal static class OutputNamer
         return chosen;
     }
 
+    // ------------------------------------------------------------------
+    //  In-process output reservation (pre-1.0 review C2)
+    //
+    //  All plans compute their destination BEFORE any job starts writing,
+    //  and the default concurrency is 2 — so two same-stem plans (e.g.
+    //  "report.docx" + "report.pdf" compressed individually) both probed
+    //  File.Exists("report.zip") = false and two native writers opened the
+    //  SAME file. Real submit points therefore reserve their name in this
+    //  registry; preview paths keep using the un-reserving EnsureUnique.
+    //  Cross-process races remain out of scope (as with every archiver).
+    // ------------------------------------------------------------------
+    private static readonly System.Threading.Lock s_reserveLock = new();
+    private static readonly HashSet<string> s_reserved = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Collision-safe name that is also atomically registered against
+    /// other in-flight jobs in this process. Use at REAL submit points
+    /// only (a preview must not burn names). Pair with <see cref="Release"/>
+    /// when the output is cleaned up after cancel/failure.
+    /// </summary>
+    public static string ReserveUnique(string path)
+    {
+        lock (s_reserveLock)
+        {
+            string candidate = UniquifyFile(path,
+                p => File.Exists(p) || s_reserved.Contains(p));
+            s_reserved.Add(candidate);
+            return candidate;
+        }
+    }
+
+    /// <summary>Directory flavour of <see cref="ReserveUnique"/> — the
+    /// numeric suffix appends after the full folder name ("app.v2 (1)").</summary>
+    public static string ReserveUniqueDirectory(string path)
+    {
+        lock (s_reserveLock)
+        {
+            string candidate = UniquifyDirectory(path,
+                p => Directory.Exists(p) || File.Exists(p) || s_reserved.Contains(p));
+            s_reserved.Add(candidate);
+            return candidate;
+        }
+    }
+
+    /// <summary>Free a reservation whose output was removed again
+    /// (cancel / failure cleanup). Safe to call for unreserved paths.</summary>
+    public static void Release(string path)
+    {
+        lock (s_reserveLock)
+        {
+            s_reserved.Remove(path);
+        }
+    }
+
     /// <summary>
     /// Bandizip / Windows Explorer "Copy" naming: foo.zip exists →
     /// "foo (1).zip"; if that exists too, "foo (2).zip"; up to 9999.
@@ -149,13 +203,15 @@ internal static class OutputNamer
     /// duplicates we stamp with a timestamp rather than blowing the
     /// loop (pathological — millions-of-clones territory).
     ///
-    /// Race note: ConcurrentLimit=1 makes File.Exists / write
-    /// sequential within a process. Two parallel OtterZip processes
-    /// could in theory pick the same unused index; fine for v1.
+    /// NOTE: probes the filesystem only — no cross-job reservation. Fine
+    /// for previews; real submit points go through <see cref="ReserveUnique"/>.
     /// </summary>
     public static string EnsureUnique(string path)
+        => UniquifyFile(path, File.Exists);
+
+    private static string UniquifyFile(string path, Func<string, bool> isTaken)
     {
-        if (!File.Exists(path)) return path;
+        if (!isTaken(path)) return path;
         string dir = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
         string nameOnly = Path.GetFileNameWithoutExtension(path);
         string ext = Path.GetExtension(path);
@@ -171,10 +227,26 @@ internal static class OutputNamer
         {
             string candidate = Path.Combine(dir, string.Format(
                 CultureInfo.InvariantCulture, "{0} ({1}){2}", nameOnly, i, ext));
-            if (!File.Exists(candidate)) return candidate;
+            if (!isTaken(candidate)) return candidate;
         }
         return Path.Combine(dir, string.Format(CultureInfo.InvariantCulture,
             "{0} ({1:yyyyMMddHHmmss}){2}", nameOnly, DateTime.Now, ext));
+    }
+
+    private static string UniquifyDirectory(string path, Func<string, bool> isTaken)
+    {
+        if (!isTaken(path)) return path;
+        string parent = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+        string name = Path.GetFileName(path.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        for (int i = 1; i < 10000; i++)
+        {
+            string candidate = Path.Combine(parent, string.Format(
+                CultureInfo.InvariantCulture, "{0} ({1})", name, i));
+            if (!isTaken(candidate)) return candidate;
+        }
+        return Path.Combine(parent, string.Format(CultureInfo.InvariantCulture,
+            "{0} ({1:yyyyMMddHHmmss})", name, DateTime.Now));
     }
 
     /// <summary>

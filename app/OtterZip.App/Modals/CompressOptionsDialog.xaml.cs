@@ -268,7 +268,9 @@ public sealed partial class CompressOptionsDialog : Window
         destination = string.Empty;
         try
         {
-            destination = OutputNamer.EnsureUnique(SwapArchiveExtension(raw, ext));
+            // Real submit point — reserve against other in-flight jobs, not
+            // just the filesystem (the preview paths keep plain EnsureUnique).
+            destination = OutputNamer.ReserveUnique(SwapArchiveExtension(raw, ext));
             string parent = Path.GetDirectoryName(destination) ?? string.Empty;
             if (!string.IsNullOrEmpty(parent))
             {
@@ -342,7 +344,7 @@ public sealed partial class CompressOptionsDialog : Window
             // (the slices are byte-faithful — see the core split round-trip).
             if (plan.VolumeSizeBytes == 0)
             {
-                await CompressEngine.MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
+                await CompressEngine.MaybeVerifyAsync(plan.Destination, ct, password).ConfigureAwait(false);
             }
             CompressEngine.MaybeRecycleSources(sources);
             string resultPath = plan.VolumeSizeBytes > 0 ? plan.Destination + ".001" : plan.Destination;
@@ -353,9 +355,12 @@ public sealed partial class CompressOptionsDialog : Window
                 item.StatusText = summary;
             });
         }
-        catch (OperationCanceledException)
+        catch
         {
-            CompressEngine.TryDeletePartialArchive(plan.Destination);
+            // The output is unusable on ANY failure (cancel, disk full, IO
+            // error) — a truncated archive left on disk looks real. Sweep the
+            // base file and, in split mode, the .001..NNN segment set.
+            CompressEngine.TryDeletePartialArchive(plan.Destination, plan.VolumeSizeBytes);
             throw;
         }
     }

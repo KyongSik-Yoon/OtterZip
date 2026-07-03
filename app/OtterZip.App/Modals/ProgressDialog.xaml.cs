@@ -167,7 +167,7 @@ public sealed partial class ProgressDialog : Window
             workTimer.Stop();
             ulong originalBytes = OperationSummary.TotalInputBytes(sources);
             string summary = OperationSummary.Compress(originalBytes, report.BytesWritten, workTimer.Elapsed);
-            await CompressEngine.MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
+            await CompressEngine.MaybeVerifyAsync(plan.Destination, ct, password).ConfigureAwait(false);
             CompressEngine.MaybeRecycleSources(sources);
             _dispatcher.TryEnqueue(() =>
             {
@@ -176,9 +176,11 @@ public sealed partial class ProgressDialog : Window
                 item.StatusText = summary;
             });
         }
-        catch (OperationCanceledException)
+        catch
         {
-            CompressEngine.TryDeletePartialArchive(plan.Destination);
+            // The output is unusable on ANY failure (cancel, disk full, IO
+            // error) — a truncated archive left behind looks real.
+            CompressEngine.TryDeletePartialArchive(plan.Destination, plan.VolumeSizeBytes);
             throw;
         }
     }

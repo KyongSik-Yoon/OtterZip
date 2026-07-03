@@ -397,8 +397,22 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
         };
-        var result = await dialog.ShowAsync();
-        return result == ContentDialogResult.Primary;
+        try
+        {
+            var result = await dialog.ShowAsync();
+            return result == ContentDialogResult.Primary;
+        }
+        catch (Exception)
+        {
+            // WinUI allows only ONE ContentDialog per XamlRoot — if another
+            // dialog (e.g. the compress password prompt) is open, ShowAsync
+            // throws and, in this async-void closing path, the exception was
+            // silently swallowed AFTER args.Cancel=true, eating the user's
+            // close click with no feedback. Treat as "stay": the visible
+            // dialog keeps the user's attention, and closing it lets the
+            // next X-click prompt normally.
+            return false;
+        }
     }
 
     private void TrySizeWindow(int width, int height)
@@ -1324,11 +1338,32 @@ public sealed partial class MainWindow : Window
         };
         var done = new TaskCompletionSource<ExtractReport>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _jobQueue.Submit(item, (ct, progress) =>
-            RunInlineExtractWorkAsync(item, archivePath, destination, password,
-                preserveMotw, destExistedBefore, done, ct, progress));
+        // Safety net: the queue can settle a job WITHOUT ever invoking the
+        // work delegate (cancel while still Queued → WaitForSlotAsync bails),
+        // in which case nothing would complete `done` and this await — and
+        // any multi-archive loop above it — would hang forever (pre-1.0
+        // review finding). The delegate's own TrySet* wins in every normal
+        // path because it runs before the queue's settle event.
+        void OnSettled(object? _, JobItem settled)
+        {
+            if (ReferenceEquals(settled, item))
+            {
+                done.TrySetCanceled();
+            }
+        }
+        _jobQueue.JobSettled += OnSettled;
+        try
+        {
+            _jobQueue.Submit(item, (ct, progress) =>
+                RunInlineExtractWorkAsync(item, archivePath, destination, password,
+                    preserveMotw, destExistedBefore, done, ct, progress));
 
-        await done.Task.ConfigureAwait(true);
+            await done.Task.ConfigureAwait(true);
+        }
+        finally
+        {
+            _jobQueue.JobSettled -= OnSettled;
+        }
     }
 
     /// <summary>
@@ -1404,6 +1439,9 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private static void RollbackPartialExtract(string destination, bool destExistedBefore)
     {
+        // Free the in-process name reservation regardless — the output is
+        // being abandoned, so a retry should get the clean name back.
+        OutputNamer.Release(destination);
         if (destExistedBefore || !Directory.Exists(destination)) return;
         try
         {
@@ -1594,6 +1632,12 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private Task<UserControls.ExtractPanelSubmitArgs?> PromptExtractPanelAsync()
     {
+        // The slot is single-occupancy. If a second extract arrives while a
+        // panel is already up (drop B while A's panel shows, or a redirected
+        // shell activation), dismiss the OLDER flow instead of orphaning its
+        // TCS — otherwise A's loop awaits forever and A is silently never
+        // extracted (pre-1.0 review finding).
+        _pendingExtractTcs?.TrySetResult(null);
         _pendingExtractTcs = new TaskCompletionSource<UserControls.ExtractPanelSubmitArgs?>();
         return _pendingExtractTcs.Task;
     }
@@ -1637,7 +1681,11 @@ public sealed partial class MainWindow : Window
                 : (Path.GetDirectoryName(archivePath) ?? Directory.GetCurrentDirectory());
             string stem = Path.GetFileNameWithoutExtension(archivePath);
             string dest = useSubfolder
-                ? EnsureUniqueExtractDirectory(Path.Combine(baseDir, stem))
+                // Bulk plans all compute BEFORE any job writes — reserve the
+                // directory name against the sibling jobs in this loop
+                // (a.zip + a.7z both resolved to "…\a" and extracted into it
+                // concurrently — pre-1.0 review finding).
+                ? OutputNamer.ReserveUniqueDirectory(Path.Combine(baseDir, stem))
                 : baseDir;
             EnqueueBulkExtractJob(archivePath, dest, preserveMotw);
         }
@@ -2107,7 +2155,7 @@ public sealed partial class MainWindow : Window
             // core split round-trip tests); reveal/open targets the .001.
             if (plan.VolumeSizeBytes == 0)
             {
-                await MaybeVerifyAsync(plan.Destination, ct).ConfigureAwait(false);
+                await MaybeVerifyAsync(plan.Destination, ct, password).ConfigureAwait(false);
             }
             MaybeRecycleSources(sources);
             string resultPath = plan.VolumeSizeBytes > 0 ? plan.Destination + ".001" : plan.Destination;
@@ -2118,17 +2166,18 @@ public sealed partial class MainWindow : Window
                 item.StatusText = summary;
             }).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch
         {
-            // Native side aborts at the next entry boundary; whatever's
-            // been written so far is incomplete, so delete the file.
-            TryDeletePartialArchive(plan.Destination);
+            // The output is unusable on ANY failure (cancel, disk full, IO
+            // error) — a truncated archive left behind looks real. Sweep the
+            // base file and, in split mode, the .001..NNN segment set.
+            TryDeletePartialArchive(plan.Destination, plan.VolumeSizeBytes);
             throw;
         }
     }
 
-    private static void TryDeletePartialArchive(string path)
-        => CompressEngine.TryDeletePartialArchive(path);
+    private static void TryDeletePartialArchive(string path, ulong volumeSizeBytes = 0)
+        => CompressEngine.TryDeletePartialArchive(path, volumeSizeBytes);
 
     /// <summary>
     /// Marshal <paramref name="action"/> onto the window's DispatcherQueue
@@ -2187,11 +2236,13 @@ public sealed partial class MainWindow : Window
     /// Honor the <c>Settings_DeleteSourceAfterCompress</c> toggle: every
     /// source path that survived the compress moves to the Recycle Bin.
     /// Runs only after a successful compress + verify (caller-gated) so a
+    /// failed build never destroys the user's input.
+    /// </summary>
     private static void MaybeRecycleSources(IReadOnlyList<string> sources)
         => CompressEngine.MaybeRecycleSources(sources);
 
-    private static Task MaybeVerifyAsync(string archivePath, CancellationToken ct)
-        => CompressEngine.MaybeVerifyAsync(archivePath, ct);
+    private static Task MaybeVerifyAsync(string archivePath, CancellationToken ct, string? password = null)
+        => CompressEngine.MaybeVerifyAsync(archivePath, ct, password);
 
     private CompressEngine.CompressPlan PlanCompress(IReadOnlyList<string> sources)
     {
@@ -2210,9 +2261,6 @@ public sealed partial class MainWindow : Window
         CancellationToken ct)
         => CompressEngine.RunAsync(plan, sources, password, progress, ct);
 
-    /// <summary>
-    /// Pick the archive name stem from a single source path. Directories
-    /// keep their full name (dots are part of the folder name, not an
     // ============================================================
     //  Formatting helpers
     // ============================================================

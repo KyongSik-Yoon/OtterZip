@@ -68,7 +68,11 @@ internal static class CompressEngine
 
         string saveLoc = SettingsService.Get<string>("Settings_SaveLocation", "same");
         string customDir = SettingsService.Get<string>("Settings_SaveLocationPath", "");
-        string destination = OutputNamer.Compose(sources, stem, ext, saveLoc, customDir);
+        // Reserve, don't just probe: BuildPlan's two callers are both real
+        // submit points, and with concurrency 2 two same-stem plans would
+        // otherwise pick the SAME destination before either starts writing.
+        string destination = OutputNamer.ReserveUnique(
+            OutputNamer.Compose(sources, stem, ext, saveLoc, customDir));
 
         return new CompressPlan(destination, fmt, method, level);
     }
@@ -145,13 +149,20 @@ internal static class CompressEngine
     /// just-written archive and CRC-verify every entry. Throws on
     /// corruption; caller surfaces as a normal error toast.
     /// </summary>
-    public static async Task MaybeVerifyAsync(string archivePath, CancellationToken ct)
+    public static async Task MaybeVerifyAsync(
+        string archivePath, CancellationToken ct, string? password = null)
     {
         if (!SettingsService.Get<bool>("Settings_VerifyAfterCompress", false))
         {
             return;
         }
-        using var archive = Archive.Open(archivePath);
+        // Thread the creation password into the verify re-open — the core
+        // counts every entry it cannot decrypt as corrupted, so verifying an
+        // AES archive without its password flagged EVERY password-protected
+        // compress as a failure (pre-1.0 review finding).
+        using var archive = string.IsNullOrEmpty(password)
+            ? Archive.Open(archivePath)
+            : Archive.OpenWithPassword(archivePath, password);
         var report = await archive.TestAsync(ct).ConfigureAwait(false);
         if (!report.IsHealthy)
         {
@@ -179,17 +190,37 @@ internal static class CompressEngine
     }
 
     /// <summary>
-    /// Best-effort cleanup of a partially-written archive on cancel.
-    /// Swallows IO + permission errors — the cancel path runs as a
-    /// finalizer and must never crash on file locks.
+    /// Best-effort cleanup of a partially-written archive on cancel or
+    /// failure. Swallows IO + permission errors — the cleanup path runs as
+    /// a finalizer and must never crash on file locks.
+    /// <para>In split mode the writer emits <c>{path}.001..NNN</c> and the
+    /// bare <paramref name="path"/> never exists, so pass
+    /// <paramref name="volumeSizeBytes"/> &gt; 0 to sweep the segment set
+    /// too (pre-1.0 review: a cancelled split job stranded every partial
+    /// volume).</para>
     /// </summary>
-    public static void TryDeletePartialArchive(string path)
+    public static void TryDeletePartialArchive(string path, ulong volumeSizeBytes = 0)
     {
+        // The output is gone (or about to be) — free the in-process name
+        // reservation so a rerun of the same stem gets the clean name back.
+        OutputNamer.Release(path);
         try
         {
             if (File.Exists(path))
             {
                 File.Delete(path);
+            }
+            if (volumeSizeBytes > 0)
+            {
+                for (int i = 1; i <= 999; i++)
+                {
+                    string segment = path + "." + i.ToString("000", System.Globalization.CultureInfo.InvariantCulture);
+                    if (!File.Exists(segment))
+                    {
+                        break;
+                    }
+                    File.Delete(segment);
+                }
             }
         }
         catch (IOException) { }
