@@ -355,4 +355,14 @@
   <data name="Settings_OverwriteRename.Content"><value>重命名保留两者</value></data>
   <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}分{1}秒</value></data>
   <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}秒</value></data>
+  <data name="Error_ArchiveFailed.Text" xml:space="preserve"><value>无法处理此压缩文件（已损坏或不受支持）</value></data>
+  <data name="Error_DiskFull.Text" xml:space="preserve"><value>磁盘空间不足</value></data>
+  <data name="Error_PathTraversal.Text" xml:space="preserve"><value>已阻止不安全的路径</value></data>
+  <data name="Error_ZipBomb.Text" xml:space="preserve"><value>疑似压缩炸弹，已中止</value></data>
+  <data name="Error_FeatureDisabled.Text" xml:space="preserve"><value>此格式不支持该功能</value></data>
+  <data name="Error_OperationFailed.Text" xml:space="preserve"><value>操作失败</value></data>
+  <data name="ConfigPanel_AesNote.Text" xml:space="preserve"><value>使用 AES-256 加密 · 无法在 Windows 资源管理器中打开</value></data>
+  <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>无法拖放此项目</value></data>
+  <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>关闭</value></data>
+  <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>取消任务</value></data>
 </root>

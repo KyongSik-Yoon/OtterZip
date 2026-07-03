@@ -20,7 +20,8 @@
 
     <StackPanel Padding="{StaticResource SpacingM}"
                 Spacing="{StaticResource SpacingSValue}"
-                VerticalAlignment="Center">
+                VerticalAlignment="Center"
+                KeyDown="OnPanelKeyDown">
 
         <!-- Title row: archive filename + close (×). The filename is the
              only thing that varies per archive; we keep it on BodyText
@@ -44,8 +45,8 @@
                        VerticalAlignment="Center" />
             <Button x:Name="CloseButton"
                     Grid.Column="2"
+                    x:Uid="ExtractPanel_CloseButton"
                     Style="{StaticResource IconButtonStyle}"
-                    AutomationProperties.Name="Close"
                     Click="OnCloseClick">
                 <FontIcon Glyph="&#xE711;" FontSize="14" />
             </Button>

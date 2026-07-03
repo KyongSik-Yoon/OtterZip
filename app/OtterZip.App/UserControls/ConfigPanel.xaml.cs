@@ -190,32 +190,19 @@ public sealed partial class ConfigPanel : UserControl
         set => SetValue(PasswordProperty, value);
     }
 
-    public static readonly DependencyProperty UseAes256Property =
-        DependencyProperty.Register(
-            nameof(UseAes256),
-            typeof(bool),
-            typeof(ConfigPanel),
-            new PropertyMetadata(true));
-
-    public bool UseAes256
-    {
-        get => (bool)GetValue(UseAes256Property);
-        set => SetValue(UseAes256Property, value);
-    }
-
     private void OnPasswordChanged(object sender, RoutedEventArgs e)
     {
         Password = PasswordInput.Password ?? string.Empty;
-        bool hasValue = !string.IsNullOrEmpty(Password);
-        if (FormatSupportsPassword(SelectedFormat))
+        // Encryption is always AES-256 (fail-closed core) — the note tells
+        // the user the output won't open in stock Windows Explorer. The old
+        // UseAes256 checkbox/DP were wired to nothing and got removed.
+        if (AesNoteText is not null)
         {
-            UseAes256Check.IsEnabled = hasValue;
-            if (hasValue && !UseAes256Check.IsChecked.GetValueOrDefault())
-            {
-                UseAes256Check.IsChecked = true;
-            }
+            AesNoteText.Visibility =
+                !string.IsNullOrEmpty(Password) && FormatSupportsPassword(SelectedFormat)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
         }
-        UseAes256 = UseAes256Check.IsChecked.GetValueOrDefault();
     }
 
     private void OnRevealToggled(object sender, RoutedEventArgs e)
@@ -288,7 +275,7 @@ public sealed partial class ConfigPanel : UserControl
         // FormatCombo's SelectionChanged fires while XAML is still loading
         // top-to-bottom — at that moment PasswordCard / SplitCombo may not
         // exist yet. Skip until the visual tree is fully realized.
-        if (PasswordInput is null || RevealButton is null || UseAes256Check is null || SplitCombo is null)
+        if (PasswordInput is null || RevealButton is null || AesNoteText is null || SplitCombo is null)
         {
             return;
         }
@@ -298,7 +285,17 @@ public sealed partial class ConfigPanel : UserControl
 
         PasswordInput.IsEnabled = supportsPassword;
         RevealButton.IsEnabled = supportsPassword;
-        UseAes256Check.IsEnabled = supportsPassword && !string.IsNullOrEmpty(Password);
+        if (!supportsPassword)
+        {
+            // Clear, don't just disable: a stale password + tar/xz would hit
+            // the core's fail-closed guard and error the whole job (the
+            // options dialog already cleared; the flyout didn't).
+            PasswordInput.Password = string.Empty;
+        }
+        AesNoteText.Visibility =
+            supportsPassword && !string.IsNullOrEmpty(PasswordInput.Password)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
 
         SplitCombo.IsEnabled = supportsSplit;
         if (!supportsSplit && SplitCombo.SelectedIndex != 0)

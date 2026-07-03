@@ -141,7 +141,9 @@ public sealed class JobQueue : IDisposable
         }
         catch (Exception ex)
         {
-            MarkError(item, ex.Message);
+            // Localized headline for known failure shapes; raw message only
+            // for unexpected managed-side errors (ErrorMessages.Localize).
+            MarkError(item, ErrorMessages.Localize(ex));
             // Central choke point for every queued compress/extract failure.
             // The classifier separates our bugs (Rust panic / invalid arg)
             // from expected user errors (wrong password / corrupt / disk).
@@ -324,7 +326,9 @@ public sealed class JobQueue : IDisposable
         {
             Dispatcher = _ui,
             State = JobState.Error,
-            StatusText = string.IsNullOrEmpty(message) ? "Error" : message,
+            StatusText = string.IsNullOrEmpty(message)
+                ? Localize("Error_OperationFailed")
+                : message,
             IsIndeterminate = false,
         };
         _ui.TryEnqueue(() =>

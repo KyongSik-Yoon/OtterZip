@@ -281,10 +281,12 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            string fmt = item.Kind == JobKind.Compress
-                ? _strings.GetString("Main_StatusBarCompressDoneFormat/Text")
-                : _strings.GetString("Main_StatusBarDoneFormat/Text");
-            string body = string.Format(CultureInfo.CurrentCulture, fmt,
+            // Neutral "{name} · {detail}" body. The status-bar formats used
+            // before expect (entryCount, size) — feeding them (folderName,
+            // fullStatusText) produced a garbled double sentence in every
+            // locale ("MyFolder개 항목 추출 완료 · 154개 항목 추출 완료 · …").
+            string body = string.Format(CultureInfo.CurrentCulture,
+                _strings.GetString("Toast_CompressBodyFormat/Text"),
                 Path.GetFileName(item.ResultPath!),
                 item.StatusText ?? string.Empty);
             ToastService.ShowCompletion(item.DisplayName, body);
@@ -848,6 +850,8 @@ public sealed partial class MainWindow : Window
             Application.Current.Resources["OtterzipBrandBrush"];
         DropOverlayTitle.Foreground = (Microsoft.UI.Xaml.Media.Brush)
             Application.Current.Resources["OtterzipBrandBrush"];
+        // Restore the inviting title — a previous reject may have swapped it.
+        DropOverlayTitle.Text = _strings.GetString("DropOverlay_HoverTitle/Text");
         DropOverlaySubtitle.Text = subtitle;
     }
 
@@ -862,6 +866,9 @@ public sealed partial class MainWindow : Window
             Application.Current.Resources["SystemFillColorCriticalBrush"];
         DropOverlayTitle.Foreground = (Microsoft.UI.Xaml.Media.Brush)
             Application.Current.Resources["SystemFillColorCriticalBrush"];
+        // A red card titled "여기에 놓으세요" contradicted itself — say why
+        // the drop is refused instead.
+        DropOverlayTitle.Text = _strings.GetString("DropOverlay_RejectTitle/Text");
         DropOverlaySubtitle.Text = subtitle;
     }
 

@@ -327,4 +327,14 @@
   <data name="Settings_OverwriteRename.Content"><value>Manter ambos (renomear)</value></data>
   <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}min {1}s</value></data>
   <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}s</value></data>
+  <data name="Error_ArchiveFailed.Text" xml:space="preserve"><value>Não foi possível processar este arquivo (corrompido ou sem suporte)</value></data>
+  <data name="Error_DiskFull.Text" xml:space="preserve"><value>Espaço em disco insuficiente</value></data>
+  <data name="Error_PathTraversal.Text" xml:space="preserve"><value>Caminho não seguro bloqueado</value></data>
+  <data name="Error_ZipBomb.Text" xml:space="preserve"><value>Interrompido — possível zip bomb</value></data>
+  <data name="Error_FeatureDisabled.Text" xml:space="preserve"><value>Sem suporte para este formato</value></data>
+  <data name="Error_OperationFailed.Text" xml:space="preserve"><value>A operação falhou</value></data>
+  <data name="ConfigPanel_AesNote.Text" xml:space="preserve"><value>Criptografado com AES-256 · não abre no Explorador de Arquivos do Windows</value></data>
+  <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>Não é possível soltar estes itens</value></data>
+  <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>Fechar</value></data>
+  <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>Cancelar tarefa</value></data>
 </root>

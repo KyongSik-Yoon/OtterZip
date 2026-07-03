@@ -176,6 +176,41 @@ public sealed partial class CompressOptionsDialog : Window
             : PasswordRevealMode.Hidden;
     }
 
+    /// <summary>Show the "AES-256 · won't open in Explorer" heads-up while
+    /// a password is set (password ZIPs are always AES — fail-closed core).</summary>
+    private void OnPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (AesNoteText is null)
+        {
+            return;
+        }
+        AesNoteText.Visibility =
+            !string.IsNullOrEmpty(PasswordInput.Password) && PasswordInput.IsEnabled
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
+    /// <summary>Enter = 압축, Esc = 취소 (pre-1.0 UX review: the dialog had
+    /// no keyboard path at all). Ignored once the job is running — the
+    /// progress view owns the window then.</summary>
+    private void OnRootKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (_running)
+        {
+            return;
+        }
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            e.Handled = true;
+            OnCompressClick(sender, new RoutedEventArgs());
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            e.Handled = true;
+            Close();
+        }
+    }
+
     private async void OnBrowseClick(object sender, RoutedEventArgs e)
     {
         try

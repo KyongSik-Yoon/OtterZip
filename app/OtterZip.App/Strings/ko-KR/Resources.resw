@@ -405,4 +405,14 @@
   <data name="Settings_OverwriteRename.Content"><value>이름 바꿔 풀기</value></data>
   <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}분 {1}초</value></data>
   <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}초</value></data>
+  <data name="Error_ArchiveFailed.Text" xml:space="preserve"><value>아카이브를 처리할 수 없습니다 (손상되었거나 지원하지 않는 형식)</value></data>
+  <data name="Error_DiskFull.Text" xml:space="preserve"><value>디스크 공간이 부족합니다</value></data>
+  <data name="Error_PathTraversal.Text" xml:space="preserve"><value>안전하지 않은 경로가 차단되었습니다</value></data>
+  <data name="Error_ZipBomb.Text" xml:space="preserve"><value>압축 폭탄이 의심되어 중단했습니다</value></data>
+  <data name="Error_FeatureDisabled.Text" xml:space="preserve"><value>이 형식에서는 지원하지 않는 기능입니다</value></data>
+  <data name="Error_OperationFailed.Text" xml:space="preserve"><value>작업에 실패했습니다</value></data>
+  <data name="ConfigPanel_AesNote.Text" xml:space="preserve"><value>AES-256으로 암호화됩니다 · Windows 탐색기에서는 열리지 않습니다</value></data>
+  <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>이 항목은 놓을 수 없습니다</value></data>
+  <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>닫기</value></data>
+  <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>작업 취소</value></data>
 </root>

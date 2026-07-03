@@ -162,11 +162,18 @@
                                                   FontSize="{StaticResource IconSizeS}" />
                                     </ToggleButton>
                                 </Grid>
-                                <CheckBox x:Name="UseAes256Check"
-                                          x:Uid="ConfigPanel_UseAes256"
-                                          IsChecked="True"
-                                          IsEnabled="False"
-                                          MinHeight="0" />
+                                <!-- Password ZIPs are always AES-256 (fail-
+                                     closed core) — the old toggle here was
+                                     wired to nothing and implied a ZipCrypto
+                                     fallback that doesn't exist. Replaced by
+                                     an Explorer-compat heads-up, shown while
+                                     a password is set. -->
+                                <TextBlock x:Name="AesNoteText"
+                                           x:Uid="ConfigPanel_AesNote"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           TextWrapping="Wrap"
+                                           Visibility="Collapsed" />
                             </StackPanel>
 
                             <!-- Bottom checkboxes -->

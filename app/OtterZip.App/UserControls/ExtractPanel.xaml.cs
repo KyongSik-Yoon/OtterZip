@@ -168,6 +168,26 @@ public sealed partial class ExtractPanel : UserControl
     private void OnCancelClick(object sender, RoutedEventArgs e)
         => Dismissed?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>
+    /// Keyboard shortcuts for the panel's #1 flow: type the password, hit
+    /// Enter (= 추출). Esc dismisses. Buttons handle Enter themselves and
+    /// mark it Handled, so this only fires from the input fields / panel
+    /// background (pre-1.0 UX review: no key handling existed at all).
+    /// </summary>
+    private void OnPanelKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            e.Handled = true;
+            OnExtractClick(sender, new RoutedEventArgs());
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            e.Handled = true;
+            Dismissed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     private void OnCloseClick(object sender, RoutedEventArgs e)
         => Dismissed?.Invoke(this, EventArgs.Empty);
 

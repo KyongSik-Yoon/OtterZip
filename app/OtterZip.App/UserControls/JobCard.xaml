@@ -76,8 +76,8 @@
 
                 <Button Grid.Column="3"
                         x:Name="CancelButton"
+                        x:Uid="JobCard_CancelButton"
                         Style="{StaticResource IconButtonStyle}"
-                        AutomationProperties.Name="Cancel job"
                         Click="OnCancelClick"
                         MinWidth="24" MinHeight="24"
                         Padding="2">

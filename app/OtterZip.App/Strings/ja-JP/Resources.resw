@@ -327,4 +327,14 @@
   <data name="Settings_OverwriteRename.Content"><value>名前を変えて両方残す</value></data>
   <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}分{1}秒</value></data>
   <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}秒</value></data>
+  <data name="Error_ArchiveFailed.Text" xml:space="preserve"><value>アーカイブを処理できません（破損または未対応の形式）</value></data>
+  <data name="Error_DiskFull.Text" xml:space="preserve"><value>ディスクの空き容量が不足しています</value></data>
+  <data name="Error_PathTraversal.Text" xml:space="preserve"><value>安全でないパスをブロックしました</value></data>
+  <data name="Error_ZipBomb.Text" xml:space="preserve"><value>ZIP爆弾の疑いがあるため中止しました</value></data>
+  <data name="Error_FeatureDisabled.Text" xml:space="preserve"><value>この形式では対応していない機能です</value></data>
+  <data name="Error_OperationFailed.Text" xml:space="preserve"><value>操作に失敗しました</value></data>
+  <data name="ConfigPanel_AesNote.Text" xml:space="preserve"><value>AES-256で暗号化されます · Windowsエクスプローラーでは開けません</value></data>
+  <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>この項目はドロップできません</value></data>
+  <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>閉じる</value></data>
+  <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>ジョブをキャンセル</value></data>
 </root>

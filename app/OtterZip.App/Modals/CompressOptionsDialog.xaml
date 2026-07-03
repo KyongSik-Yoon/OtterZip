@@ -21,7 +21,8 @@
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid"
-          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+          Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+          KeyDown="OnRootKeyDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -137,7 +138,8 @@
                         </Grid.ColumnDefinitions>
                         <PasswordBox Grid.Column="0"
                                      x:Name="PasswordInput"
-                                     x:Uid="ConfigPanel_PasswordPlaceholder" />
+                                     x:Uid="ConfigPanel_PasswordPlaceholder"
+                                     PasswordChanged="OnPasswordChanged" />
                         <ToggleButton Grid.Column="1"
                                       x:Name="RevealButton"
                                       x:Uid="ConfigPanel_PasswordRevealButton"
@@ -151,6 +153,15 @@
                                       FontSize="{StaticResource IconSizeS}" />
                         </ToggleButton>
                     </Grid>
+                    <!-- Explorer-compat heads-up: password ZIPs are AES-256
+                         only (core is fail-closed), which stock Windows
+                         Explorer cannot open. Shown while a password is set. -->
+                    <TextBlock x:Name="AesNoteText"
+                               x:Uid="ConfigPanel_AesNote"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed" />
                 </StackPanel>
 
                 <!-- Advanced: Solid block (7z) + split into volumes (7z/ZIP) -->

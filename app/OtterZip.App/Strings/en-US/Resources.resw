@@ -358,4 +358,14 @@
   <data name="Settings_OverwriteRename.Content"><value>Keep both (rename)</value></data>
   <data name="Job_ElapsedMinutesSecondsFormat.Text" xml:space="preserve"><value>{0}m {1}s</value></data>
   <data name="Job_ElapsedSecondsFormat.Text" xml:space="preserve"><value>{0:0.0}s</value></data>
+  <data name="Error_ArchiveFailed.Text" xml:space="preserve"><value>Can't process this archive (corrupted or unsupported)</value></data>
+  <data name="Error_DiskFull.Text" xml:space="preserve"><value>Not enough disk space</value></data>
+  <data name="Error_PathTraversal.Text" xml:space="preserve"><value>Unsafe path blocked</value></data>
+  <data name="Error_ZipBomb.Text" xml:space="preserve"><value>Stopped — possible zip bomb</value></data>
+  <data name="Error_FeatureDisabled.Text" xml:space="preserve"><value>Not supported for this format</value></data>
+  <data name="Error_OperationFailed.Text" xml:space="preserve"><value>The operation failed</value></data>
+  <data name="ConfigPanel_AesNote.Text" xml:space="preserve"><value>Encrypted with AES-256 · won't open in Windows Explorer</value></data>
+  <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>Can't drop these items</value></data>
+  <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>Close</value></data>
+  <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>Cancel job</value></data>
 </root>
