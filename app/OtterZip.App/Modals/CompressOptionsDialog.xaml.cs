@@ -414,8 +414,18 @@ public sealed partial class CompressOptionsDialog : Window
         }
         args.Cancel = true;
         _closing = true;
-        await Progress.RequestCancelAndWaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-        Close();
+        try
+        {
+            await Progress.RequestCancelAndWaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+            Close();
+        }
+        catch (Exception)
+        {
+            // async void — an escaping COMException on a torn-down HWND
+            // would only reach the global handler and leave the window
+            // stuck open. Best-effort re-close instead.
+            try { Close(); } catch (Exception) { /* already gone */ }
+        }
     }
 
     private static string SwapArchiveExtension(string path, string newExt)

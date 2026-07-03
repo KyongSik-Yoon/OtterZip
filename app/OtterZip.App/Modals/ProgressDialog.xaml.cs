@@ -374,12 +374,21 @@ public sealed partial class ProgressDialog : Window
         if (_settled || _closeRequested) return;
         args.Cancel = true;
         _closeRequested = true;
-        _settlementWait = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _jobItem?.RequestCancel();
-        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
-        cts.Token.Register(() => _settlementWait?.TrySetResult(false));
-        await _settlementWait.Task.ConfigureAwait(true);
-        Close();
+        try
+        {
+            _settlementWait = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _jobItem?.RequestCancel();
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+            cts.Token.Register(() => _settlementWait?.TrySetResult(false));
+            await _settlementWait.Task.ConfigureAwait(true);
+            Close();
+        }
+        catch (Exception)
+        {
+            // async void — an escaping COMException on a torn-down HWND
+            // would leave the window stuck open. Best-effort re-close.
+            try { Close(); } catch (Exception) { /* already gone */ }
+        }
     }
 
     private async Task<string?> PromptPasswordAsync(string archiveName)

@@ -91,10 +91,12 @@ internal static class OperationSummary
         const ulong KB = 1024;
         const ulong MB = KB * 1024;
         const ulong GB = MB * 1024;
-        var inv = CultureInfo.CurrentCulture;
-        if (bytes >= GB) { return string.Format(inv, "{0:0.##} GB", bytes / (double)GB); }
-        if (bytes >= MB) { return string.Format(inv, "{0:0.##} MB", bytes / (double)MB); }
-        if (bytes >= KB) { return string.Format(inv, "{0:0.##} KB", bytes / (double)KB); }
-        return string.Format(inv, "{0} B", bytes);
+        // CurrentCulture on purpose: user-facing number, so the decimal
+        // separator should match the locale. (Was misleadingly named `inv`.)
+        var culture = CultureInfo.CurrentCulture;
+        if (bytes >= GB) { return string.Format(culture, "{0:0.##} GB", bytes / (double)GB); }
+        if (bytes >= MB) { return string.Format(culture, "{0:0.##} MB", bytes / (double)MB); }
+        if (bytes >= KB) { return string.Format(culture, "{0:0.##} KB", bytes / (double)KB); }
+        return string.Format(culture, "{0} B", bytes);
     }
 }

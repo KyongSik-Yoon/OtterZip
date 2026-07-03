@@ -204,8 +204,17 @@ public sealed partial class ExtractOptionsDialog : Window
         }
         args.Cancel = true;
         _closing = true;
-        await Progress.RequestCancelAndWaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-        Close();
+        try
+        {
+            await Progress.RequestCancelAndWaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+            Close();
+        }
+        catch (Exception)
+        {
+            // async void — an escaping COMException on a torn-down HWND
+            // would leave the window stuck open. Best-effort re-close.
+            try { Close(); } catch (Exception) { /* already gone */ }
+        }
     }
 
     // ---- extract-destination helpers (mirrors MainWindow's privates so

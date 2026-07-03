@@ -11,9 +11,10 @@ namespace OtterZip.App.Services;
 /// onboarding was already completed/skipped the call is a no-op. Settings →
 /// Info → "시작 안내 다시 보기" reuses <see cref="ShowAlways"/> on demand.
 ///
-/// Mirrors the DragShelf (Maru) OnboardingService structure, but the window
-/// itself is native WinUI (no WebView2 — OtterZip deliberately avoids it for
-/// Native AOT).
+/// Mirrors the DragShelf (Maru) OnboardingService structure. The window is a
+/// borderless WebView2 host (Dialogs/OnboardingWindow) rendering
+/// Assets/Onboarding/index.html — the MSIX ships non-AOT, so the WebView2
+/// AOT caveats don't apply (see the csproj IL2026/IL3050 note).
 /// </summary>
 internal static class OnboardingService
 {
