@@ -41,6 +41,15 @@ public sealed class JobItem : INotifyPropertyChanged
     public string? SourcePath { get; set; }
 
     /// <summary>
+    /// Output name reserved via <c>OutputNamer.ReserveUnique(Directory)</c>
+    /// when this job was planned, if any. The queue releases it the moment
+    /// the job settles (done / error / cancelled — including cancelled while
+    /// still queued) so the in-process reservation doesn't outlive the job
+    /// and mis-name a later same-named job in the session (APP-C1).
+    /// </summary>
+    public string? ReservedOutputPath { get; set; }
+
+    /// <summary>
     /// Backing CancellationTokenSource for the work. The queue creates
     /// and disposes it; the card calls Cancel() through
     /// <see cref="RequestCancel"/>.

@@ -115,7 +115,10 @@ public sealed partial class ProgressDialog : Window
             }
 
             var sources = _request.Paths;
-            var item = new JobItem(JobKind.Compress, basename);
+            var item = new JobItem(JobKind.Compress, basename)
+            {
+                ReservedOutputPath = plan.Destination, // queue releases on settle (APP-C1)
+            };
             _jobItem = item;
             item.PropertyChanged += OnJobItemPropertyChanged;
             _jobQueue.Submit(item, (ct, progress) =>

@@ -88,7 +88,8 @@ public sealed partial class JobProgressView : UserControl
         string successMessage,
         string revealPath,
         bool revealSelect,
-        Func<JobItem, CancellationToken, System.IProgress<double>, Task> work)
+        Func<JobItem, CancellationToken, System.IProgress<double>, Task> work,
+        string? reservedOutputPath = null)
     {
         ArgumentNullException.ThrowIfNull(work);
         _successMessage = successMessage ?? string.Empty;
@@ -100,7 +101,10 @@ public sealed partial class JobProgressView : UserControl
         ResetVisualState();
         ArchiveNameText.Text = headerName;
 
-        var item = new JobItem(kind, headerName);
+        var item = new JobItem(kind, headerName)
+        {
+            ReservedOutputPath = reservedOutputPath, // queue releases on settle (APP-C1)
+        };
         _jobItem = item;
         item.PropertyChanged += OnJobItemPropertyChanged;
         _jobQueue.Submit(item, (ct, progress) => work(item, ct, progress));

@@ -290,7 +290,8 @@ public sealed partial class CompressOptionsDialog : Window
             _strings.GetString("ProgressDialog_StatusSuccess/Text"),
             revealTarget,
             revealSelect: true,
-            (item, ct, overall) => RunCompressWorkAsync(item, plan, sources, password, ct, overall));
+            (item, ct, overall) => RunCompressWorkAsync(item, plan, sources, password, ct, overall),
+            reservedOutputPath: destination); // released by the queue on settle (APP-C1)
     }
 
     /// <summary>

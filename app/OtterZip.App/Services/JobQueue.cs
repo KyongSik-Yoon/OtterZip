@@ -283,6 +283,19 @@ public sealed class JobQueue : IDisposable
         });
     }
 
+    // Release any output-name reservation the moment a job settles, in EVERY
+    // terminal state (done / cancelled — incl. cancelled-while-queued — /
+    // error). Without this the in-process reservation outlived the job and a
+    // later same-named job got a spurious "(1)" suffix in the same session,
+    // and s_reserved grew unbounded (APP-C1). Idempotent (HashSet.Remove).
+    private static void ReleaseReservation(JobItem item)
+    {
+        if (!string.IsNullOrEmpty(item.ReservedOutputPath))
+        {
+            OutputNamer.Release(item.ReservedOutputPath);
+        }
+    }
+
     private void MarkDone(JobItem item) => _ui.TryEnqueue(() =>
     {
         item.State = JobState.Done;
@@ -291,6 +304,7 @@ public sealed class JobQueue : IDisposable
         // Leave StatusText alone — the work delegate may have set a
         // richer summary (e.g. "8.2 MB"); if not, the last running
         // update ("100%") is a fine placeholder.
+        ReleaseReservation(item);
         JobSettled?.Invoke(this, item);
     });
 
@@ -298,6 +312,7 @@ public sealed class JobQueue : IDisposable
     {
         item.State = JobState.Cancelled;
         item.StatusText = Localize("Job_StatusCancelled");
+        ReleaseReservation(item);
         JobSettled?.Invoke(this, item);
     });
 
@@ -305,6 +320,7 @@ public sealed class JobQueue : IDisposable
     {
         item.State = JobState.Error;
         item.StatusText = message;
+        ReleaseReservation(item);
         JobSettled?.Invoke(this, item);
     });
 

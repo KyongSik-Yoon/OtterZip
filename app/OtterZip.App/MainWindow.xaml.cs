@@ -218,6 +218,10 @@ public sealed partial class MainWindow : Window
     }
 
     private bool _confirmedExit;
+    // Set when PromptExitWhileBusyAsync fails to even show the dialog. A
+    // second consecutive failure fails OPEN so the user is never trapped
+    // unable to close the window (APP-M2).
+    private bool _exitPromptFailed;
 
     /// <summary>
     /// True when the JobQueue has at least one running or queued card —
@@ -402,17 +406,24 @@ public sealed partial class MainWindow : Window
         try
         {
             var result = await dialog.ShowAsync();
+            _exitPromptFailed = false; // prompt worked — reset the escape hatch
             return result == ContentDialogResult.Primary;
         }
         catch (Exception)
         {
-            // WinUI allows only ONE ContentDialog per XamlRoot — if another
-            // dialog (e.g. the compress password prompt) is open, ShowAsync
-            // throws and, in this async-void closing path, the exception was
-            // silently swallowed AFTER args.Cancel=true, eating the user's
-            // close click with no feedback. Treat as "stay": the visible
-            // dialog keeps the user's attention, and closing it lets the
-            // next X-click prompt normally.
+            // WinUI allows only ONE ContentDialog per XamlRoot — usually
+            // another dialog (e.g. the compress password prompt) is open, so
+            // ShowAsync throws. Treat the FIRST failure as "stay": the visible
+            // dialog keeps the user's attention, and dismissing it lets the
+            // next X-click prompt normally. But never TRAP the user unable to
+            // close: if showing the prompt fails AGAIN on the next attempt,
+            // fail OPEN and honor the close — OnAppWindowClosing still cancels
+            // in-flight jobs cleanly (APP-M2).
+            if (_exitPromptFailed)
+            {
+                return true;
+            }
+            _exitPromptFailed = true;
             return false;
         }
     }
@@ -1710,6 +1721,9 @@ public sealed partial class MainWindow : Window
         var item = new JobItem(JobKind.Extract, Path.GetFileName(archivePath))
         {
             SourcePath = archivePath, // for Settings_DeleteArchiveAfterExtract
+            // Reserved only in the sub-folder case; releasing a non-reserved
+            // path is a harmless no-op (APP-C1).
+            ReservedOutputPath = destination,
         };
         bool destExistedBefore = Directory.Exists(destination);
 
@@ -2068,7 +2082,10 @@ public sealed partial class MainWindow : Window
     private void EnqueueCompressJob(IReadOnlyList<string> sources, string? password)
     {
         var plan = PlanCompress(sources);
-        var item = new JobItem(JobKind.Compress, Path.GetFileName(plan.Destination));
+        var item = new JobItem(JobKind.Compress, Path.GetFileName(plan.Destination))
+        {
+            ReservedOutputPath = plan.Destination, // released by the queue on settle (APP-C1)
+        };
         _jobQueue.Submit(item, (ct, progress) =>
             RunCompressWorkAsync(item, plan, sources, password, ct, progress));
     }

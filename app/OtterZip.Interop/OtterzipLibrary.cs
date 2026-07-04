@@ -10,6 +10,15 @@ namespace OtterZip.Interop;
 /// </summary>
 public static class OtterzipLibrary
 {
+    /// <summary>
+    /// The C-ABI contract version these managed bindings were generated
+    /// against — MUST match <c>ABI_VERSION</c> in <c>otterzip-ffi/src/lib.rs</c>.
+    /// Every FFI struct is trailing-append versioned, so a native DLL built at
+    /// a different ABI would be read at the wrong size and silently corrupt
+    /// options/reports. Bump this in lockstep whenever the FFI contract changes.
+    /// </summary>
+    public const uint ExpectedAbiVersion = 9;
+
     private static readonly System.Threading.Lock s_initLock = new();
     private static bool s_initialized;
 
@@ -20,6 +29,17 @@ public static class OtterzipLibrary
         lock (s_initLock)
         {
             if (s_initialized) return;
+            // Fail fast on an ABI mismatch (e.g. a partial build that updated
+            // the app but not otterzip_ffi.dll) — otherwise every struct is
+            // marshaled at the wrong size and extraction runs on garbage
+            // options with NO error (INT-H1).
+            uint nativeAbi = NativeMethods.AbiVersion();
+            if (nativeAbi != ExpectedAbiVersion)
+            {
+                throw new OtterzipException(
+                    $"OtterZip native ABI mismatch: this build expects v{ExpectedAbiVersion} " +
+                    $"but otterzip_ffi reports v{nativeAbi}. The installation is inconsistent — reinstall OtterZip.");
+            }
             int rc = NativeMethods.Init();
             if (rc != 0)
             {
