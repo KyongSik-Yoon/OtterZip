@@ -53,9 +53,14 @@ $dirProps = Join-Path $repo 'Directory.Build.props'
 $xml = [xml](Read-Utf8 $manifest)
 $current = $xml.Package.Identity.Version       # e.g. 0.1.0.0
 $parts = $current.Split('.')
-[int]$major = $parts[0]
-[int]$minor = $parts[1]
-[int]$patch = $parts[2]
+# NOTE: these MUST NOT be named $major/$minor/$patch — PowerShell variable
+# names are case-INSENSITIVE, so $major would be the SAME variable as the
+# [switch]$Major parameter. Assigning the parsed component to it silently
+# overwrites the switch (e.g. `$major = 1` makes `-Major` read as true),
+# which made `-Patch` on 1.0.0 compute 2.0.0. Keep them distinct.
+[int]$curMajor = $parts[0]
+[int]$curMinor = $parts[1]
+[int]$curPatch = $parts[2]
 
 # 2. Compute target.
 if ($Version) {
@@ -63,9 +68,9 @@ if ($Version) {
         throw "Version must be MAJOR.MINOR.PATCH, got '$Version'"
     }
     $target = $Version
-} elseif ($Patch) { $target = "$major.$minor.$($patch + 1)" }
-elseif ($Minor)   { $target = "$major.$($minor + 1).0" }
-elseif ($Major)   { $target = "$($major + 1).0.0" }
+} elseif ($Patch) { $target = "$curMajor.$curMinor.$($curPatch + 1)" }
+elseif ($Minor)   { $target = "$curMajor.$($curMinor + 1).0" }
+elseif ($Major)   { $target = "$($curMajor + 1).0.0" }
 else {
     throw "Pick one of: -Version <ver> | -Patch | -Minor | -Major"
 }
