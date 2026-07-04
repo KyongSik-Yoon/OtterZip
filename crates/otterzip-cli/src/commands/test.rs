@@ -23,7 +23,20 @@ pub fn run(args: &TestArgs, quiet: bool) -> Result<i32> {
 fn test_one(path: &Path, password: Option<&str>, quiet: bool) -> Result<i32> {
     let (archive, _merged) = open_archive(path, password)?;
     let mut sink = progress::make_sink(quiet);
-    let report = archive.test(Some(&mut sink))?;
+    // A missing/incorrect password now surfaces as WrongPassword (exit 4)
+    // instead of being mis-reported as "N entries CORRUPTED" (CLI-C1).
+    let report = match archive.test(Some(&mut sink)) {
+        Ok(r) => r,
+        Err(otterzip_core::OtterzipError::WrongPassword) => {
+            progress::finish(quiet);
+            eprintln!(
+                "{}: encrypted archive — supply the correct password with -p to test it",
+                path.display()
+            );
+            return Ok(exit::code_for(&otterzip_core::OtterzipError::WrongPassword));
+        }
+        Err(e) => return Err(e.into()),
+    };
     progress::finish(quiet);
 
     if report.entries_corrupted > 0 {

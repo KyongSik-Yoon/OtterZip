@@ -554,12 +554,30 @@ impl Archive {
             match self.reader()?.extract_entry(&entry.path, &mut crc_sink) {
                 Ok(_) => {
                     report.entries_tested += 1;
-                    if let Some(expected) = entry.crc32 {
-                        if crc_sink.finalize() != expected {
-                            report.entries_corrupted += 1;
-                            report.corrupted_entries.push(entry.path.clone());
+                    // Skip the CRC comparison for encrypted entries. AES (AE-2)
+                    // ZIP stores a 0 CRC placeholder — the AES HMAC provides
+                    // integrity and was already validated by extract_entry
+                    // above (a tampered ciphertext fails there and lands in the
+                    // Err arm). Comparing the placeholder 0 against the real
+                    // decrypted CRC would false-positive every encrypted entry
+                    // as corrupt, which also made compress+verify falsely fail
+                    // on password-protected archives (CLI-C1 / app verify).
+                    if entry.encryption == crate::format::EncryptionMethod::None {
+                        if let Some(expected) = entry.crc32 {
+                            if crc_sink.finalize() != expected {
+                                report.entries_corrupted += 1;
+                                report.corrupted_entries.push(entry.path.clone());
+                            }
                         }
                     }
+                }
+                // A missing/incorrect password is an archive-level auth
+                // failure, NOT per-entry corruption. Surfacing it as
+                // "N entries CORRUPTED" tells the user their (fine)
+                // encrypted archive is damaged (CLI-C1). Propagate it so
+                // callers can prompt for / report the password distinctly.
+                Err(OtterzipError::WrongPassword) => {
+                    return Err(OtterzipError::WrongPassword);
                 }
                 Err(_) => {
                     // Couldn't even decompress — definitely corrupted.

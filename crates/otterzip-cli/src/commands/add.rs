@@ -49,6 +49,22 @@ pub fn create_archive(
             output.display()
         );
     }
+    // Split mode never writes `output` itself — it writes `output.001/.002/…`,
+    // so the base-name guard above misses a pre-existing volume set and would
+    // silently overwrite .001..N (and leave any stale trailing volumes to
+    // corrupt reassembly). Refuse if the first segment already exists (CLI-M1).
+    if spec.volume.is_some() {
+        let mut first = output.as_os_str().to_os_string();
+        first.push(".001");
+        let first = std::path::PathBuf::from(first);
+        if first.exists() {
+            bail!(
+                "'{}' already exists (a split volume set is present). Use a new name \
+                 or delete the existing '<name>.001..NNN' volumes first.",
+                first.display()
+            );
+        }
+    }
     let opts = build_options(output, spec)?;
 
     let mut archive = Archive::create(output, opts)

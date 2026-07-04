@@ -590,16 +590,23 @@ fn create_encrypted_zip_is_actually_encrypted() {
         "plaintext secret leaked into the archive — not encrypted"
     );
 
-    // Verify contract: test() fails without the password, passes with it.
+    // Verify contract: test() WITHOUT the password reports a missing/incorrect
+    // password (WrongPassword) — NOT per-entry corruption. Encrypted archives
+    // are authed by the AES HMAC, not the ZIP CRC (AE-2 stores a 0 CRC), so
+    // reporting "corrupt" here would be wrong and would make compress+verify
+    // falsely fail (CLI-C1).
     let no_pw = Archive::open(&zip_path, OpenMode::Read).unwrap();
-    let bad = no_pw
+    let err = no_pw
         .test::<fn(&otterzip_core::Progress) -> bool>(None)
-        .unwrap();
+        .unwrap_err();
     assert!(
-        bad.entries_corrupted >= 1,
-        "test() without password must report the encrypted entry as unreadable"
+        matches!(err, otterzip_core::OtterzipError::WrongPassword),
+        "test() without password must report WrongPassword, got {err:?}"
     );
 
+    // WITH the correct password it must PASS with zero corrupted entries —
+    // the CRC comparison is skipped for encrypted entries (the HMAC already
+    // proved integrity during decode).
     let with_pw =
         Archive::open_with_password(&zip_path, OpenMode::Read, "correct horse".to_owned())
             .unwrap();
@@ -610,5 +617,6 @@ fn create_encrypted_zip_is_actually_encrypted() {
         good.entries_corrupted, 0,
         "test() with the correct password must pass"
     );
+    assert_eq!(good.entries_tested, 1);
     assert_eq!(good.entries_tested, 1);
 }
