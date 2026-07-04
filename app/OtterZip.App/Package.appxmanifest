@@ -896,8 +896,12 @@
           — same shape as the GUI App element above.
         * Same uap10:TrustLevel mediumIL + RuntimeBehavior win32App pair
           as the GUI App element (the proven, shell-surrogate-safe combo).
-        * AppListEntry="none" keeps it out of the Start menu — it's a
-          command, not a launchable app.
+        * The CLI IS listed in the Start menu ("OtterZip CLI"). We used to
+          set AppListEntry="none" to hide it (it's a command, not a
+          launchable app), but the Store rejects an alias-only app with no
+          app-list presence as a "headless app" (needs the HeadlessAppBypass
+          right we don't hold): "package specifies a headless app…". Omitting
+          AppListEntry (defaults to shown) clears that validation error.
 
       ⚠ Adding/altering <Application> elements has destabilised the shell
       verb surrogate before (v0.16-18). After building, unpack the .msix
@@ -916,8 +920,7 @@
                           Description="OtterZip command-line tool"
                           BackgroundColor="transparent"
                           Square150x150Logo="Assets\Square150x150Logo.png"
-                          Square44x44Logo="Assets\Square44x44Logo.png"
-                          AppListEntry="none" />
+                          Square44x44Logo="Assets\Square44x44Logo.png" />
       <Extensions>
         <uap5:Extension Category="windows.appExecutionAlias">
           <uap5:AppExecutionAlias>
