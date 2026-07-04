@@ -97,9 +97,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "arbitrary"
@@ -1100,9 +1100,9 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "memmap2"
-version = "0.9.10"
+version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
 dependencies = [
  "libc",
 ]
@@ -1177,7 +1177,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "otterzip-bench"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "criterion",
  "otterzip-core",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "otterzip-cli"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "otterzip-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bzip2 0.5.2",
  "cab",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "otterzip-ffi"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "cbindgen",
  "otterzip-core",
