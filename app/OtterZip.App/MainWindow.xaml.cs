@@ -1846,7 +1846,11 @@ public sealed partial class MainWindow : Window
             string msg = string.Format(CultureInfo.CurrentCulture,
                 _strings.GetString("Split_NotSupportedFormat/Text"),
                 split.Volumes.Count);
-            throw new OtterzipException(-1, msg);
+            // AlreadyLocalized: msg is a finished localized string. Without this
+            // sentinel, JobQueue.RunAsync → ErrorMessages.Localize would map the
+            // unknown code to the generic "Error_ArchiveFailed" headline and the
+            // "spanned 7z — v1.1 예정" explanation would be lost.
+            throw new OtterzipException(OtterzipErrorCodes.AlreadyLocalized, msg);
         }
     }
 

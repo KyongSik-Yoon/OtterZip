@@ -142,6 +142,9 @@ impl SevenZBackend {
         let mut idx: u32 = 0;
         let mut canceled = false;
         let mut traversal_err: Option<String> = None;
+        // Set when the absolute output-byte cap would be exceeded; surfaced
+        // as a typed error after the callback loop (mirrors traversal_err).
+        let mut bomb_err: Option<OtterzipError> = None;
 
         reader
             .for_each_entries(|entry, body| {
@@ -241,7 +244,27 @@ impl SevenZBackend {
 
                 let file = File::create(&out_path).map_err(map_sevenz_err_io)?;
                 let mut writer = BufWriter::new(file);
-                let written = io::copy(body, &mut writer).map_err(map_sevenz_err_io)?;
+                // Bounded copy: enforces the absolute output-byte cap so a
+                // crafted 7z (solid blocks report compressed_size == 0, which
+                // makes the per-entry ratio gate inert) can't extract past the
+                // cap. On overflow we stash the typed error and stop the loop.
+                let already = report_cell.borrow().bytes_written;
+                let written = match crate::archive::__copy_capped(
+                    body,
+                    &mut writer,
+                    &path_str,
+                    already,
+                    opts,
+                ) {
+                    Ok(n) => n,
+                    Err(e @ OtterzipError::ZipBombSuspected { .. }) => {
+                        bomb_err = Some(e);
+                        return Ok(false);
+                    }
+                    Err(e) => {
+                        return Err(sevenz_rust2::Error::Other(e.to_string().into()));
+                    }
+                };
                 use std::io::Write as _;
                 writer.flush().map_err(map_sevenz_err_io)?;
                 // PR-7A: MOTW propagation. Best-effort.
@@ -262,6 +285,9 @@ impl SevenZBackend {
             })
             .map_err(map_sevenz_err)?;
 
+        if let Some(err) = bomb_err {
+            return Err(err);
+        }
         if let Some(orig) = traversal_err {
             return Err(OtterzipError::PathTraversalBlocked(orig));
         }

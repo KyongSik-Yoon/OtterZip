@@ -14,6 +14,16 @@ public static class OtterzipErrorCodes
     public const int FeatureDisabled = -40;
     public const int PathTraversal = -41;
     public const int ZipBomb = -42;
+
+    /// <summary>
+    /// App-side sentinel (NOT a native code — native codes are all &lt;= 0).
+    /// Marks an <see cref="OtterzipException"/> whose <see cref="Exception.Message"/>
+    /// is ALREADY a finished, localized, user-facing string that must be shown
+    /// verbatim. The error-localization layer (<c>ErrorMessages.Localize</c>)
+    /// passes these through instead of replacing them with a generic headline.
+    /// Use for app-synthesized failures like "spanned 7z not yet supported".
+    /// </summary>
+    public const int AlreadyLocalized = 1;
 }
 
 public sealed class OtterzipException : Exception

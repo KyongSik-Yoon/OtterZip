@@ -32,6 +32,9 @@ internal static class ErrorMessages
             {
                 return oz.ErrorCode switch
                 {
+                    // App-synthesized message that's already a finished localized
+                    // string — show it verbatim (e.g. "spanned 7z — v1.1 예정").
+                    OtterzipErrorCodes.AlreadyLocalized => oz.Message,
                     OtterzipErrorCodes.WrongPassword => Get("Error_WrongPassword"),
                     OtterzipErrorCodes.PathTraversal => Get("Error_PathTraversal"),
                     OtterzipErrorCodes.ZipBomb => Get("Error_ZipBomb"),

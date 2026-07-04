@@ -262,7 +262,17 @@ impl TarBackend {
 
             let file = File::create(&out_path)?;
             let mut writer = BufWriter::new(file);
-            let written = io::copy(&mut entry, &mut writer)?;
+            // Bounded copy: enforces the absolute output-byte cap. tar's
+            // per-entry ratio is a constant 1:1 (no per-entry compressed
+            // size exists behind the gzip/bzip2/xz stream), so the byte cap
+            // is the only bomb defense on this path.
+            let written = crate::archive::__copy_capped(
+                &mut entry,
+                &mut writer,
+                &path_str,
+                ctx.report.bytes_written,
+                ctx.opts,
+            )?;
             writer.flush()?;
             // PR-7A: MOTW propagation. Best-effort.
             if let Some(payload) = ctx.motw_payload {

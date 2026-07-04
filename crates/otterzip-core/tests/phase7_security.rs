@@ -184,6 +184,58 @@ fn absolute_byte_cap_blocks_oversized_payload() {
 }
 
 #[test]
+fn tar_gz_byte_cap_blocks_disk_fill_bomb() {
+    // A .tar.gz whose single entry is 4 MiB of zeros: the gzip layer
+    // squashes it to a few KiB, and tar reports compressed == uncompressed,
+    // so the per-entry ratio gate reads a constant 1:1 and never fires.
+    // Only the absolute output-byte cap can stop this. Regression for the
+    // M1 gap where tar/7z streaming extraction ignored
+    // `max_total_output_bytes` entirely (a crafted tarball would extract
+    // until the disk filled).
+    let td = tempdir().unwrap();
+    let targz = td.path().join("bomb.tar.gz");
+    let zeros = vec![0u8; 4 * 1024 * 1024];
+    let bytes = {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let genc =
+                flate2::write::GzEncoder::new(&mut buf, flate2::Compression::default());
+            let mut tarball = tar::Builder::new(genc);
+            let mut header = tar::Header::new_gnu();
+            header.set_size(zeros.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tarball
+                .append_data(&mut header, "big.bin", &zeros[..])
+                .unwrap();
+            tarball.into_inner().unwrap().finish().unwrap();
+        }
+        buf.into_inner()
+    };
+    fs::write(&targz, &bytes).unwrap();
+
+    let opts = ExtractOptions {
+        destination: td.path().join("out"),
+        overwrite: OverwritePolicy::Always,
+        // Isolate the byte cap: disable both ratio gates so only the
+        // absolute cap can be responsible for the abort.
+        max_compression_ratio: 0,
+        max_total_compression_ratio: 0,
+        // 1 MiB cap; the 4 MiB entry must trip it mid-write.
+        max_total_output_bytes: 1024 * 1024,
+        ..Default::default()
+    };
+    let archive = Archive::open(&targz, OpenMode::Read).unwrap();
+    let err = archive
+        .extract_all::<fn(&Progress) -> bool>(&opts, None)
+        .unwrap_err();
+    assert!(
+        matches!(err, OtterzipError::ZipBombSuspected { .. }),
+        "tar.gz byte cap must trip, got {err:?}"
+    );
+}
+
+#[test]
 fn legitimate_archive_passes_phase7_gates() {
     // Sanity: a normal small archive with safe names + low ratio must
     // sail through every Phase 7 check using the documented defaults.

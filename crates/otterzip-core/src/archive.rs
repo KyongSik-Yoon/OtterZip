@@ -1170,6 +1170,47 @@ pub(crate) fn __check_bomb_for_streaming(
     check_zip_bomb(entry, opts)
 }
 
+/// Streaming-path enforcement of the absolute output-byte cap — the
+/// decompression-bomb backstop for formats where the per-entry ratio gate
+/// can't help. `tar.*` reports `compressed_size == uncompressed_size` (the
+/// gzip/bzip2/xz layer wraps the whole stream, so per-entry compressed sizes
+/// don't exist), which makes the ratio a constant 1:1; solid 7z blocks report
+/// `compressed_size == 0`. In both cases `__check_bomb_for_streaming` is inert,
+/// so without this a crafted `evil.tar.gz` (e.g. 10 TB of zeros in a 10 MB
+/// stream) would extract until the disk fills.
+///
+/// Copies `reader` → `writer` but writes at most `budget + 1` bytes, where
+/// `budget` is the remaining cap (`max_total_output_bytes - already_written`).
+/// The `+ 1` lets us detect an entry that *would* push the running total past
+/// the cap without first writing the entire (bomb) payload — so a single
+/// pathological entry is bounded, not just multi-entry aggregates. Returns
+/// [`OtterzipError::ZipBombSuspected`] the moment the cap would be exceeded.
+/// `max_total_output_bytes == 0` disables the cap (unbounded copy).
+#[doc(hidden)]
+pub(crate) fn __copy_capped<R: std::io::Read + ?Sized, W: std::io::Write + ?Sized>(
+    reader: &mut R,
+    writer: &mut W,
+    entry_path: &str,
+    already_written: u64,
+    opts: &ExtractOptions,
+) -> Result<u64> {
+    use std::io::Read;
+    let cap = opts.max_total_output_bytes;
+    if cap == 0 {
+        return Ok(std::io::copy(reader, writer)?);
+    }
+    let budget = cap.saturating_sub(already_written);
+    let written = std::io::copy(&mut reader.take(budget.saturating_add(1)), writer)?;
+    if written > budget {
+        return Err(OtterzipError::ZipBombSuspected {
+            entry: entry_path.to_string(),
+            ratio: 0,
+            limit: opts.max_total_compression_ratio,
+        });
+    }
+    Ok(written)
+}
+
 /// Phase 7 — cumulative bomb gate. Streaming backends call this after
 /// each entry write to track aggregate ratio + total output bytes. A
 /// fresh `BombMonitor` is created per `extract_all` invocation.
