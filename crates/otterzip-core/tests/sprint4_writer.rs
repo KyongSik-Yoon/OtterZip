@@ -545,3 +545,70 @@ fn add_file_on_read_mode_archive_errors() {
         otterzip_core::OtterzipError::InvalidArgument(_)
     ));
 }
+
+/// Regression: creating a password-protected ZIP must produce an archive
+/// that is ACTUALLY AES-256 encrypted on disk — not silently plaintext.
+///
+/// The prior `sprint3_backends::encrypted_zip_unlocks_with_correct_password`
+/// only exercised the READ path against a fixture built by the `zip` crate;
+/// nothing asserted that OtterZip's own writer encrypts. A stale-binary
+/// scare during the 1.0.1 smoke test showed how invisible a silent-plaintext
+/// regression would be, so this pins the create side:
+///   - the on-disk bytes carry the AES extra-field marker (0x9901),
+///   - the plaintext never appears in the archive,
+///   - opening WITHOUT the password fails to read the entry, and
+///   - `test()` reports corruption without the password but passes with it
+///     (the exact contract the app's verify-after-compress relies on).
+#[test]
+fn create_encrypted_zip_is_actually_encrypted() {
+    let td = tempdir().unwrap();
+    let src = td.path().join("secret.txt");
+    let secret = b"TOP-SECRET-PLAINTEXT-must-not-appear-in-the-archive";
+    fs::write(&src, secret).unwrap();
+    let zip_path = td.path().join("enc.zip");
+
+    let opts = CreateOptions {
+        format: ArchiveFormat::Zip,
+        password: Some(Zeroizing::new("correct horse".to_string())),
+        encryption: EncryptionMethod::Aes256,
+        ..Default::default()
+    };
+    let mut archive = Archive::create(&zip_path, opts).unwrap();
+    archive.add_file(&src, "secret.txt").unwrap();
+    archive.commit().unwrap();
+
+    // On-disk format checks: AES marker present, plaintext absent.
+    let bytes = fs::read(&zip_path).unwrap();
+    assert!(
+        bytes.windows(2).any(|w| w == [0x01, 0x99]),
+        "AES-256 extra field (0x9901) missing — ZIP was written unencrypted"
+    );
+    assert!(
+        !bytes
+            .windows(secret.len())
+            .any(|w| w == secret),
+        "plaintext secret leaked into the archive — not encrypted"
+    );
+
+    // Verify contract: test() fails without the password, passes with it.
+    let no_pw = Archive::open(&zip_path, OpenMode::Read).unwrap();
+    let bad = no_pw
+        .test::<fn(&otterzip_core::Progress) -> bool>(None)
+        .unwrap();
+    assert!(
+        bad.entries_corrupted >= 1,
+        "test() without password must report the encrypted entry as unreadable"
+    );
+
+    let with_pw =
+        Archive::open_with_password(&zip_path, OpenMode::Read, "correct horse".to_owned())
+            .unwrap();
+    let good = with_pw
+        .test::<fn(&otterzip_core::Progress) -> bool>(None)
+        .unwrap();
+    assert_eq!(
+        good.entries_corrupted, 0,
+        "test() with the correct password must pass"
+    );
+    assert_eq!(good.entries_tested, 1);
+}
