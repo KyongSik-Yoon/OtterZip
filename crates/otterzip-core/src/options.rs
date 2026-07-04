@@ -75,10 +75,18 @@ impl Default for ExtractOptions {
             follow_symlinks: false,
             block_path_traversal: true,
             max_compression_ratio: 1000,
-            // Cumulative ratio threshold. 100:1 is generous for legitimate
-            // text-heavy archives (Silesia averages ~3-4:1) but stops the
-            // typical "1 GB unpacks to 4 PB" zip bombs cold.
-            max_total_compression_ratio: 100,
+            // Cumulative ratio threshold, matched to the per-entry cap above.
+            // 100 was too tight: a single legitimately-compressible entry
+            // (logs, CSVs, repeated/sparse data commonly hit 200-500:1, and
+            // an all-repeats file can exceed that) tripped the aggregate gate
+            // even though the per-entry gate allows 1000:1 — the aggregate
+            // being LOWER than the per-entry cap made that headroom
+            // unreachable whenever an archive had few entries. The real
+            // backstop against decompression bombs is `max_total_output_bytes`
+            // (16 GiB absolute); this ratio gate is a secondary heuristic, so
+            // 1000 keeps it consistent while still stopping the classic
+            // "1 GB unpacks to 4 PB" bombs (ratios in the millions) cold.
+            max_total_compression_ratio: 1000,
             // Hard ceiling: 16 GiB. Larger legitimate archives are rare;
             // callers who need more pass the explicit override.
             max_total_output_bytes: 16 * 1024 * 1024 * 1024,

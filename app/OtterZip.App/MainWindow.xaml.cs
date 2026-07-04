@@ -535,7 +535,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
+            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ErrorMessages.Localize(ex));
         }
     }
 
@@ -558,7 +558,7 @@ public sealed partial class MainWindow : Window
             }
             catch (Exception ex)
             {
-                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(path), ex.Message);
+                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(path), ErrorMessages.Localize(ex));
             }
         }
     }
@@ -674,7 +674,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
+            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ErrorMessages.Localize(ex));
         }
     }
 
@@ -722,7 +722,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ex.Message);
+            _jobQueue.ReportError(JobKind.Compress, "OtterZip", ErrorMessages.Localize(ex));
             return default;
         }
         finally
@@ -1048,7 +1048,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             DebugLog.Info("ExtractAsync: probe failed: " + ex.Message);
-            _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
+            _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ErrorMessages.Localize(ex));
             return;
         }
 
@@ -1229,7 +1229,7 @@ public sealed partial class MainWindow : Window
             // sees the failure (the queue's own error path runs only when
             // the work delegate inside PerformExtractAsync was reached;
             // some failures throw before that).
-            _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
+            _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ErrorMessages.Localize(ex));
             return true;
         }
     }
@@ -1296,7 +1296,7 @@ public sealed partial class MainWindow : Window
             catch (Exception ex)
             {
                 SwitchView(AppView.Idle);
-                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ex.Message);
+                _jobQueue.ReportError(JobKind.Extract, Path.GetFileName(archivePath), ErrorMessages.Localize(ex));
                 return;
             }
         }

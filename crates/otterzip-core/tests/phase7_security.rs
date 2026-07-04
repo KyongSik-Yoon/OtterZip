@@ -134,12 +134,18 @@ fn cumulative_ratio_blocks_many_small_bomb() {
     // Per-entry ratio is fine (256 KiB / ~1 KiB = ~256, but each entry's
     // raw bytes are below the per-entry default of 1000). The aggregate
     // (32×256 KiB ≈ 8 MiB uncompressed / ~32 KiB compressed ≈ 256:1)
-    // blows past the 100:1 cumulative gate.
+    // blows past this explicit 100:1 cumulative gate.
+    //
+    // Pinned explicitly rather than via Default: the shipped default was
+    // raised to 1000 (it was tripping on legitimately-compressible archives
+    // like logs), so ~256:1 no longer trips the default. This test exercises
+    // the gate *mechanism* at a fixed threshold, independent of the default.
     let opts = ExtractOptions {
         destination: td.path().join("out"),
         overwrite: OverwritePolicy::Always,
-        // Per-entry off, cumulative on.
+        // Per-entry off, cumulative on at an explicit 100:1.
         max_compression_ratio: 0,
+        max_total_compression_ratio: 100,
         ..Default::default()
     };
     let archive = Archive::open(&zip, OpenMode::Read).unwrap();

@@ -311,7 +311,12 @@ public sealed class Archive : IDisposable
             Reserved1 = 0,
             Reserved2 = 0,
             MaxCompressionRatio = 1000,
-            MaxTotalCompressionRatio = 100,
+            // Matched to the per-entry cap. 100 was lower than the per-entry
+            // 1000, so a single legitimately-compressible archive (logs, CSVs,
+            // repeated data — 200-500:1 is normal) tripped the aggregate gate
+            // with no way to proceed. The 16 GiB absolute byte cap below is
+            // the real decompression-bomb backstop; this ratio is secondary.
+            MaxTotalCompressionRatio = 1000,
             MaxTotalOutputBytes = 16UL * 1024 * 1024 * 1024,
             PasswordUtf8 = null,
             PasswordLen = 0,
