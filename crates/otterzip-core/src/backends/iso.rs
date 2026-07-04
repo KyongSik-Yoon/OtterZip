@@ -192,6 +192,7 @@ impl IsoBackend {
             String::new(),
             &mut flat,
             &mut by_path,
+            0,
         )
         .map_err(map_iso_err)?;
 
@@ -241,6 +242,14 @@ fn map_iso_err(e: Iso9660Error) -> OtterzipError {
 
 /// Recursively walk an ISO9660 directory, appending every encountered
 /// entry to `flat`. Skips the canonical `.` / `..` records.
+/// Hard cap on directory-tree recursion. ISO9660 proper limits nesting to 8
+/// levels; Joliet/Rock Ridge relax that, but 64 is generous headroom for any
+/// legitimate image. Without this bound a crafted image whose subdirectory
+/// record points `extent_lba` at itself or an ancestor recurses forever and
+/// overflows the stack — an unrecoverable abort (catch_unwind can't catch a
+/// stack overflow) reachable at Archive::open time (pre-1.0.1 review BK-C1).
+const ISO_MAX_DEPTH: u32 = 64;
+
 fn walk_directory(
     block_io: &mut FileBlockIo,
     extent_lba: u32,
@@ -248,7 +257,11 @@ fn walk_directory(
     prefix: String,
     flat: &mut Vec<IsoEntry>,
     by_path: &mut HashMap<String, usize>,
+    depth: u32,
 ) -> std::result::Result<(), Iso9660Error> {
+    if depth > ISO_MAX_DEPTH {
+        return Err(Iso9660Error::InvalidDirectoryRecord);
+    }
     let iter = DirectoryIterator::new(block_io, extent_lba, extent_len);
 
     // Collect first so the recursive call doesn't fight the
@@ -287,6 +300,7 @@ fn walk_directory(
                 archive_path,
                 flat,
                 by_path,
+                depth + 1,
             )?;
         }
     }

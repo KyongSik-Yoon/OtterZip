@@ -1118,12 +1118,38 @@ fn map_sevenz_err(e: sevenz_rust2::Error) -> OtterzipError {
 
 /// Common backbone — a `tar::Builder` wrapping some writer. Both plain TAR
 /// and TAR.GZ go through this; the only difference is the inner writer.
+/// Finalizer for a tar output sink. `commit` calls [`TarSink::finalize`] so
+/// the final flush / gzip-trailer write RETURNS its I/O error instead of
+/// swallowing it in `Drop` — a disk-full on the very last write must fail the
+/// commit loudly, not silently truncate the archive (pre-1.0.1 review BK-M2).
+trait TarSink: std::io::Write + Send {
+    fn finalize(self: Box<Self>) -> std::io::Result<()>;
+}
+
+impl TarSink for BufWriter<File> {
+    fn finalize(mut self: Box<Self>) -> std::io::Result<()> {
+        // Drains the buffered final block to the file, surfacing any error.
+        // (`Write` isn't `use`d in this module — fully qualify the method.)
+        std::io::Write::flush(&mut *self)
+    }
+}
+
+impl TarSink for flate2::write::GzEncoder<BufWriter<File>> {
+    fn finalize(self: Box<Self>) -> std::io::Result<()> {
+        // finish() writes the gzip CRC/ISIZE trailer and returns the inner
+        // BufWriter; flush() then drains it. Both can fail on a full disk —
+        // Drop would have discarded exactly these errors.
+        let mut inner = (*self).finish()?;
+        std::io::Write::flush(&mut inner)
+    }
+}
+
 struct TarBuilderHolder {
-    builder: Option<tar::Builder<Box<dyn std::io::Write + Send>>>,
+    builder: Option<tar::Builder<Box<dyn TarSink>>>,
 }
 
 impl TarBuilderHolder {
-    fn new(inner: Box<dyn std::io::Write + Send>) -> Self {
+    fn new(inner: Box<dyn TarSink>) -> Self {
         Self {
             builder: Some(tar::Builder::new(inner)),
         }
@@ -1193,7 +1219,7 @@ impl TarBuilderHolder {
         Ok(())
     }
 
-    fn finish(mut self) -> Result<Box<dyn std::io::Write + Send>> {
+    fn finish(mut self) -> Result<Box<dyn TarSink>> {
         let builder = self
             .builder
             .take()
@@ -1209,7 +1235,7 @@ pub(crate) struct TarPlainWriterBackend {
 impl TarPlainWriterBackend {
     fn create(path: &Path, _opts: &CreateOptions) -> Result<Self> {
         let file = File::create(path)?;
-        let inner: Box<dyn std::io::Write + Send> = Box::new(BufWriter::new(file));
+        let inner: Box<dyn TarSink> = Box::new(BufWriter::new(file));
         Ok(Self {
             holder: TarBuilderHolder::new(inner),
         })
@@ -1228,9 +1254,9 @@ impl ArchiveWriter for TarPlainWriterBackend {
     }
 
     fn commit(self: Box<Self>) -> Result<()> {
-        let inner = self.holder.finish()?;
-        // Drop drains the BufWriter.
-        drop(inner);
+        // finalize() flushes the final block and RETURNS any I/O error
+        // (Drop would have swallowed it, reporting a truncated archive as OK).
+        self.holder.finish()?.finalize().map_err(OtterzipError::Io)?;
         Ok(())
     }
 }
@@ -1247,7 +1273,7 @@ impl TarGzWriterBackend {
             BufWriter::new(file),
             flate2::Compression::new(level),
         );
-        let inner: Box<dyn std::io::Write + Send> = Box::new(gz);
+        let inner: Box<dyn TarSink> = Box::new(gz);
         Ok(Self {
             holder: TarBuilderHolder::new(inner),
         })
@@ -1266,15 +1292,12 @@ impl ArchiveWriter for TarGzWriterBackend {
     }
 
     fn commit(self: Box<Self>) -> Result<()> {
-        // For tar.gz we must `finish()` the GzEncoder explicitly so its
-        // checksum/footer gets written. The TarBuilderHolder gives us back
-        // the boxed inner; we *should* call `finish` on it but we erased
-        // the concrete GzEncoder<BufWriter<File>> type via `Box<dyn Write>`.
-        // Workaround: drop the box, which calls `Drop` on `GzEncoder` which
-        // in turn flushes + writes the trailer. That's the supported
-        // pattern per `flate2` docs.
-        let inner = self.holder.finish()?;
-        drop(inner);
+        // finalize() calls GzEncoder::finish() (writes the gzip CRC/ISIZE
+        // trailer) and flushes the underlying BufWriter, RETURNING any I/O
+        // error. The old `drop(inner)` relied on GzEncoder::Drop, which
+        // discards trailer-write errors — a disk-full on the final block
+        // produced a corrupt .tar.gz reported as a successful commit (BK-M2).
+        self.holder.finish()?.finalize().map_err(OtterzipError::Io)?;
         Ok(())
     }
 }

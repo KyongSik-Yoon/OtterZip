@@ -859,7 +859,31 @@ impl Archive {
 
             let file = fs::File::create(&out_path)?;
             let mut writer = BufWriter::new(file);
-            let written = self.reader()?.extract_entry(&entry.path, &mut writer)?;
+            let cap = opts.max_total_output_bytes;
+            let written = if cap > 0 {
+                // Enforce the absolute output-byte cap DURING the write. The
+                // post-entry __BombMonitor check below only fires after the
+                // whole entry is written — too late for a single-stream
+                // backend (.gz/.xz/.bz2/.zst/.lz4) whose one entry IS the
+                // entire payload and whose per-entry ratio gate is inert
+                // (uncompressed_size == 0), so an unbounded copy would fill
+                // the disk before any check ran (BK-M1).
+                let remaining = cap.saturating_sub(report.bytes_written);
+                let mut capped = CappedWriter { inner: &mut writer, remaining, tripped: false };
+                match self.reader()?.extract_entry(&entry.path, &mut capped) {
+                    Ok(n) => n,
+                    Err(_) if capped.tripped => {
+                        return Err(OtterzipError::ZipBombSuspected {
+                            entry: entry.path.clone(),
+                            ratio: 0,
+                            limit: opts.max_total_compression_ratio,
+                        });
+                    }
+                    Err(e) => return Err(e),
+                }
+            } else {
+                self.reader()?.extract_entry(&entry.path, &mut writer)?
+            };
             writer.flush()?;
             // PR-7A: propagate Zone.Identifier from source archive.
             // Best-effort — log + continue on ADS failure (likely
@@ -1211,6 +1235,45 @@ pub(crate) fn __copy_capped<R: std::io::Read + ?Sized, W: std::io::Write + ?Size
     Ok(written)
 }
 
+/// Writer wrapper that enforces the absolute output-byte cap DURING a copy.
+/// The serial extract loop wraps each entry's output in this so a single
+/// unbounded entry — e.g. a single-stream `.gz`/`.xz` bomb whose per-entry
+/// ratio gate is inert (`uncompressed_size == 0`) — can't fill the disk
+/// before the post-entry [`__BombMonitor`] check runs. Writes at most
+/// `remaining` bytes, then fails; `tripped` records that the cap (not an I/O
+/// fault) stopped it, so the caller surfaces [`OtterzipError::ZipBombSuspected`]
+/// rather than a generic I/O error (BK-M1).
+struct CappedWriter<'a, W: std::io::Write + ?Sized> {
+    inner: &'a mut W,
+    remaining: u64,
+    tripped: bool,
+}
+
+impl<W: std::io::Write + ?Sized> std::io::Write for CappedWriter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if buf.len() as u64 > self.remaining {
+            // Write what still fits under the cap, then stop hard.
+            let fit = self.remaining as usize;
+            if fit > 0 {
+                self.inner.write_all(&buf[..fit])?;
+                self.remaining = 0;
+            }
+            self.tripped = true;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "otterzip: extract output-byte cap exceeded",
+            ));
+        }
+        let n = self.inner.write(buf)?;
+        self.remaining -= n as u64;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 /// Phase 7 — cumulative bomb gate. Streaming backends call this after
 /// each entry write to track aggregate ratio + total output bytes. A
 /// fresh `BombMonitor` is created per `extract_all` invocation.
@@ -1433,9 +1496,17 @@ fn resolve_output_path(
     let as_path = Path::new(entry_path);
 
     if opts.flatten_paths {
-        let name = as_path
-            .file_name()
-            .map_or_else(|| PathBuf::from(entry_path), PathBuf::from);
+        // Validate the flattened component like the non-flatten path below,
+        // and reject `file_name() == None` (entry is `.`/`..`/root) instead
+        // of falling back to the raw entry_path — a bare `..` would otherwise
+        // resolve to dest_root.join("..") and escape the destination (FFI-M2).
+        let name = match as_path.file_name() {
+            Some(n) => n,
+            None => return Err(Skipped::Traversal(entry_path.to_string())),
+        };
+        if validate_component_phase7(&name.to_string_lossy()).is_err() {
+            return Err(Skipped::Traversal(entry_path.to_string()));
+        }
         return Ok(dest_root.join(name));
     }
 

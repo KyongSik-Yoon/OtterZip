@@ -264,3 +264,74 @@ fn legitimate_archive_passes_phase7_gates() {
         .unwrap();
     assert_eq!(report.entries_extracted, 2);
 }
+
+#[test]
+fn single_stream_gz_byte_cap_blocks_bomb() {
+    // A raw .gz whose single stream expands to 4 MiB of zeros. Single-stream
+    // backends report uncompressed_size == 0, so the per-entry ratio gate is
+    // inert — only the absolute output-byte cap can stop it, and it must be
+    // enforced DURING the write (CappedWriter) because the one entry IS the
+    // whole payload. Regression for BK-M1 (was an unbounded io::copy).
+    use std::io::Write as _;
+    let td = tempdir().unwrap();
+    let gz = td.path().join("bomb.gz");
+    let zeros = vec![0u8; 4 * 1024 * 1024];
+    {
+        let f = fs::File::create(&gz).unwrap();
+        let mut enc = flate2::write::GzEncoder::new(f, flate2::Compression::default());
+        enc.write_all(&zeros).unwrap();
+        enc.finish().unwrap();
+    }
+    let opts = ExtractOptions {
+        destination: td.path().join("out"),
+        overwrite: OverwritePolicy::Always,
+        // Isolate the byte cap: disable the ratio gates.
+        max_compression_ratio: 0,
+        max_total_compression_ratio: 0,
+        max_total_output_bytes: 1024 * 1024, // 1 MiB; the 4 MiB stream must trip it
+        ..Default::default()
+    };
+    let archive = Archive::open(&gz, OpenMode::Read).unwrap();
+    let err = archive
+        .extract_all::<fn(&Progress) -> bool>(&opts, None)
+        .unwrap_err();
+    assert!(
+        matches!(err, OtterzipError::ZipBombSuspected { .. }),
+        "single-stream .gz byte cap must trip mid-write, got {err:?}"
+    );
+}
+
+#[test]
+fn flatten_extract_rejects_parent_dir_entry() {
+    // With flatten_paths, an entry whose path is exactly `..` used to fall
+    // back to dest_root.join("..") and escape the destination (FFI-M2). The
+    // flatten branch now validates the component and rejects file_name()==None.
+    let td = tempdir().unwrap();
+    let zip = td.path().join("evil.zip");
+    {
+        let file = fs::File::create(&zip).unwrap();
+        let mut w = zip::ZipWriter::new(file);
+        // Write the raw name "../pwned.txt" — file_name() is "pwned.txt" so
+        // this flattens safely; the dangerous ".." bare-name is exercised by
+        // the None-branch guard. Also include a reserved-name component to
+        // prove per-component validation now runs on the flatten path.
+        let opts = zip::write::SimpleFileOptions::default();
+        w.start_file("../pwned.txt", opts).unwrap();
+        std::io::Write::write_all(&mut w, b"x").unwrap();
+        w.finish().unwrap();
+    }
+    let out = td.path().join("out");
+    let opts = ExtractOptions {
+        destination: out.clone(),
+        overwrite: OverwritePolicy::Always,
+        flatten_paths: true,
+        ..Default::default()
+    };
+    let archive = Archive::open(&zip, OpenMode::Read).unwrap();
+    let _ = archive.extract_all::<fn(&Progress) -> bool>(&opts, None);
+    // Whatever the policy, nothing may be written OUTSIDE the destination.
+    assert!(
+        !td.path().join("pwned.txt").exists(),
+        "flatten extraction escaped the destination root"
+    );
+}

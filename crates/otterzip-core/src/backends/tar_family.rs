@@ -341,9 +341,17 @@ fn resolve_output_path_streaming(
 ) -> std::result::Result<PathBuf, String> {
     let as_path = Path::new(entry_path);
     if opts.flatten_paths {
-        let name = as_path
-            .file_name()
-            .map_or_else(|| PathBuf::from(entry_path), PathBuf::from);
+        // Validate the flattened component like the non-flatten path, and
+        // reject the `file_name() == None` case (entry is `.`/`..`/root)
+        // instead of falling back to the raw entry_path — a bare `..` would
+        // otherwise resolve to dest_root.join("..") and escape (FFI-M2).
+        let name = match as_path.file_name() {
+            Some(n) => n,
+            None => return Err(entry_path.to_string()),
+        };
+        if crate::archive::__validate_component(&name.to_string_lossy()).is_err() {
+            return Err(entry_path.to_string());
+        }
         return Ok(dest_root.join(name));
     }
 
