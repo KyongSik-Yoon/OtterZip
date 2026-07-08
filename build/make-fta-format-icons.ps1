@@ -1,36 +1,35 @@
 #requires -Version 5.1
-# Generate per-format file icons with format-name badges (ZIP / 7Z / RAR / ...)
-# composited over the shell mascot. Mirrors the WinRAR / 7-Zip convention so
-# users can tell archive variants apart at a glance in Explorer.
+# Generate per-format file icons: the shell mascot with a large, bottom-placed
+# extension label (ZIP / 7Z / RAR / ...) so users tell archive variants apart
+# at a glance in Explorer — WinRAR / 7-Zip convention.
 #
-# Layout:
-#   Top  ~70% : shell mascot (ShellMascot.png)
-#   Bot  ~30% : solid brown badge with white bold sans-serif label
+# Design ("Variant C2/LT", approved 2026-07):
+#   * NO badge plate. The extension is drawn as large text with a dark outline
+#     (halo) so it reads on the cream shell AND on any Explorer background.
+#   * Text is color-coded per format family and placed toward the BOTTOM.
+#   * Label sized via GenericTypographic + cap-height fudge so it fills nearly
+#     the whole icon width (plain auto-fit rendered it ~40% smaller / too small).
+#   * Small sizes (<=32px): the extension DOMINATES — the shell shrinks and
+#     fades to a faint backdrop so 3-4 characters stay legible at 16px (the
+#     old centered-badge design was invisible at these sizes).
+#   * Large sizes (>32px): full shell mascot + a big bottom label.
 #
-# Sizes < 48px: badge would be unreadable, so we ship a bare-shell icon
-# (mirrors the original ArchiveIcon). Above 48px, the label is rendered.
-#
-# Output layout (for each format key like "zip", "7z", ...):
+# Output layout (per format key like "zip", "7z", ...):
 #   Assets/FileIcons/{key}/Icon.targetsize-{N}.png
-#
-# The Package.appxmanifest then has one <uap:FileTypeAssociation> per
-# format key, pointing Logo at "Assets\FileIcons\{key}\Icon.png" - MRT
-# resolves the .targetsize-N qualifier at runtime.
+# Package.appxmanifest has one <uap:FileTypeAssociation> per format key.
 
 param(
     [string]$ShellSrc = "D:\11.AI\SpanZIP\app\OtterZip.App\Assets\ShellMascot.png",
     [string]$OutRoot = "D:\11.AI\SpanZIP\app\OtterZip.App\Assets\FileIcons",
-    # Comma-separated list of format keys to generate, e.g. "zip,7z,rar".
-    # Default = all 29 formats wired in Package.appxmanifest.
+    # Comma-separated format keys to (re)generate, e.g. "zip,7z,rar". Default = all.
     [string]$Only = "",
-    # Set to skip already-rendered icons (idempotent re-runs).
     [switch]$SkipExisting
 )
 
 Add-Type -AssemblyName System.Drawing
 
-# Format key -> on-icon label text. Labels are kept <=4 chars so they
-# fit at 48px without forcing an unreadably small font.
+# Format key -> on-icon label. Kept <=4 chars; the fitter auto-shrinks 4-char
+# labels (TBZ2 / TZST / LZMA / ZIPX) so they never clip.
 $formats = @(
     @{ key = 'zip';  label = 'ZIP'  },
     @{ key = 'zipx'; label = 'ZIPX' },
@@ -70,24 +69,13 @@ if ($Only -ne "") {
 }
 
 $sizes = @(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)
-# Overlay design: shell always renders at FULL canvas size; badge is
-# overlaid on top, covering only the bottom strip. Works at every size
-# (Bandizip-style) because the shell never shrinks. At very small sizes
-# the text becomes a tag-like color band (legibility falls off below
-# ~32px but the colored band still differentiates).
-$labelMinSize = 0    # 0 = render badge at every size
 
-$shellBmp = [System.Drawing.Bitmap]::FromFile($ShellSrc)
-Write-Host ("Source shell: {0}x{1}" -f $shellBmp.Width, $shellBmp.Height)
+# Dark warm-brown outline drawn under the colored fill — gives every glyph a
+# halo that keeps it legible on light Explorer backgrounds.
+$outlineColor = [System.Drawing.Color]::FromArgb(255, 30, 20, 10)
 
-# Thick label outline — near-black warm brown. The colour fill is drawn
-# ON TOP, so a Pen of width W leaves a visible outer halo of ~W/2; this
-# keeps the glyph legible on the shell and on any Explorer background.
-$outlineColor = [System.Drawing.Color]::FromArgb(255, 38, 24, 12)
-
-# Per-format label fill colour, grouped by family so each archive class
-# (ZIP / 7z / RAR / TAR / stream-compressor / disk-image / sys-package)
-# reads at a glance even when the glyphs are too small to spell out.
+# Per-format label color, grouped by family so each archive class reads at a
+# glance even when the glyphs are too small to spell out.
 function Get-FormatFill([string]$key) {
     switch -Regex ($key) {
         '^(zip|zipx|jar|war|ear|ipa|apk|aab|xpi|crx)$' { return [System.Drawing.Color]::FromArgb(255, 244, 168, 0) }
@@ -101,106 +89,98 @@ function Get-FormatFill([string]$key) {
     }
 }
 
+$shellBmp = [System.Drawing.Bitmap]::FromFile($ShellSrc)
+Write-Host ("Source shell: {0}x{1}" -f $shellBmp.Width, $shellBmp.Height)
+
+function New-Canvas([int]$s) {
+    $bmp = New-Object System.Drawing.Bitmap $s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode      = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $g.InterpolationMode  = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.PixelOffsetMode    = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+    $g.TextRenderingHint  = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+    $g.Clear([System.Drawing.Color]::Transparent)
+    return @($bmp, $g)
+}
+
+# Draw the shell, optionally scaled and alpha-faded, top- or center-aligned.
+function Draw-Shell($g, [int]$s, [double]$scale, [double]$alpha, [string]$valign) {
+    $w = [int]($s * $scale)
+    $x = [int](($s - $w) / 2)
+    if ($valign -eq 'top') { $y = 0 } else { $y = [int](($s - $w) / 2) }
+    $rect = New-Object System.Drawing.Rectangle $x, $y, $w, $w
+    if ($alpha -ge 0.999) {
+        $g.DrawImage($shellBmp, $rect)
+    } else {
+        $cm = New-Object System.Drawing.Imaging.ColorMatrix
+        $cm.Matrix33 = [single]$alpha
+        $ia = New-Object System.Drawing.Imaging.ImageAttributes
+        $ia.SetColorMatrix($cm)
+        $g.DrawImage($shellBmp, $rect, 0, 0, $shellBmp.Width, $shellBmp.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
+        $ia.Dispose()
+    }
+}
+
+# Fit + draw an outlined, centered label. wF/hF are box fractions of the canvas,
+# cy is the box's vertical-center fraction, outFactor scales the halo pen width.
+function Draw-Text($g, [int]$s, [string]$label, $fillCol, $outCol,
+                   [double]$wF, [double]$hF, [double]$cy, [double]$outFactor, [double]$fudge) {
+    $fam = New-Object System.Drawing.FontFamily "Segoe UI"
+    # GenericTypographic removes the glyph side-bearing so the label can grow to
+    # nearly the full icon width. The fudge factor compensates for MeasureString's
+    # tall line box (leading/descent) so the visible cap-height fills the box —
+    # a plain fit left the glyph at ~53% of the box and looked small.
+    $sf = [System.Drawing.StringFormat]::GenericTypographic.Clone()
+    $sf.Alignment = [System.Drawing.StringAlignment]::Center
+    $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
+    $sf.FormatFlags = $sf.FormatFlags -bor [System.Drawing.StringFormatFlags]::NoClip
+    $boxW = $s * $wF; $boxH = $s * $hF
+    $boxX = ($s - $boxW) / 2; $boxY = $s * $cy - $boxH / 2
+    $rect = New-Object System.Drawing.RectangleF ([single]$boxX), ([single]$boxY), ([single]$boxW), ([single]$boxH)
+    $refPx = 100.0
+    $rf = New-Object System.Drawing.Font $fam, $refPx, ([System.Drawing.FontStyle]::Bold)
+    $area = New-Object System.Drawing.SizeF ([single]10000), ([single]10000)
+    $m = $g.MeasureString($label, $rf, $area, $sf); $rf.Dispose()
+    $byW = $refPx * $boxW / $m.Width
+    $byH = $refPx * $boxH / $m.Height * $fudge
+    $fontPx = [Math]::Max([Math]::Min($byW, $byH), 4)
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $path.AddString($label, $fam, [int]([System.Drawing.FontStyle]::Bold), [single]$fontPx, $rect, $sf)
+    $penW = [Math]::Max($fontPx * $outFactor, 1.0)
+    $pen = New-Object System.Drawing.Pen $outCol, ([single]$penW)
+    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    $g.DrawPath($pen, $path)
+    $brush = New-Object System.Drawing.SolidBrush $fillCol
+    $g.FillPath($brush, $path)
+    $pen.Dispose(); $brush.Dispose(); $path.Dispose(); $sf.Dispose(); $fam.Dispose()
+}
+
 $count = 0
 foreach ($f in $formats) {
     $dstDir = Join-Path $OutRoot $f.key
     if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir | Out-Null }
+    $fill = Get-FormatFill $f.key
 
     foreach ($s in $sizes) {
         $dstPath = Join-Path $dstDir ("Icon.targetsize-{0}.png" -f $s)
         if ($SkipExisting -and (Test-Path $dstPath)) { continue }
 
-        $bmp = New-Object System.Drawing.Bitmap $s, $s, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-        $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $g.SmoothingMode      = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-        $g.InterpolationMode  = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-        $g.PixelOffsetMode    = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-        $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
-        $g.TextRenderingHint  = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-        $g.Clear([System.Drawing.Color]::Transparent)
+        $pair = New-Canvas $s
+        $bmp = $pair[0]; $g = $pair[1]
 
-        # Shell at FULL canvas size — mascot stays prominent.
-        $g.DrawImage($shellBmp, (New-Object System.Drawing.Rectangle 0, 0, $s, $s))
-
-        if ($s -ge $labelMinSize) {
-            # Pre-1.0 icon redesign: a colored-glyph-on-shell label washed
-            # out (amber/brown text on the cream shell was near-invisible at
-            # small sizes). Industry convention (Bandizip / Windows): a solid
-            # per-format-color BADGE PLATE at the bottom with WHITE bold
-            # text — maximum contrast at every size, and the plate color
-            # still encodes the format family. The plate is lifted off the
-            # bottom edge so it doesn't read as clipped in Explorer grids.
-            $fontFamily = New-Object System.Drawing.FontFamily "Segoe UI"
-            $sf = New-Object System.Drawing.StringFormat
-            $sf.Alignment = [System.Drawing.StringAlignment]::Center
-            $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
-
-            # Small icons: the plate takes ~52% of the height and the full
-            # width — at 16-40px the extension is the only thing that can
-            # read, so legibility beats shell visibility. Larger icons keep
-            # the mascot dominant with a slimmer plate.
-            if ($s -le 40) {
-                $plateH = $s * 0.52
-                $plateInset = 0.0
-                $bottomPad = [Math]::Max($s * 0.03, 1)
-                $textWFactor = 0.98; $textHFactor = 0.86
-            } else {
-                $plateH = $s * 0.40
-                $plateInset = $s * 0.02
-                $bottomPad = $s * 0.05
-                $textWFactor = 0.92; $textHFactor = 0.80
-            }
-            $plateY = $s - $plateH - $bottomPad
-            $plateW = $s - (2 * $plateInset)
-            $radius = [Math]::Max($plateH * 0.28, 2.0)
-
-            # Rounded-rect plate in the format-family color with a subtle
-            # dark border so it also reads on white Explorer backgrounds.
-            $plate = New-Object System.Drawing.Drawing2D.GraphicsPath
-            $d = $radius * 2
-            $plate.AddArc([single]$plateInset, [single]$plateY, [single]$d, [single]$d, 180, 90)
-            $plate.AddArc([single]($plateInset + $plateW - $d), [single]$plateY, [single]$d, [single]$d, 270, 90)
-            $plate.AddArc([single]($plateInset + $plateW - $d), [single]($plateY + $plateH - $d), [single]$d, [single]$d, 0, 90)
-            $plate.AddArc([single]$plateInset, [single]($plateY + $plateH - $d), [single]$d, [single]$d, 90, 90)
-            $plate.CloseFigure()
-
-            $plateBrush = New-Object System.Drawing.SolidBrush (Get-FormatFill $f.key)
-            $g.FillPath($plateBrush, $plate)
-            $plateBrush.Dispose()
-            $borderW = [Math]::Max([int][Math]::Round($s * 0.02), 1)
-            $borderPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(110, 38, 24, 12)), $borderW
-            $g.DrawPath($borderPen, $plate)
-            $borderPen.Dispose()
-            $plate.Dispose()
-
-            # White bold label centered on the plate, auto-fitted so 4-char
-            # labels (TBZ2 / TZST) never clip.
-            $rect = New-Object System.Drawing.RectangleF ([single]$plateInset), ([single]$plateY), ([single]$plateW), ([single]$plateH)
-            $refPx = 100.0
-            $refFont = New-Object System.Drawing.Font $fontFamily, $refPx, ([System.Drawing.FontStyle]::Bold)
-            $meas = $g.MeasureString($f.label, $refFont)
-            $refFont.Dispose()
-            $fitW = ($plateW * $textWFactor) / $meas.Width
-            $fitH = ($plateH * $textHFactor) / $meas.Height
-            $fontPx = [Math]::Max($refPx * [Math]::Min($fitW, $fitH), 4)
-
-            $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-            $path.AddString(
-                $f.label,
-                $fontFamily,
-                [int]([System.Drawing.FontStyle]::Bold),
-                [single]$fontPx,
-                $rect,
-                $sf
-            )
-            $textBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
-            $g.FillPath($textBrush, $path)
-            $textBrush.Dispose()
-            $path.Dispose()
-
-            $sf.Dispose()
-            $fontFamily.Dispose()
+        # Variant "LT" params — biggest legible label (typographic + cap fudge).
+        if ($s -le 32) {
+            # Small: extension dominates; shell is a faint top backdrop.
+            Draw-Shell $g $s 0.50 0.20 'top'
+            $wF = 1.00; $hF = 0.90; $bottomPad = 0.03; $outFactor = 0.10; $fudge = 1.42
+        } else {
+            # Large: full shell + big bottom label.
+            Draw-Shell $g $s 1.00 1.00 'center'
+            $wF = 0.96; $hF = 0.66; $bottomPad = 0.05; $outFactor = 0.15; $fudge = 1.30
         }
+        $cy = (1.0 - $bottomPad) - $hF / 2.0
+        Draw-Text $g $s $f.label $fill $outlineColor $wF $hF $cy $outFactor $fudge
 
         $g.Dispose()
         $bmp.Save($dstPath, [System.Drawing.Imaging.ImageFormat]::Png)
