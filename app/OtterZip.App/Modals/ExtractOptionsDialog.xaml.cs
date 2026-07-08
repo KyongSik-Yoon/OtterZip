@@ -60,6 +60,12 @@ public sealed partial class ExtractOptionsDialog : Window
         Panel.PasswordEdited += (_, _) => Panel.ClearError();
         Progress.CloseRequested += OnProgressCloseRequested;
         Progress.Settled += OnProgressSettled;
+        // Auto-fit the window to the progress view whenever its content height
+        // changes (percent → multi-line done summary) so no dead space remains.
+        Progress.SizeChanged += (_, _) =>
+        {
+            if (Progress.Visibility == Visibility.Visible) { FitHeightToContent(460); }
+        };
 
         ConfigureForCurrentArchive();
     }
@@ -74,6 +80,7 @@ public sealed partial class ExtractOptionsDialog : Window
         _running = false;
         Progress.Visibility = Visibility.Collapsed;
         Panel.Visibility = Visibility.Visible;
+        TrySizeWindow(460, 360); // restore the option-form height
 
         _currentArchive = _request.Paths[_index];
         bool isEncrypted = ProbeIsEncrypted(_currentArchive);
@@ -102,6 +109,10 @@ public sealed partial class ExtractOptionsDialog : Window
         _running = true;
         Panel.Visibility = Visibility.Collapsed;
         Progress.Visibility = Visibility.Visible;
+        // The progress view is far shorter than the option form — auto-fit the
+        // window to it so no empty gap remains (SizeChanged re-fits on the
+        // multi-line done summary). Restored to the form height on loop-back.
+        FitHeightToContent(460);
         Title = string.Format(CultureInfo.CurrentCulture,
             _strings.GetString("ExtractOptionsDialog_TitleExtractingFormat/Text"), basename);
 
@@ -128,6 +139,7 @@ public sealed partial class ExtractOptionsDialog : Window
                 _running = false;
                 Progress.Visibility = Visibility.Collapsed;
                 Panel.Visibility = Visibility.Visible;
+                TrySizeWindow(460, 360); // restore the option-form height
                 Panel.Configure(_currentArchive,
                     ResolveExtractDestination(_currentArchive),
                     needsPassword: true, showDestination: true, prefillPassword: null);
@@ -293,6 +305,20 @@ public sealed partial class ExtractOptionsDialog : Window
         if (bytes >= MB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} MB", bytes / (double)MB);
         if (bytes >= KB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} KB", bytes / (double)KB);
         return string.Format(CultureInfo.CurrentCulture, "{0} B", bytes);
+    }
+
+    /// <summary>
+    /// Resize the window height to exactly fit the currently-visible content
+    /// (the compact progress view) — removes the dead space the tall option-form
+    /// height leaves below it. Width stays fixed; clamped for safety.
+    /// </summary>
+    private void FitHeightToContent(int widthDip)
+    {
+        if (Content is not FrameworkElement root) { return; }
+        root.Measure(new Windows.Foundation.Size(widthDip, double.PositiveInfinity));
+        int contentH = (int)Math.Ceiling(root.DesiredSize.Height);
+        if (contentH <= 0) { return; }
+        TrySizeWindow(widthDip, Math.Clamp(contentH + 32, 150, 440));
     }
 
     private void TrySizeWindow(int width, int height)

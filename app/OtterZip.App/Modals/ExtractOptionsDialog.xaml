@@ -25,6 +25,10 @@
 
         <controls:ExtractPanel x:Name="Panel" />
 
-        <modals:JobProgressView x:Name="Progress" Visibility="Collapsed" />
+        <!-- Top-aligned so its natural height drives the window fit (SizeChanged
+             fires when the status line grows/shrinks → window re-fits). -->
+        <modals:JobProgressView x:Name="Progress"
+                                VerticalAlignment="Top"
+                                Visibility="Collapsed" />
     </Grid>
 </Window>

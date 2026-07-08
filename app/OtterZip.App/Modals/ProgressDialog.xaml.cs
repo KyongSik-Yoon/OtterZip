@@ -67,9 +67,15 @@ public sealed partial class ProgressDialog : Window
         _jobQueue = new JobQueue(_dispatcher, concurrentLimit: 1);
         _jobQueue.JobSettled += OnJobSettled;
 
-        // 500×240 dev pixels. Compact mascot header (now with a source /
-        // current-file subline) + status row + two-button action bar.
-        TrySizeWindow(500, 240);
+        // Width fixed at 500 dev px; height auto-fits the content so there is
+        // no dead space below the compact progress view. Re-fit whenever the
+        // status line changes height (percent → multi-line done summary).
+        TrySizeWindow(500, 200);
+        if (Content is FrameworkElement fitRoot)
+        {
+            fitRoot.Loaded += (_, _) => FitHeightToContent(500);
+        }
+        StatusText.SizeChanged += (_, _) => FitHeightToContent(500);
         _stopwatch.Start();
         AppWindow.Closing += OnAppWindowClosing;
         _ = StartCompressAsync();
@@ -414,6 +420,21 @@ public sealed partial class ProgressDialog : Window
         };
         var result = await dialog.ShowAsync();
         return result == ContentDialogResult.Primary ? passwordBox.Password : null;
+    }
+
+    /// <summary>
+    /// Resize the window height to exactly fit the current content — removes
+    /// the empty space a fixed height leaves below the compact progress view.
+    /// Width stays fixed; height = measured content + the default title bar.
+    /// Clamped so a bad measure can never produce a broken window.
+    /// </summary>
+    private void FitHeightToContent(int widthDip)
+    {
+        if (Content is not FrameworkElement root) { return; }
+        root.Measure(new Windows.Foundation.Size(widthDip, double.PositiveInfinity));
+        int contentH = (int)Math.Ceiling(root.DesiredSize.Height);
+        if (contentH <= 0) { return; }
+        TrySizeWindow(widthDip, Math.Clamp(contentH + 32, 150, 440));
     }
 
     private void TrySizeWindow(int width, int height)

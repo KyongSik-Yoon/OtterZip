@@ -29,11 +29,13 @@
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
+            <!-- Auto (not *) so the window can be resized to fit the content
+                 exactly — no dead space below the compact progress view. -->
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="20,16,20,10" RowSpacing="12">
+        <Grid Grid.Row="0" Padding="20,14,20,8" RowSpacing="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />

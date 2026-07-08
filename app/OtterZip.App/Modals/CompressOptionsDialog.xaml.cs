@@ -57,6 +57,12 @@ public sealed partial class CompressOptionsDialog : Window
         TrySizeWindow(480, 500);
         AppWindow.Closing += OnAppWindowClosing;
         Progress.CloseRequested += (_, _) => Close();
+        // Auto-fit the window to the progress view whenever its content height
+        // changes (percent → multi-line done summary) so no dead space remains.
+        Progress.SizeChanged += (_, _) =>
+        {
+            if (Progress.Visibility == Visibility.Visible) { FitHeightToContent(500); }
+        };
 
         InitOptions();
     }
@@ -280,7 +286,7 @@ public sealed partial class CompressOptionsDialog : Window
         OptionsRoot.Visibility = Visibility.Collapsed;
         ActionBar.Visibility = Visibility.Collapsed;
         Progress.Visibility = Visibility.Visible;
-        TrySizeWindow(500, 260);
+        FitHeightToContent(500); // shrink to the compact progress view, no dead space
         Title = string.Format(CultureInfo.CurrentCulture,
             _strings.GetString("ProgressDialog_TitleCompressFormat/Text"), basename);
 
@@ -454,6 +460,20 @@ public sealed partial class CompressOptionsDialog : Window
         if (bytes >= MB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} MB", bytes / (double)MB);
         if (bytes >= KB) return string.Format(CultureInfo.CurrentCulture, "{0:0.##} KB", bytes / (double)KB);
         return string.Format(CultureInfo.CurrentCulture, "{0} B", bytes);
+    }
+
+    /// <summary>
+    /// Resize the window height to exactly fit the currently-visible content
+    /// (the compact progress view) — removes the dead space the tall option-form
+    /// height leaves below it. Width stays fixed; clamped for safety.
+    /// </summary>
+    private void FitHeightToContent(int widthDip)
+    {
+        if (Content is not FrameworkElement root) { return; }
+        root.Measure(new Windows.Foundation.Size(widthDip, double.PositiveInfinity));
+        int contentH = (int)Math.Ceiling(root.DesiredSize.Height);
+        if (contentH <= 0) { return; }
+        TrySizeWindow(widthDip, Math.Clamp(contentH + 32, 150, 440));
     }
 
     private void TrySizeWindow(int width, int height)

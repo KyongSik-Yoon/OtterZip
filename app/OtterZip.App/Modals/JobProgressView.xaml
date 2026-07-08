@@ -24,11 +24,14 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
+            <!-- Auto (not *) so the control's natural height is well-defined:
+                 the host window is then resized to fit exactly (no dead space
+                 below the compact progress view). -->
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="24,24,24,16" RowSpacing="14">
+        <Grid Grid.Row="0" Padding="24,20,24,12" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -79,7 +82,7 @@
         <StackPanel Grid.Row="1"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
-                    Padding="0,0,24,20"
+                    Padding="0,0,24,16"
                     Spacing="8">
             <Button x:Name="OpenFolderButton"
                     x:Uid="ProgressDialog_OpenFolderButton"

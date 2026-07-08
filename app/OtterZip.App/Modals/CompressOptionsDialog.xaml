@@ -243,6 +243,7 @@
         <modals:JobProgressView x:Name="Progress"
                                 Grid.Row="0"
                                 Grid.RowSpan="2"
+                                VerticalAlignment="Top"
                                 Visibility="Collapsed" />
     </Grid>
 </Window>
