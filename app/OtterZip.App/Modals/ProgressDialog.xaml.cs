@@ -286,7 +286,9 @@ public sealed partial class ProgressDialog : Window
         if (item.State == JobState.Done && !string.IsNullOrEmpty(item.StatusText))
         {
             // item.StatusText already carries "<archive size> · NN%↓ · NN MB/s".
-            return $"{baseMessage}  ·  {item.StatusText}";
+            // Deliberate 2-line layout: outcome on line 1, metrics on line 2 —
+            // tidy regardless of how long the localized outcome line is.
+            return $"{baseMessage}\n{item.StatusText}";
         }
         return baseMessage;
     }
@@ -434,7 +436,9 @@ public sealed partial class ProgressDialog : Window
         root.Measure(new Windows.Foundation.Size(widthDip, double.PositiveInfinity));
         int contentH = (int)Math.Ceiling(root.DesiredSize.Height);
         if (contentH <= 0) { return; }
-        TrySizeWindow(widthDip, Math.Clamp(contentH + 32, 150, 440));
+        // + title-bar/frame allowance (~44 DIP) — enough that the action-bar
+        // bottom padding survives (buttons aren't flush against the edge).
+        TrySizeWindow(widthDip, Math.Clamp(contentH + 44, 150, 440));
     }
 
     private void TrySizeWindow(int width, int height)

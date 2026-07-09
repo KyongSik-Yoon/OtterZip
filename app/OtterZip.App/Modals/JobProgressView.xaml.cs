@@ -204,14 +204,17 @@ public sealed partial class JobProgressView : UserControl
                     item.StatusText ?? string.Empty);
             case JobState.Done:
                 const string sep = "  ·  ";
-                string detail = string.IsNullOrEmpty(item.StatusText) ? string.Empty : sep + item.StatusText;
+                var metrics = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrEmpty(item.StatusText)) { metrics.Add(item.StatusText); }
                 // Compress StatusText already carries throughput (OperationSummary);
                 // append elapsed only for extract, where it doesn't.
-                if (item.Kind != JobKind.Compress)
-                {
-                    detail += sep + FormatElapsed(_stopwatch.Elapsed);
-                }
-                return _successMessage + detail;
+                if (item.Kind != JobKind.Compress) { metrics.Add(FormatElapsed(_stopwatch.Elapsed)); }
+                // Deliberate 2-line layout: outcome on line 1, metrics (count ·
+                // size · time) on line 2. Keeps the result tidy regardless of how
+                // long the localized outcome line is, across all languages.
+                return metrics.Count == 0
+                    ? _successMessage
+                    : _successMessage + "\n" + string.Join(sep, metrics);
             default:
                 return _successMessage;
         }

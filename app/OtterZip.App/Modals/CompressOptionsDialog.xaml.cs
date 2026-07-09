@@ -57,12 +57,17 @@ public sealed partial class CompressOptionsDialog : Window
         TrySizeWindow(480, 500);
         AppWindow.Closing += OnAppWindowClosing;
         Progress.CloseRequested += (_, _) => Close();
-        // Auto-fit the window to the progress view whenever its content height
-        // changes (percent → multi-line done summary) so no dead space remains.
+        // Auto-fit the window to the progress view. SizeChanged covers the
+        // initial show; Settled re-fits after the (possibly multi-line) done
+        // summary renders, since a Top-aligned view clipped by the window would
+        // not fire SizeChanged when its content grows past the window.
         Progress.SizeChanged += (_, _) =>
         {
             if (Progress.Visibility == Visibility.Visible) { FitHeightToContent(500); }
         };
+        Progress.Settled += (_, _) => _dispatcher.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => { if (Progress.Visibility == Visibility.Visible) { FitHeightToContent(500); } });
 
         InitOptions();
     }
@@ -473,7 +478,9 @@ public sealed partial class CompressOptionsDialog : Window
         root.Measure(new Windows.Foundation.Size(widthDip, double.PositiveInfinity));
         int contentH = (int)Math.Ceiling(root.DesiredSize.Height);
         if (contentH <= 0) { return; }
-        TrySizeWindow(widthDip, Math.Clamp(contentH + 32, 150, 440));
+        // + title-bar/frame allowance (~44 DIP) — enough that the action-bar
+        // bottom padding survives (buttons aren't flush against the edge).
+        TrySizeWindow(widthDip, Math.Clamp(contentH + 44, 150, 440));
     }
 
     private void TrySizeWindow(int width, int height)

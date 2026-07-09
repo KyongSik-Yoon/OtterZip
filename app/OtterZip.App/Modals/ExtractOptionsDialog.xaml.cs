@@ -147,9 +147,17 @@ public sealed partial class ExtractOptionsDialog : Window
             });
             return;
         }
-        // Done / hard error: this archive is finished; advance the pointer
-        // so the progress view's Close button moves to the next archive
-        // (or closes the window when none remain).
+        // Done / hard error: the done summary is multi-line, and a Top-aligned
+        // view clipped by the (1-line-sized) window won't fire SizeChanged — so
+        // re-fit explicitly once the summary has rendered. Low priority runs
+        // after JobProgressView's own settled-UI enqueue; the measure uses an
+        // infinite height so the clipped state doesn't matter.
+        _dispatcher.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => { if (Progress.Visibility == Visibility.Visible) { FitHeightToContent(460); } });
+
+        // Advance the pointer so the progress view's Close button moves to the
+        // next archive (or closes the window when none remain).
         _index++;
     }
 
@@ -318,7 +326,9 @@ public sealed partial class ExtractOptionsDialog : Window
         root.Measure(new Windows.Foundation.Size(widthDip, double.PositiveInfinity));
         int contentH = (int)Math.Ceiling(root.DesiredSize.Height);
         if (contentH <= 0) { return; }
-        TrySizeWindow(widthDip, Math.Clamp(contentH + 32, 150, 440));
+        // + title-bar/frame allowance (~44 DIP) — enough that the action-bar
+        // bottom padding survives (buttons aren't flush against the edge).
+        TrySizeWindow(widthDip, Math.Clamp(contentH + 44, 150, 440));
     }
 
     private void TrySizeWindow(int width, int height)
