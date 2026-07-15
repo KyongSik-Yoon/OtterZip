@@ -72,7 +72,7 @@ Windows 10（版本 2004）或更高 · x64
 - `crates/**` — **MIT OR Apache-2.0**（Rust 双许可）
 - `app/**` — **GPL-3.0-or-later** (+ unRAR exception)
 
-详见 [LICENSE.md](../LICENSE.md)。
+详见 [LICENSING.md](../LICENSING.md)。
 
 ## 第三方声明
 

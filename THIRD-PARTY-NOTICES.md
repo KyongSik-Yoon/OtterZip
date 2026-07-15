@@ -34,7 +34,7 @@ and is not "free" by the Debian/FSF definition.
   RAR compression algorithm.
 - The explicit exception that permits distributing the GPL-licensed application
   linked with UnRAR is in [`app/LICENSE`](app/LICENSE); see also
-  [`LICENSE.md`](LICENSE.md) §2.
+  [`LICENSING.md`](LICENSING.md) §2.
 
 `cargo-about` reads crate metadata, so it cannot see the vendored UnRAR terms.
 **Keep this note when regenerating the file below.**

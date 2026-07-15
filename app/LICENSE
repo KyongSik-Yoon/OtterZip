@@ -46,4 +46,4 @@ Scope: this license applies to app/OtterZip.App, app/OtterZip.Interop,
 app/OtterZip.Shell and app/OtterZip.App.Tests.
 
 The Rust core under crates/** is licensed separately as MIT OR Apache-2.0.
-See ../LICENSE.md for the overview.
+See ../LICENSING.md for the overview.

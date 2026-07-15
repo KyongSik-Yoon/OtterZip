@@ -72,7 +72,7 @@ Windows 10（バージョン 2004）以降 · x64
 - `crates/**` — **MIT OR Apache-2.0**（Rust デュアルライセンス）
 - `app/**` — **GPL-3.0-or-later** (+ unRAR exception)
 
-詳細は [LICENSE.md](../LICENSE.md) をご覧ください。
+詳細は [LICENSING.md](../LICENSING.md) をご覧ください。
 
 ## サードパーティ通知
 

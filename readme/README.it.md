@@ -72,7 +72,7 @@ Windows 10 (versione 2004) o successivo · x64
 - `crates/**` — **MIT OR Apache-2.0** (doppia licenza Rust)
 - `app/**` — **GPL-3.0-or-later** (+ unRAR exception)
 
-Per i dettagli vedi [LICENSE.md](../LICENSE.md).
+Per i dettagli vedi [LICENSING.md](../LICENSING.md).
 
 ## Note su software di terze parti
 

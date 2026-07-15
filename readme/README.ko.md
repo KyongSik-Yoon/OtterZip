@@ -72,7 +72,7 @@ Windows 10 (버전 2004) 이상 · x64
 - `crates/**` — **MIT OR Apache-2.0** (Rust 듀얼 라이선스)
 - `app/**` — **GPL-3.0-or-later** (+ unRAR exception)
 
-자세한 내용은 [LICENSE.md](../LICENSE.md)를 참고하십시오.
+자세한 내용은 [LICENSING.md](../LICENSING.md)를 참고하십시오.
 
 ## 서드파티 고지
 
