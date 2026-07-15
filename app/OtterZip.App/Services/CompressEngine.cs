@@ -249,12 +249,14 @@ internal static class CompressEngine
             "tar.gz" => (ArchiveFormat.TarGz,
                          store ? CompressionMethod.Store : CompressionMethod.Deflate,
                          ".tar.gz"),
-            "tar.bz2" => (ArchiveFormat.TarBz2,
-                          store ? CompressionMethod.Store : CompressionMethod.Bzip2,
-                          ".tar.bz2"),
-            "tar.xz" => (ArchiveFormat.TarXz,
-                         store ? CompressionMethod.Store : CompressionMethod.Lzma2,
-                         ".tar.xz"),
+            // No tar.bz2 / tar.xz arm on purpose. The core answers
+            // FeatureDisabled(".tar.bz2 / .tar.xz creation lands post-MVP") for
+            // both, so mapping them here only produced a job that failed at the
+            // FFI boundary -- which is exactly what shipped once three separate
+            // format dropdowns offered them. Anything this method cannot honour
+            // must fall to the ZIP arm below rather than reach the core, so a
+            // dropdown regression degrades instead of erroring. Add the arm back
+            // in the same change that adds the writer backend, never before.
             "xz" => (ArchiveFormat.Xz,
                      store ? CompressionMethod.Store : CompressionMethod.Lzma2,
                      ".xz"),

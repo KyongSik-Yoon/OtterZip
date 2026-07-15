@@ -88,12 +88,17 @@ public sealed partial class ProgressDialog : Window
             // Settings_DefaultFormat is stored as the UI tag ("ZIP",
             // "7Z", "TAR.GZ"); CompressEngine takes lowercase. Unknown
             // tags fall back to ZIP via the engine's _default arm.
+            //
+            // tar.bz2 / tar.xz are deliberately absent: the core rejects
+            // creating them (FeatureDisabled), and they were offered in the
+            // format dropdown long enough for the setting to be persisted.
+            // Mapping them here would hand the engine a format it refuses and
+            // fail the job, so a stale setting falls through to ZIP -- the
+            // same answer the settings panel and the options dialog now give.
             string? quickFormat = _request.QuickFormat;
             string defaultTag = SettingsService.Get<string>("Settings_DefaultFormat", "ZIP");
             string fallbackFormat = string.Equals(defaultTag, "7Z", StringComparison.OrdinalIgnoreCase) ? "7z"
                 : string.Equals(defaultTag, "TAR.GZ", StringComparison.OrdinalIgnoreCase) ? "tar.gz"
-                : string.Equals(defaultTag, "TAR.BZ2", StringComparison.OrdinalIgnoreCase) ? "tar.bz2"
-                : string.Equals(defaultTag, "TAR.XZ", StringComparison.OrdinalIgnoreCase) ? "tar.xz"
                 : string.Equals(defaultTag, "TAR", StringComparison.OrdinalIgnoreCase) ? "tar"
                 : string.Equals(defaultTag, "ZIPX", StringComparison.OrdinalIgnoreCase) ? "zipx"
                 : string.Equals(defaultTag, "XZ", StringComparison.OrdinalIgnoreCase) ? "xz"

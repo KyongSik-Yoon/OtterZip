@@ -78,8 +78,6 @@
                             <ComboBoxItem x:Uid="ConfigPanel_FormatSevenZ" Tag="7z" />
                             <ComboBoxItem x:Uid="ConfigPanel_FormatTar" Tag="tar" />
                             <ComboBoxItem x:Uid="ConfigPanel_FormatTarGz" Tag="tar.gz" />
-                            <ComboBoxItem x:Uid="ConfigPanel_FormatTarBz2" Tag="tar.bz2" />
-                            <ComboBoxItem x:Uid="ConfigPanel_FormatTarXz" Tag="tar.xz" />
                             <ComboBoxItem x:Uid="ConfigPanel_FormatXz" Tag="xz" />
                             <ComboBoxItem x:Uid="ConfigPanel_FormatZipx" Tag="zipx" />
                         </ComboBox>

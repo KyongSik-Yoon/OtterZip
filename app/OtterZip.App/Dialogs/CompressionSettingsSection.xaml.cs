@@ -50,13 +50,24 @@ public sealed partial class CompressionSettingsSection : UserControl
         DeleteSourceAfterCompressCheck.IsOn = SettingsService.Get<bool>("Settings_DeleteSourceAfterCompress", false);
     }
 
-    private static int SelectFormatIndex(string format)
+    /// <summary>
+    /// Resolves a stored format tag to its position in the combo by matching
+    /// Tag, so the two cannot fall out of step. The previous hard-coded index
+    /// table silently mismapped: it never listed xz or zipx, so choosing either
+    /// as the default reopened the panel showing ZIP.
+    /// </summary>
+    private int SelectFormatIndex(string format)
     {
-        if (string.Equals(format, "7z", StringComparison.Ordinal)) return 1;
-        if (string.Equals(format, "tar", StringComparison.Ordinal)) return 2;
-        if (string.Equals(format, "tar.gz", StringComparison.Ordinal)) return 3;
-        if (string.Equals(format, "tar.bz2", StringComparison.Ordinal)) return 4;
-        if (string.Equals(format, "tar.xz", StringComparison.Ordinal)) return 5;
+        for (int i = 0; i < DefaultFormatCombo.Items.Count; i++)
+        {
+            if (DefaultFormatCombo.Items[i] is ComboBoxItem item
+                && item.Tag is string tag
+                && string.Equals(tag, format, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
         return 0;
     }
 
