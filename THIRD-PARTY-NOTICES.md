@@ -17,6 +17,28 @@ own license; the full license texts follow.
 - **Unicode License v3** — 1 component(s)
 - **bzip2 and libbzip2 License v1.0.6** — 1 component(s)
 
+## Important note on UnRAR (not covered correctly by the generated list below)
+
+The generated list below shows the `unrar` and `unrar_sys` crates with their
+**crate-level MIT license**. That MIT license covers the **Rust binding only**.
+
+Those crates embed the **UnRAR sources, © Alexander Roshal**, which carry their
+own separate license. In summary, the UnRAR license allows the sources to be used
+in any software to **handle** RAR archives free of charge, but **forbids using
+them to develop or re-create the RAR compression algorithm**. Because it imposes
+that extra restriction on recipients, the UnRAR license is **not GPL-compatible**
+and is not "free" by the Debian/FSF definition.
+
+- **OtterZip uses UnRAR to EXTRACT RAR archives only. OtterZip never creates RAR
+  archives**, and the UnRAR code here must not be used to develop or re-create the
+  RAR compression algorithm.
+- The explicit exception that permits distributing the GPL-licensed application
+  linked with UnRAR is in [`app/LICENSE`](app/LICENSE); see also
+  [`LICENSE.md`](LICENSE.md) §2.
+
+`cargo-about` reads crate metadata, so it cannot see the vendored UnRAR terms.
+**Keep this note when regenerating the file below.**
+
 ---
 
 ## Apache License 2.0

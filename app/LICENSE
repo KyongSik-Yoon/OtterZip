@@ -1,89 +1,49 @@
-OtterZip Application — Proprietary License
-Copyright (c) 2026 LumiBear Studio. All Rights Reserved.
+OtterZip Application (app/**)
+Copyright (C) 2026 LumiBear Studio
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+The full license text is in ../COPYING.
+
+================================================================================
+UnRAR EXCEPTION
+================================================================================
+
+As a special exception, LumiBear Studio, the copyright holder of this program,
+gives you permission to link this program with the UnRAR code -- reached through
+the `unrar` and `unrar_sys` crates, which embed UnRAR sources
+(C) Alexander Roshal -- and to distribute the resulting combined work, provided
+that you also comply with the UnRAR license terms for the UnRAR portions.
+
+This exception is necessary because the UnRAR license is NOT compatible with the
+GNU GPL: it forbids using the UnRAR sources to develop or re-create the RAR
+compression algorithm, which is a restriction the GPL does not allow to be
+imposed on recipients. The exception exists solely so that the combined work may
+be distributed, and it follows the approach 7-Zip uses ("GNU LGPL with unRAR
+restriction").
+
+OtterZip uses UnRAR to EXTRACT RAR archives only. OtterZip never creates RAR
+archives, and the UnRAR code in this project must not be used to develop or
+re-create the RAR compression algorithm.
+
+If you modify this program, you may extend this exception to your version of the
+program, but you are not obliged to do so. If you do not wish to do so, delete
+this exception statement from your version.
 
 ================================================================================
 
-이 라이선스는 OtterZip 저장소의 `app/` 디렉터리 하위에 있는 모든 소스 코드,
-XAML, 에셋, 아이콘, 브랜드 자산, 구성 파일, 문서(이하 "본 소프트웨어")에
-적용됩니다.
+Scope: this license applies to app/OtterZip.App, app/OtterZip.Interop,
+app/OtterZip.Shell and app/OtterZip.App.Tests.
 
-1. 권리 유보
-   본 소프트웨어의 모든 저작권, 영업비밀, 특허, 상표권, 기타 모든 지적 재산권은
-   저작권자에게 유보됩니다.
-
-2. 금지 사항
-   저작권자의 사전 서면 허가 없이 다음 행위를 금지합니다:
-   (a) 본 소프트웨어의 복제, 수정, 번역, 파생물 작성
-   (b) 재배포, 재판매, 대여, 리스, 재라이선스
-   (c) 공개 전시, 공개 실행
-   (d) 역공학(리버스 엔지니어링), 디컴파일, 디스어셈블
-      (단, 해당 행위를 제한하는 것이 관할 법에 의해 금지되는 범위는 제외)
-   (e) 저작권 고지, 상표, 라이선스 고지의 제거 또는 변경
-
-3. 제3자 구성요소
-   본 소프트웨어에는 Rust 코어(`crates/**`, `MIT OR Apache-2.0`) 및 기타 제3자
-   오픈소스 라이브러리가 동적 링크 또는 번들로 포함됩니다. 해당 구성요소의
-   라이선스 전문은 저장소 루트의 `THIRD-PARTY-NOTICES.md` 및 각 구성요소의
-   라이선스 파일을 참조하십시오. 본 Proprietary 라이선스는 제3자 오픈소스
-   구성요소에는 적용되지 않습니다.
-
-4. 상표
-   "OtterZip"이라는 명칭, 관련 로고, 아이콘은 저작권자의 상표이며, 본 라이선스에
-   의해 사용 권한이 부여되지 않습니다. Rust 코어를 오픈소스 라이선스에 따라
-   포크하여 파생 제품을 만드는 경우에도 "OtterZip" 명칭 및 이와 혼동될 수 있는
-   명칭의 사용은 허가되지 않습니다.
-
-5. 무보증
-   본 소프트웨어는 "있는 그대로(AS IS)" 제공되며, 명시적·묵시적 일체의 보증 없이
-   제공됩니다. 저작권자는 본 소프트웨어의 사용 또는 사용 불가로 인해 발생하는
-   어떠한 손해에 대해서도 책임지지 않습니다.
-
-6. 라이선스 계약
-   상업적 사용, OEM 배포, 또는 본 라이선스의 금지 사항을 넘어서는 사용에 대한
-   라이선스가 필요한 경우 저작권자에게 문의하십시오.
-
-================================================================================
-OtterZip Application — Proprietary License
-Copyright (c) 2026 LumiBear Studio. All Rights Reserved.
-
-This license applies to all source code, XAML, assets, icons, brand materials,
-configuration files, and documentation located under the `app/` directory of
-the OtterZip repository (collectively, the "Software").
-
-1. Reservation of Rights
-   All copyrights, trade secrets, patents, trademarks, and other intellectual
-   property rights in the Software are reserved by the copyright holder.
-
-2. Prohibited Acts
-   Without prior written permission of the copyright holder, you may NOT:
-   (a) copy, modify, translate, or create derivative works of the Software;
-   (b) redistribute, resell, rent, lease, or sublicense the Software;
-   (c) publicly display or publicly perform the Software;
-   (d) reverse engineer, decompile, or disassemble the Software, except to
-       the extent such restrictions are prohibited by applicable law;
-   (e) remove or alter any copyright, trademark, or license notices.
-
-3. Third-Party Components
-   The Software incorporates, by dynamic linking or bundling, the Rust core
-   crates (`crates/**`, licensed under `MIT OR Apache-2.0`) and other
-   third-party open-source libraries. The full text of those licenses is
-   provided in `THIRD-PARTY-NOTICES.md` at the repository root and in each
-   component's license file. This Proprietary License does NOT apply to
-   such third-party open-source components.
-
-4. Trademarks
-   "OtterZip" and associated logos and icons are trademarks of the copyright
-   holder. No trademark rights are granted by this License. Use of the
-   "OtterZip" name (or confusingly similar names) in any fork or derivative
-   work — even one based solely on the openly licensed Rust core — is not
-   permitted.
-
-5. No Warranty
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-   OR IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
-   CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OR INABILITY
-   TO USE THE SOFTWARE.
-
-6. Commercial Licensing
-   For commercial use, OEM distribution, or any use beyond the prohibitions
-   set forth in this License, please contact the copyright holder.
+The Rust core under crates/** is licensed separately as MIT OR Apache-2.0.
+See ../LICENSE.md for the overview.
