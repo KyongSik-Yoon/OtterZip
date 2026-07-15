@@ -46,8 +46,29 @@ if (-not $Msix) {
 }
 
 if (-not (Test-Path $Pfx))  { throw "PFX not found: $Pfx — run tools\dev-cert.ps1 first." }
-if (-not (Test-Path $Cer))  { throw "CER not found: $Cer — run tools\dev-cert.ps1 first." }
 if (-not (Test-Path $Msix)) { throw "MSIX not found: $Msix" }
+
+# The cert we trust below MUST be the one the PFX signs with further down.
+# Deriving it from the PFX is the only way to guarantee that. A separate
+# build\dev-cert.cer used to be the default here and silently went stale
+# (CN=SpanZIP) once the pfx was reissued as CN=A55D3041-... : trusting it
+# authorised nothing, so a fresh machine's install failed with 0x800B0109
+# while this one worked off the already-trusted cert. -Cer still overrides,
+# but is verified against the PFX rather than taken on faith.
+$pfxPublic = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+    $Pfx, $Password, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
+if ($Cer) {
+    if (-not (Test-Path $Cer)) { throw "CER not found: $Cer" }
+    $given = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($Cer)
+    if ($given.Thumbprint -ne $pfxPublic.Thumbprint) {
+        throw ("-Cer does not match the signing PFX and would trust the wrong certificate.`n" +
+               "  cer: $($given.Subject) [$($given.Thumbprint)]`n" +
+               "  pfx: $($pfxPublic.Subject) [$($pfxPublic.Thumbprint)]")
+    }
+} else {
+    $Cer = Join-Path ([System.IO.Path]::GetTempPath()) ("otterzip-signer-" + $pfxPublic.Thumbprint + ".cer")
+    [IO.File]::WriteAllBytes($Cer, $pfxPublic.Export('Cert'))
+}
 
 # 0. Admin check — adding to LocalMachine stores is privileged.
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -59,6 +80,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Write-Host "MSIX:  $Msix"
 Write-Host "PFX:   $Pfx"
 Write-Host "CER:   $Cer"
+Write-Host "SIGNER: $($pfxPublic.Subject) [$($pfxPublic.Thumbprint)]"
 Write-Host ""
 
 # 1. Trust the public cert — both Root (chain authority) and TrustedPeople
