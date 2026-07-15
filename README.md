@@ -1,102 +1,91 @@
+<div align="center">
+
+<img src="readme/images/otter.png" width="96" alt="OtterZip">
+
 # OtterZip
 
-> Fast archive tool — Rust core + WinUI 3 (Windows) + SwiftUI (macOS, planned).
-> Built for speed. Competes with 7-Zip, WinRAR, Bandizip, PeaZip.
+**The quiet archive tool for Windows.**
 
-[![Rust CI](https://github.com/otterzip/otterzip/actions/workflows/ci-rust.yml/badge.svg)](./.github/workflows/ci-rust.yml)
-[![.NET CI](https://github.com/otterzip/otterzip/actions/workflows/ci-dotnet.yml/badge.svg)](./.github/workflows/ci-dotnet.yml)
+Right-click to compress or extract. No ads, no accounts, no tracking.
 
----
+[**Website**](https://lumibearstudio.github.io/otterzip-web/) · [**Microsoft Store**](https://apps.microsoft.com/detail/9NWQNGGSWJCL) · [**Download**](https://github.com/LumiBearStudio/OtterZip/releases/latest/download/OtterZip_x64_installer.zip)
 
-## 현재 상태 (2026-04-23, Phase 6 Sprint 0)
+English · [한국어](readme/README.ko.md) · [日本語](readme/README.ja.md) · [中文](readme/README.zh.md) · [Deutsch](readme/README.de.md) · [Français](readme/README.fr.md) · [Español](readme/README.es.md) · [Português](readme/README.pt.md) · [Русский](readme/README.ru.md) · [Italiano](readme/README.it.md)
 
-- ✅ Phase 1 — 용어·스키마·FFI 계약
-- ✅ Phase 2 — 컨벤션·구조
-- ✅ Phase 3 — 목업 (텍스트 스펙 + HTML)
-- ✅ Phase 4 — API 레퍼런스 (Rust / FFI / 셸 확장)
-- ✅ Phase 5 — 디자인 토큰 + XAML 스켈레톤
-- ✅ **Phase 6 — 병렬 구현 완료** — Sprint 0~6 그린, MSIX 사이드로드 동작
-- ✅ Phase 7 — SEO/Security 하드닝 (path component 가드 / 다층 ZIP bomb / OWASP 셀프 점검)
-- ✅ Phase 8 — Review (gap 보고서 + 백로그 G1~G7 처리, ABI v5)
-- 🚧 Phase 9 — Deployment (사이드로드 / 자기서명 — 정식 채널 미정)
+</div>
 
-## 아키텍처
+<br>
 
-```
-┌────────────────────────┐
-│   WinUI 3 App (C#)     │  Native AOT, MSIX 패키징
-│   OtterZip.App          │  다국어/다크/라이트
-├────────────────────────┤
-│   OtterZip.Interop (C#) │  P/Invoke + SafeHandle
-├────────────────────────┤
-│   otterzip_ffi.dll (Rust)   │  C ABI (cbindgen 자동 생성)
-│   otterzip-ffi          │
-├────────────────────────┤
-│   otterzip-core (Rust)  │  Archive + 포맷 백엔드
-│                        │  libdeflate / zstd / liblzma / ...
-└────────────────────────┘
+<img src="readme/images/window.png" alt="OtterZip main window">
 
-┌────────────────────────┐
-│ OtterZip.Shell.dll      │  C++/WinRT · IExplorerCommand
-│ (Windows 셸 확장)      │  MSIX uap3:Extension 등록
-└────────────────────────┘
-```
+## Zip. Done.
 
-## 핵심 문서
+Right-click a file — it's zipped. Right-click an archive — it's out. You barely open the app.
 
-- [CLAUDE.md](CLAUDE.md) — Claude/개발자 작업 가이드
-- [CONVENTIONS.md](CONVENTIONS.md) — 코딩 컨벤션 종합
-- [LICENSE.md](LICENSE.md) — 오픈 코어 라이선스 구조
-- [docs/01-plan/](docs/01-plan/) — 스키마·성능·구조·라이선스
-- [docs/02-design/](docs/02-design/) — 디자인 철학·목업·토큰·시스템
-- [docs/03-api/](docs/03-api/) — Rust·FFI·셸 확장 레퍼런스
-- [docs/05-build/phase-6-plan.md](docs/05-build/phase-6-plan.md) — 현재 구현 계획
+## Why OtterZip
 
-## 개발 환경 셋업
+- **Right from Explorer** — compress and extract straight from the right-click menu. No window to open first.
+- **One thing, done well** — no modes, no clutter, no learning curve.
+- **No ads. No accounts. No tracking.** No bundles, no nagging, nothing to sign up for. Crash reports are strictly opt-in.
+- **A native core, quietly fast** — the engine is written in Rust. It does the work and doesn't leave you waiting.
+- **Looks like Windows, because it is** — built with C# and WinUI 3. A real native interface, not a web page in a window.
+- **Yours to tune** — light, dark, or follow system. Ten languages built in.
 
-### 요구사항
+## Install
 
-- **Windows 11** (또는 Windows 10 20H1+)
-- **Rust** (`rust-toolchain.toml`이 자동 설치)
-- **.NET 9 SDK** (`global.json`이 고정)
-- **Visual Studio 2022 17.12+** (Workloads: .NET desktop, C++ desktop, Windows App SDK)
-- **Windows App SDK 1.6+**
+### Microsoft Store — recommended
 
-### 빌드
+One-click install, and updates arrive automatically.
 
-```powershell
-# 1. Rust (네이티브 otterzip_ffi.dll)
-cargo build --workspace
+[Get it from the Microsoft Store](https://apps.microsoft.com/detail/9NWQNGGSWJCL)
 
-# 2. .NET (빌드 타깃이 Rust 산출물 자동 복사)
-dotnet build OtterZip.sln
+### Direct download — free
 
-# 3. (개발자) CLI로 smoke
-cargo run -p otterzip-cli
+1. Download [**OtterZip_x64_installer.zip**](https://github.com/LumiBearStudio/OtterZip/releases/latest/download/OtterZip_x64_installer.zip)
+2. Extract the zip.
+3. Right-click `Install.ps1` → **Run with PowerShell**, then accept the prompt.
 
-# 4. (개발자) 벤치
-cargo bench -p otterzip-core
-```
+The bundle is signed by LumiBear Studio rather than by the Store, so the first install registers our publisher certificate once — that is what the prompt is for. Step-by-step guide: [**How to install**](https://lumibearstudio.github.io/otterzip-web/install.html)
 
-### 실행
+Both channels are the exact same app.
 
-Visual Studio에서 `OtterZip.App`을 스타트업 프로젝트로 설정 후 F5.
+## Formats
 
-## 라이선스
+**Create** — ZIP · 7z · TAR · TAR.GZ
 
-- `crates/**` — **MIT OR Apache-2.0** (Rust 생태계 듀얼)
-- `app/**` — **Proprietary** (All Rights Reserved)
-- 자세히: [LICENSE.md](LICENSE.md)
+**Extract** — ZIP · 7z · RAR · TAR · TAR.GZ · GZ · BZ2 · XZ · ZST · LZ4 · ISO · CAB · JAR · APK · IPA and more
 
-## 제3자 고지
+AES-256 encryption and split (multi-volume) archives when you need them.
 
-- [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
-- 특히 **unrar** (© Alexander Roshal) — RAR 해제 전용
+## Sensible defaults, out of the box
 
-## 기여
+<img src="readme/images/settings.png" width="620" alt="OtterZip settings">
 
-현재는 코어 팀 비공개 기여. OSS 기여 오픈은 v0.2.0 이후 예정.
+Theme, language, overwrite rules and more — tuned however you like, and out of the way until you need it.
+
+## Requirements
+
+Windows 10 (version 2004) or later · x64
+
+## License
+
+- `crates/**` — **MIT OR Apache-2.0** (Rust dual license)
+- `app/**` — **GPL-3.0-or-later** (+ unRAR exception)
+
+See [LICENSE.md](LICENSE.md) for details.
+
+## Third-party notices
+
+See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). In particular **unrar** (© Alexander Roshal) is used for RAR extraction only — OtterZip never creates RAR archives.
+
+## Privacy
+
+No ads, no accounts, no tracking. Crash reporting is opt-in and off by default. See [PRIVACY.md](PRIVACY.md).
 
 ---
 
-**성능 규약:** 세상에서 가장 빠르지는 않다. 하지만 **경쟁 아카이브 GUI 도구보다는 빠르다.** 측정: Silesia corpus 기준. ([docs/01-plan/performance.md](docs/01-plan/performance.md))
+<div align="center">
+
+© 2026 LumiBear Studio
+
+</div>
