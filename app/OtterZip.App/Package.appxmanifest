@@ -30,7 +30,7 @@
   -->
   <Identity Name="LumiBearStudio.OtterZip"
             Publisher="CN=A55D3041-E7F5-46CB-8707-AD9C81D7CB43"
-            Version="1.1.8.0" />
+            Version="1.1.10.0" />
 
   <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000"
                     PhonePublisherId="00000000-0000-0000-0000-000000000000" />
@@ -877,68 +877,18 @@
       </Extensions>
 
     </Application>
-
-    <!--
-      Public CLI surface. A SECOND Application element whose Executable
-      is the bundled console binary `otterzip-cli.exe` (staged by the
-      IncludeOtterZipCliInPackage csproj Target — named -cli to avoid a
-      case-insensitive payload clash with the GUI host OtterZip.exe).
-      The windows.appExecutionAlias extension registers `otterzip.exe`
-      as a reparse-point stub in %LOCALAPPDATA%\Microsoft\WindowsApps
-      (on the default user PATH), so a NEW terminal resolves
-      `otterzip ...` to this binary.
-
-        * uap10:Subsystem="console" keeps stdio attached when launched
-          by name (a Rust binary is console-subsystem by default —
-          matches). It REQUIRES uap10:SupportsMultipleInstances="true".
-        * NO EntryPoint: with uap10:RuntimeBehavior="win32App" MakeAppx
-          rejects an explicit EntryPoint ("must not declare EntryPoint")
-          — same shape as the GUI App element above.
-        * Same uap10:TrustLevel mediumIL + RuntimeBehavior win32App pair
-          as the GUI App element (the proven, shell-surrogate-safe combo).
-        * The CLI IS listed in the Start menu ("OtterZip CLI"). We used to
-          hide it from the app list (it's a command, not a launchable app),
-          but the Store rejects an alias-only app with no app-list presence
-          as a "headless app" (needs the HeadlessAppBypass right we don't
-          hold): "package specifies a headless app...". Leaving the app-list
-          attribute at its default (shown) clears that validation error. Do
-          NOT re-add an app-list-hiding attribute here.
-
-      ⚠ Adding/altering <Application> elements has destabilised the shell
-      verb surrogate before (v0.16-18). After building, unpack the .msix
-      and confirm BOTH Application elements + this alias survived the
-      packaging tool's manifest rewrite, and re-verify the right-click
-      verbs still appear. If the shell breaks, reverting this element
-      alone restores it without touching the CLI binary.
-    -->
-    <Application Id="OtterZipCli"
-                 Executable="otterzip-cli.exe"
-                 uap10:TrustLevel="mediumIL"
-                 uap10:RuntimeBehavior="win32App"
-                 uap10:Subsystem="console"
-                 uap10:SupportsMultipleInstances="true">
-      <uap:VisualElements DisplayName="OtterZip CLI"
-                          Description="OtterZip command-line tool"
-                          BackgroundColor="transparent"
-                          Square150x150Logo="Assets\Square150x150Logo.png"
-                          Square44x44Logo="Assets\Square44x44Logo.png" />
-      <Extensions>
-        <uap5:Extension Category="windows.appExecutionAlias">
-          <uap5:AppExecutionAlias>
-            <uap5:ExecutionAlias Alias="otterzip.exe" />
-          </uap5:AppExecutionAlias>
-        </uap5:Extension>
-      </Extensions>
-    </Application>
   </Applications>
 
   <Capabilities>
+    <!-- runFullTrust ONLY — mirrors NanaZip (same packaged shell-extension
+         architecture, Store-published). The restricted virtualization-escape
+         capability was removed 2026-07-13: it had been added 2026-05-15 as a
+         guess while diagnosing a verb-registration silent-fail whose real
+         cause turned out to be the Application activation attributes; nothing
+         in the app or shell DLL escapes MSIX virtualization (settings/cache
+         live in the package's own ApplicationData), and Store certification
+         10.6.3 denied the capability request. -->
     <rescap:Capability Name="runFullTrust" />
-    <!-- PowerToys 패턴: shell extension IExplorerCommand handler 가
-         실제 HKCU / 사용자 폴더에 MSIX virtualization 없이 접근하도록
-         필요. 2026-05-15 verb registration silent-fail 진단 결과
-         추가. -->
-    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
 
 </Package>

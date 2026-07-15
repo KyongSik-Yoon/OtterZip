@@ -179,35 +179,6 @@
   </Target>
 
   <!--
-    Bundle the public CLI (otterzip.exe) into the MSIX so the
-    AppExecutionAlias in Package.appxmanifest can put it on PATH.
-    Mirrors IncludeShellExtensionInPackage: the Rust build is driven by
-    build-msix.bat (it cargo-builds otterzip-cli in release); this Target
-    only stages the artifact at the package root (Link="otterzip-cli.exe").
-    The exe is named otterzip-cli.exe (NOT otterzip.exe) to avoid a
-    case-insensitive payload collision with the WinUI host OtterZip.exe
-    (APPX1101). The manifest's second Application points its Executable
-    at otterzip-cli.exe and exposes the `otterzip` command via an
-    AppExecutionAlias. Workspace target dir is two levels up from this
-    csproj (app/OtterZip.App/ then repo root).
-  -->
-  <Target Name="IncludeOtterZipCliInPackage"
-          BeforeTargets="AssignTargetPaths;GetCopyToOutputDirectoryItems"
-          Condition="'$(WindowsPackageType)' != 'None'">
-    <PropertyGroup>
-      <_CliExe>$(MSBuildThisFileDirectory)..\..\target\release\otterzip-cli.exe</_CliExe>
-    </PropertyGroup>
-    <ItemGroup Condition="Exists('$(_CliExe)')">
-      <Content Include="$(_CliExe)"
-               Link="otterzip-cli.exe"
-               CopyToOutputDirectory="Always"
-               Visible="false" />
-    </ItemGroup>
-    <Warning Condition="!Exists('$(_CliExe)')"
-             Text="otterzip-cli.exe not found at $(_CliExe). The 'otterzip' command-line alias will be inactive. Build otterzip-cli first (cargo build -p otterzip-cli release)." />
-  </Target>
-
-  <!--
     Sprint 6 RC: keep the manifest under source control so MSIX packaging
     sees it, but only attach it when MSIX tooling is actually enabled.
     Unpackaged dev build (WindowsPackageType=None) ignores it.
