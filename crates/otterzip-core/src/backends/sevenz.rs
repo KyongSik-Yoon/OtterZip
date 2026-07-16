@@ -20,7 +20,7 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{self, BufWriter, Read};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use sevenz_rust2::{
@@ -193,7 +193,9 @@ impl SevenZBackend {
                 }
 
                 let out_path =
-                    match resolve_output_path_streaming(dest_root, &path_str, opts) {
+                    match crate::archive::__resolve_output_path_streaming(
+                        dest_root, &path_str, opts,
+                    ) {
                         Ok(p) => p,
                         Err(orig) => {
                             if opts.block_path_traversal {
@@ -355,43 +357,3 @@ fn map_sevenz_err_io(e: io::Error) -> sevenz_rust2::Error {
     sevenz_rust2::Error::Other(e.to_string().into())
 }
 
-fn resolve_output_path_streaming(
-    dest_root: &Path,
-    entry_path: &str,
-    opts: &crate::options::ExtractOptions,
-) -> std::result::Result<PathBuf, String> {
-    let as_path = Path::new(entry_path);
-    if opts.flatten_paths {
-        // Validate the flattened component and reject `file_name() == None`
-        // (entry is `.`/`..`/root) instead of falling back to the raw path —
-        // a bare `..` would otherwise escape dest_root (FFI-M2).
-        let name = match as_path.file_name() {
-            Some(n) => n,
-            None => return Err(entry_path.to_string()),
-        };
-        if crate::archive::__validate_component(&name.to_string_lossy()).is_err() {
-            return Err(entry_path.to_string());
-        }
-        return Ok(dest_root.join(name));
-    }
-    let mut out = dest_root.to_path_buf();
-    for comp in as_path.components() {
-        match comp {
-            Component::Normal(c) => {
-                let s = c.to_string_lossy();
-                if crate::archive::__validate_component(&s).is_err() {
-                    return Err(entry_path.to_string());
-                }
-                out.push(c);
-            }
-            Component::CurDir => {}
-            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
-                return Err(entry_path.to_string());
-            }
-        }
-    }
-    if !out.starts_with(dest_root) {
-        return Err(entry_path.to_string());
-    }
-    Ok(out)
-}

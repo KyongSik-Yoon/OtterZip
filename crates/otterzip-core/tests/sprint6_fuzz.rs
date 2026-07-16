@@ -349,3 +349,138 @@ proptest! {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// RAR corpus — `guard()`'s catch_unwind is the thing under test
+// ---------------------------------------------------------------------------
+//
+// RAR is the one backend where hostile input can reach an `.unwrap()` we do not
+// own. The `unrar` crate panics rather than erroring on input we must treat as
+// ordinary attacker data:
+//
+//   * `Code::from(c).unwrap()` (open_archive.rs:254/449/556) — the vendored
+//     library is unrar 7.x and defines `ERAR_LARGE_DICT = 25` (dll.hpp:22), but
+//     `unrar_sys`'s constants stop at `ERAR_BAD_PASSWORD = 24`, so
+//     `Code::from(25)` is `None`. RAR7 permits 64 GB dictionaries, so this is
+//     reachable from LEGITIMATE archives, not just crafted ones.
+//   * `EntryFlags::from_bits(..).unwrap()` on any unrecognised flag bit.
+//
+// `RarBackend::guard` wraps every entry point in `catch_unwind` to turn those
+// into a typed `Corrupted`. These tests are what keep that honest.
+//
+// TAXONOMY NOTE: `MissingVolume` and `PathTraversalBlocked` are RAR-reachable
+// and are NOT in the older taxonomies above — a truncated RAR really does
+// surface as `MissingVolume` (the DLL's List pass runs an internal Skip and
+// reports EOpen@Process), and a mutated name really can trip the traversal
+// guard. Both are correct, classified answers, so the RAR set is its own.
+
+fn rar_fixture(name: &str) -> Vec<u8> {
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("rar")
+        .join(name);
+    fs::read(p).expect("rar fixture")
+}
+
+/// Every error a RAR may legitimately answer with. Anything outside this set is
+/// either a missed mapping or a panic that escaped `guard()`.
+fn assert_classified_rar_error(err: &OtterzipError, context: &str) {
+    match err {
+        OtterzipError::Io(_)
+        | OtterzipError::InvalidArgument(_)
+        | OtterzipError::UnsupportedFormat(_)
+        | OtterzipError::Corrupted { .. }
+        | OtterzipError::WrongPassword
+        | OtterzipError::FeatureDisabled(_)
+        | OtterzipError::BackendError(_)
+        // RAR-specific, and the reason this list is not the one above.
+        | OtterzipError::MissingVolume { .. }
+        | OtterzipError::PathTraversalBlocked(_)
+        | OtterzipError::ZipBombSuspected { .. } => {}
+        other => panic!("unexpected error variant from {context}: {other:?}"),
+    }
+}
+
+/// Drive a RAR all the way through open -> list -> extract. Panic-freedom is the
+/// invariant; `guard()` is what provides it.
+fn exercise_rar(bytes: &[u8]) {
+    let td = tempdir().unwrap();
+    let path = td.path().join("fuzz.rar");
+    fs::write(&path, bytes).unwrap();
+
+    let archive = match Archive::open(&path, OpenMode::Read) {
+        Ok(a) => a,
+        Err(e) => return assert_classified_rar_error(&e, "RAR open"),
+    };
+    match archive.entries() {
+        Ok(it) => {
+            for entry in it {
+                if let Err(e) = entry {
+                    assert_classified_rar_error(&e, "RAR listing");
+                    break;
+                }
+            }
+        }
+        Err(e) => assert_classified_rar_error(&e, "RAR listing"),
+    }
+    let opts = ExtractOptions {
+        destination: td.path().join("out"),
+        overwrite: OverwritePolicy::Always,
+        ..Default::default()
+    };
+    if let Err(e) = archive.extract_all::<fn(&Progress) -> bool>(&opts, None) {
+        assert_classified_rar_error(&e, "RAR extract");
+    }
+}
+
+#[test]
+fn rar_corpus_is_classified_not_panicking() {
+    // The shipped fixtures, unmutated: the happy path must stay inside the
+    // taxonomy too, or the mutation cases below prove nothing.
+    for name in [
+        "version.rar",
+        "crypted.rar",
+        "comment-hpw-password.rar",
+        "archive.part1.rar",
+        "solid.rar",
+        "unicode.rar",
+        "utf8.rar",
+        "traversal.rar",
+        "backslash.rar",
+        "absolute.rar",
+        "symlink.rar",
+    ] {
+        exercise_rar(&rar_fixture(name));
+    }
+}
+
+#[test]
+fn truncated_rar_does_not_panic() {
+    // Chop at every length. Truncation walks the header parser through every
+    // partial state, which is where an unrecognised flag/code byte gets read out
+    // of whatever happens to follow.
+    let full = rar_fixture("version.rar");
+    for len in 0..full.len() {
+        exercise_rar(&full[..len]);
+    }
+}
+
+proptest! {
+    // Deliberately modest: every case calls into the real unrar C++ and does
+    // filesystem I/O, so this is a soak-time knob, not a CI one.
+    #![proptest_config(ProptestConfig::with_cases(192))]
+
+    /// Single-byte mutations inside the header region of a real RAR. The 7-byte
+    /// marker is left intact so `detect` still routes to the RAR backend —
+    /// mutating it would just re-test `UnsupportedFormat` over and over.
+    #[test]
+    fn mutated_rar_header_never_panics(
+        offset in 7usize..59,
+        value in any::<u8>(),
+    ) {
+        let mut bytes = rar_fixture("version.rar");
+        bytes[offset] = value;
+        exercise_rar(&bytes);
+    }
+}

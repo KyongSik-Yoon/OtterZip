@@ -94,6 +94,10 @@ pub(crate) fn open_writer(
         ArchiveFormat::SevenZ => Ok(Box::new(SevenZWriterBackend::create(path, opts, password)?)),
         ArchiveFormat::TarGz => Ok(Box::new(TarGzWriterBackend::create(path, opts)?)),
         ArchiveFormat::Tar => Ok(Box::new(TarPlainWriterBackend::create(path, opts)?)),
+        // PERMANENT, and a LEGAL constraint rather than a scope decision: the
+        // read path (`backends/rar.rs`) links RARLAB's UnRAR sources, whose
+        // licence forbids using them to develop a RAR-compatible archiver. Do
+        // not "finish" this arm — there is no sprint in which it lands.
         ArchiveFormat::Rar => Err(OtterzipError::FeatureDisabled("RAR creation is forbidden")),
         ArchiveFormat::Gzip => Err(OtterzipError::FeatureDisabled(
             "single-stream gzip create (use .tar.gz)",

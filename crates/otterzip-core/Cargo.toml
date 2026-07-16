@@ -30,6 +30,10 @@ iso9660-rs  = { workspace = true }
 gpt_disk_io = { workspace = true }
 cab         = { workspace = true }
 cfb         = { workspace = true }
+# Production (not just dev) since the RAR backend: unrar writes files itself,
+# so `backends/rar.rs` stages every entry through a scratch TempDir created
+# inside dest_root before renaming it into place.
+tempfile    = { workspace = true }
 
 # Korean filename handling (always-on — tiny, no native deps).
 chardetng   = { workspace = true }
@@ -46,7 +50,6 @@ crc32fast   = { workspace = true }
 [dev-dependencies]
 proptest  = { workspace = true }
 criterion = { workspace = true }
-tempfile  = "3"
 zeroize   = { workspace = true }
 # `aes-crypto` is now a production feature on the workspace `zip` dep
 # (EncryptedZipWriterBackend uses with_aes_encryption), so the prior

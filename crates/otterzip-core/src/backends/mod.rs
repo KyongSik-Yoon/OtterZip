@@ -29,6 +29,11 @@ pub(crate) mod iso;
 pub(crate) mod lenient_zip;
 pub(crate) mod msi;
 pub(crate) mod multi_volume_reader;
+/// RAR — **extraction only, permanently**. The backend wraps RARLAB's UnRAR
+/// (via `unrar` / `unrar_sys`), whose licence forbids using the source to
+/// develop a RAR-compatible archiver; `writer::open_writer` keeps its
+/// `FeatureDisabled` arm for that reason, not for scope reasons.
+pub(crate) mod rar;
 pub(crate) mod sevenz;
 pub(crate) mod single_stream;
 pub(crate) mod spanned_zip;
@@ -321,7 +326,10 @@ pub(crate) fn open_backend(
         // re-open the inner data.tar.* with OtterZip for the
         // payload.
         F::Deb => Ok(Box::new(self::deb::DebBackend::open(path)?)),
-        F::Rar => Err(OtterzipError::FeatureDisabled("RAR backend (Sprint 4+)")),
+        // RAR read path. `RarBackend::open` normalises to the first volume, so
+        // a right-click on `foo.part03.rar` still extracts the whole set.
+        // Creation stays refused in `writer::open_writer` — licence, not scope.
+        F::Rar => Ok(Box::new(self::rar::RarBackend::open(path, password)?)),
         F::Unknown => Err(OtterzipError::UnsupportedFormat(None)),
     }
 }

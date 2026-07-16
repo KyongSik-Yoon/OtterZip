@@ -16,7 +16,7 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use crate::archive::ExtractWarning;
@@ -213,7 +213,11 @@ impl TarBackend {
             }
 
             let out_path =
-                match resolve_output_path_streaming(ctx.dest_root, &path_str, ctx.opts) {
+                match crate::archive::__resolve_output_path_streaming(
+                    ctx.dest_root,
+                    &path_str,
+                    ctx.opts,
+                ) {
                     Ok(p) => p,
                     Err(orig) => {
                         if ctx.opts.block_path_traversal {
@@ -334,46 +338,4 @@ fn map_tar_err(e: io::Error) -> OtterzipError {
     OtterzipError::Io(e)
 }
 
-fn resolve_output_path_streaming(
-    dest_root: &Path,
-    entry_path: &str,
-    opts: &crate::options::ExtractOptions,
-) -> std::result::Result<PathBuf, String> {
-    let as_path = Path::new(entry_path);
-    if opts.flatten_paths {
-        // Validate the flattened component like the non-flatten path, and
-        // reject the `file_name() == None` case (entry is `.`/`..`/root)
-        // instead of falling back to the raw entry_path — a bare `..` would
-        // otherwise resolve to dest_root.join("..") and escape (FFI-M2).
-        let name = match as_path.file_name() {
-            Some(n) => n,
-            None => return Err(entry_path.to_string()),
-        };
-        if crate::archive::__validate_component(&name.to_string_lossy()).is_err() {
-            return Err(entry_path.to_string());
-        }
-        return Ok(dest_root.join(name));
-    }
-
-    let mut out = dest_root.to_path_buf();
-    for comp in as_path.components() {
-        match comp {
-            Component::Normal(c) => {
-                let s = c.to_string_lossy();
-                if crate::archive::__validate_component(&s).is_err() {
-                    return Err(entry_path.to_string());
-                }
-                out.push(c);
-            }
-            Component::CurDir => {}
-            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
-                return Err(entry_path.to_string());
-            }
-        }
-    }
-    if !out.starts_with(dest_root) {
-        return Err(entry_path.to_string());
-    }
-    Ok(out)
-}
 

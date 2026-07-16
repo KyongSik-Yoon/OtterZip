@@ -1552,3 +1552,21 @@ fn resolve_output_path(
     }
     Ok(out)
 }
+
+/// [`resolve_output_path`] for the streaming backends, which want the rejected
+/// entry path back as a plain `String` (to choose between
+/// [`OtterzipError::PathTraversalBlocked`] and a clamped warning) rather than
+/// the serial loop's `Skipped`.
+///
+/// Crate-internal and shared on purpose: `sevenz` and `tar_family` each carried
+/// a byte-identical private copy, and `rar` was about to add a third — three
+/// chances for a security check to drift out of sync with the serial path's.
+/// There is exactly one rule set, here.
+#[doc(hidden)]
+pub(crate) fn __resolve_output_path_streaming(
+    dest_root: &Path,
+    entry_path: &str,
+    opts: &ExtractOptions,
+) -> std::result::Result<PathBuf, String> {
+    resolve_output_path(dest_root, entry_path, opts).map_err(|Skipped::Traversal(p)| p)
+}
