@@ -48,7 +48,7 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -557,44 +557,14 @@ fn set_first_err(
     canceled.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Resolve `entry_path` (an in-archive POSIX-style path) against
-/// `dest_root`, applying the path-traversal gate via
-/// [`crate::archive::__validate_component`]. Mirrors
-/// `ZipBackend::resolve_output_path` byte-for-byte so the parallel
-/// paths can't drift on traversal semantics.
-fn resolve_output_path(
-    dest_root: &Path,
-    entry_path: &str,
-    opts: &crate::options::ExtractOptions,
-) -> std::result::Result<PathBuf, String> {
-    let as_path = Path::new(entry_path);
-    if opts.flatten_paths {
-        let name = as_path
-            .file_name()
-            .map_or_else(|| PathBuf::from(entry_path), PathBuf::from);
-        return Ok(dest_root.join(name));
-    }
-    let mut out = dest_root.to_path_buf();
-    for comp in as_path.components() {
-        match comp {
-            Component::Normal(c) => {
-                let s = c.to_string_lossy();
-                if crate::archive::__validate_component(&s).is_err() {
-                    return Err(entry_path.to_string());
-                }
-                out.push(c);
-            }
-            Component::CurDir => {}
-            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
-                return Err(entry_path.to_string());
-            }
-        }
-    }
-    if !out.starts_with(dest_root) {
-        return Err(entry_path.to_string());
-    }
-    Ok(out)
-}
+// The lenient parser tolerates malformed ZIP *structure*; it must not relax the
+// output-path *security* gate. This private copy claimed to mirror the strict
+// backend "byte-for-byte" but had drifted: its flatten branch skipped
+// `__validate_component` entirely (NTFS ADS / reserved names passed through) and
+// fell back to the raw entry_path when `file_name()` was None (a bare `..`
+// escaped dest_root — the FFI-M2 hole). Route through the one shared resolver so
+// there is a single traversal ruleset for every backend.
+use crate::archive::__resolve_output_path_streaming as resolve_output_path;
 
 impl ArchiveBackend for LenientZipBackend {
     fn entries(&self) -> Result<Box<dyn Iterator<Item = Result<Entry>> + '_>> {

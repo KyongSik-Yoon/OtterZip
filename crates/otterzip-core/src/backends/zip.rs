@@ -11,7 +11,7 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use rayon::prelude::*;
@@ -828,46 +828,12 @@ fn open_local(source: &OpenSource) -> Result<ZipArchive<ZipReader>> {
     }
 }
 
-fn resolve_output_path(
-    dest_root: &Path,
-    entry_path: &str,
-    opts: &crate::options::ExtractOptions,
-) -> std::result::Result<PathBuf, String> {
-    let as_path = Path::new(entry_path);
-    if opts.flatten_paths {
-        // Validate the flattened component and reject `file_name() == None`
-        // (entry is `.`/`..`/root) instead of falling back to the raw path —
-        // a bare `..` would otherwise escape dest_root (FFI-M2).
-        let name = match as_path.file_name() {
-            Some(n) => n,
-            None => return Err(entry_path.to_string()),
-        };
-        if crate::archive::__validate_component(&name.to_string_lossy()).is_err() {
-            return Err(entry_path.to_string());
-        }
-        return Ok(dest_root.join(name));
-    }
-    let mut out = dest_root.to_path_buf();
-    for comp in as_path.components() {
-        match comp {
-            Component::Normal(c) => {
-                let s = c.to_string_lossy();
-                if crate::archive::__validate_component(&s).is_err() {
-                    return Err(entry_path.to_string());
-                }
-                out.push(c);
-            }
-            Component::CurDir => {}
-            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
-                return Err(entry_path.to_string());
-            }
-        }
-    }
-    if !out.starts_with(dest_root) {
-        return Err(entry_path.to_string());
-    }
-    Ok(out)
-}
+// The parallel ZIP path uses the ONE shared resolver in archive.rs rather than
+// a private copy. A byte-identical copy lived here and in lenient_zip.rs; when
+// the "resolves to dest_root itself" hole (an entry named "" / ".") was closed
+// in the shared function, a copy here would have kept the hole on the most-used
+// extract path. One ruleset, audited in one place.
+use crate::archive::__resolve_output_path_streaming as resolve_output_path;
 
 /// Read entry `i` and convert it to our POD. Pulling this out of the
 /// iterator body keeps the enumeration loop easy to audit. We use the

@@ -102,9 +102,15 @@ impl SingleStreamKind {
                 return name[..idx].to_string();
             }
         }
-        // No recognisable suffix — keep the original name; the caller will
-        // still receive a valid (if redundant) extracted file path.
-        name
+        // No recognisable suffix. Detection is by MAGIC, so a gzip stream named
+        // `logo.svgz` (or an extensionless `archive`) still reaches here — and
+        // returning the source name verbatim is a data-loss trap: extracting
+        // into the file's own folder derives an output path equal to the source
+        // and truncates it (proven: `logo.svgz` -> 0 bytes under the overwrite
+        // policy). Append a marker so the output can never collide with the
+        // source it was decoded from. A slightly odd name is a fair price for
+        // never destroying the original.
+        format!("{name}.out")
     }
 }
 

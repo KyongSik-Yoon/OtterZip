@@ -33,7 +33,7 @@
 //! the UI can show the right message.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -185,6 +185,7 @@ impl IsoBackend {
 
         let mut flat: Vec<IsoEntry> = Vec::new();
         let mut by_path: HashMap<String, usize> = HashMap::new();
+        let mut visited: HashSet<u32> = HashSet::new();
         walk_directory(
             &mut block_io,
             volume.root_extent_lba,
@@ -192,6 +193,7 @@ impl IsoBackend {
             String::new(),
             &mut flat,
             &mut by_path,
+            &mut visited,
             0,
         )
         .map_err(map_iso_err)?;
@@ -244,11 +246,16 @@ fn map_iso_err(e: Iso9660Error) -> OtterzipError {
 /// entry to `flat`. Skips the canonical `.` / `..` records.
 /// Hard cap on directory-tree recursion. ISO9660 proper limits nesting to 8
 /// levels; Joliet/Rock Ridge relax that, but 64 is generous headroom for any
-/// legitimate image. Without this bound a crafted image whose subdirectory
-/// record points `extent_lba` at itself or an ancestor recurses forever and
-/// overflows the stack — an unrecoverable abort (catch_unwind can't catch a
-/// stack overflow) reachable at Archive::open time (pre-1.0.1 review BK-C1).
+/// legitimate image. The depth cap alone stops *cycles* (a record pointing at
+/// an ancestor), but NOT amplification: N chained extents whose two records
+/// each point at the SAME next extent stay within the cap yet walk 2^N nodes —
+/// a ~120 KB image never returns and OOMs. `visited` dedups on `extent_lba`, so
+/// any directory extent is walked at most once and the DAG collapses to linear.
 const ISO_MAX_DEPTH: u32 = 64;
+
+/// Ceiling on total directory entries. A legitimate image is nowhere near this;
+/// it backstops any future amplification shape the extent-dedup doesn't cover.
+const ISO_MAX_ENTRIES: usize = 1_000_000;
 
 fn walk_directory(
     block_io: &mut FileBlockIo,
@@ -257,9 +264,19 @@ fn walk_directory(
     prefix: String,
     flat: &mut Vec<IsoEntry>,
     by_path: &mut HashMap<String, usize>,
+    visited: &mut HashSet<u32>,
     depth: u32,
 ) -> std::result::Result<(), Iso9660Error> {
     if depth > ISO_MAX_DEPTH {
+        return Err(Iso9660Error::InvalidDirectoryRecord);
+    }
+    // A directory extent already walked on any path is not re-walked: this is
+    // what bounds the crafted-DAG blow-up (keying on the extent, not the path,
+    // is the point — the same extent reached via A/A and A/B is one node).
+    if !visited.insert(extent_lba) {
+        return Ok(());
+    }
+    if flat.len() > ISO_MAX_ENTRIES {
         return Err(Iso9660Error::InvalidDirectoryRecord);
     }
     let iter = DirectoryIterator::new(block_io, extent_lba, extent_len);
@@ -300,6 +317,7 @@ fn walk_directory(
                 archive_path,
                 flat,
                 by_path,
+                visited,
                 depth + 1,
             )?;
         }

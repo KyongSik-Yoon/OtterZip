@@ -1796,13 +1796,18 @@ impl ArchiveWriter for XzWriterBackend {
 pub(crate) struct ZipxWriterBackend {
     inner: Option<zip::ZipWriter<BufWriter<File>>>,
     options: zip::write::SimpleFileOptions,
+    /// Owned password copy for AES-256. `with_aes_encryption` borrows it, and
+    /// `SimpleFileOptions` is `'static`, so the encrypted options must be built
+    /// per entry (see `add_entry`) rather than baked into `options`. `None`
+    /// means an unencrypted archive. Zeroized on drop.
+    password: Option<Zeroizing<String>>,
 }
 
 impl ZipxWriterBackend {
     fn create(
         path: &Path,
         opts: &CreateOptions,
-        _password: Option<&Zeroizing<String>>,
+        password: Option<&Zeroizing<String>>,
     ) -> Result<Self> {
         let file = File::create(path)?;
         let writer = zip::ZipWriter::new(BufWriter::new(file));
@@ -1847,9 +1852,20 @@ impl ZipxWriterBackend {
             .compression_level(Some(level))
             .unix_permissions(0o644);
 
+        // A password must not be silently dropped: the create facade hands one
+        // here for `.zipx` just as it does for `.zip`, and returning a plaintext
+        // archive after the user asked for encryption is worse than refusing.
+        // ZipCrypto is deliberately unsupported (weak); only AES-256 is honoured.
+        if opts.encryption == crate::format::EncryptionMethod::ZipCrypto {
+            return Err(OtterzipError::FeatureDisabled(
+                "ZipCrypto write is disabled; OtterZip encrypts with AES-256",
+            ));
+        }
+
         Ok(Self {
             inner: Some(writer),
             options,
+            password: password.cloned(),
         })
     }
 }
@@ -1867,14 +1883,28 @@ impl ArchiveWriter for ZipxWriterBackend {
             .as_mut()
             .ok_or(OtterzipError::InvalidArgument("zipx writer already committed"))?;
         if is_directory {
+            // Directory records carry no data, so no encryption layer.
             writer
                 .add_directory(entry_path, self.options)
                 .map_err(map_zip_err)?;
             return Ok(());
         }
-        writer
-            .start_file(entry_path, self.options)
-            .map_err(map_zip_err)?;
+        // Build the per-entry options fresh: `with_aes_encryption` borrows the
+        // password, and `SimpleFileOptions` is `'static`, so the encrypted form
+        // cannot be stored on the struct — it lives only for this call.
+        match self.password.as_ref() {
+            Some(pw) => {
+                let enc = self
+                    .options
+                    .with_aes_encryption(zip::AesMode::Aes256, pw.as_str());
+                writer.start_file(entry_path, enc).map_err(map_zip_err)?;
+            }
+            None => {
+                writer
+                    .start_file(entry_path, self.options)
+                    .map_err(map_zip_err)?;
+            }
+        }
         std::io::copy(data, writer)?;
         Ok(())
     }

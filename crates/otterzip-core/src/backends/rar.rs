@@ -91,7 +91,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use unrar::error::{Code, UnrarError, When};
-use unrar::{Archive as RarArchive, FileHeader};
+use unrar::{Archive as RarArchive, FileHeader, VolumeInfo};
 use zeroize::Zeroizing;
 
 use crate::archive::ExtractWarning;
@@ -296,11 +296,34 @@ impl RarBackend {
             Some(pw) => Some(password_bytes_for_unrar(pw)?),
             None => None,
         };
-        // Extraction MUST start at part 1. Pure STRING rewrite, zero FS calls
-        // (archive.rs:292-297 + the regex at :9-12): `foo.part04.rar` →
-        // `foo.part01.rar`, `foo.r02` → `foo.r01`, falling back to the input
-        // unchanged for single-part archives.
-        let first = RarArchive::new(path).first_part();
+        // A multi-volume set must be read from part 1, so a later part gets
+        // redirected there via `first_part()` (`foo.part04.rar` → `foo.part01.rar`).
+        // But the crate's volume regex is loose: it reads the trailing `.<digits>`
+        // of an ORDINARY name as a volume number, so a name-only rewrite turns
+        // `Backup.2024.rar` → `Backup.0001.rar` and `Season.2.rar` → `Season.1.rar`
+        // — opening a sibling the user never clicked (usually missing → a
+        // confusing failure; occasionally an UNRELATED archive that happens to
+        // exist → the wrong file's contents, silently).
+        //
+        // So we don't trust the name. We ask the archive itself: `volume_info()`
+        // reports whether the opened file IS a subsequent volume. Only then do we
+        // redirect. A standalone archive answers `None`/`First` and is opened as
+        // clicked, whatever digits its name ends in.
+        let opened_at_subsequent_volume = {
+            let probe = match password_acp.as_ref() {
+                Some(pw) => RarArchive::with_password(path, &pw[..]),
+                None => RarArchive::new(path),
+            };
+            matches!(
+                probe.open_for_listing().map(|a| a.volume_info()),
+                Ok(VolumeInfo::Subsequent)
+            )
+        };
+        let first = if opened_at_subsequent_volume {
+            RarArchive::new(path).first_part()
+        } else {
+            path.to_path_buf()
+        };
 
         let mut me = Self {
             path: first,

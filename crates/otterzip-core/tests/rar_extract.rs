@@ -403,31 +403,32 @@ fn missing_volume_extract_errors_and_leaves_no_scratch() {
 }
 
 #[test]
-fn non_first_volume_redirects_to_first_part() {
-    // Right-clicking `foo.part03.rar` must extract the whole set, so
-    // `RarBackend::open` applies `first_part()` once at open.
+fn renamed_standalone_archives_are_not_treated_as_a_volume_set() {
+    // Right-clicking a later part of a GENUINE set must read from part 1 — the
+    // redirect. But "genuine" is decided by `volume_info()` (the archive's own
+    // header flag), NOT by the name. This used to be name-only: two UNRELATED
+    // standalone archives renamed `redirect.part00001.rar` / `.part00002.rar`
+    // would make opening part 2 silently surface part 1's contents. That is the
+    // same loose-name rewrite that hijacked `Backup.2024.rar` → `Backup.0001.rar`
+    // (see `single_volume_name_with_trailing_digits_opens_itself`). A renamed
+    // standalone answers `volume_info() == None`, so it is opened as clicked.
     //
-    // Proven by redirection rather than by inspecting a path: part 1 and part 2
-    // are DIFFERENT archives with different entry names, and we open part 2. If
-    // the redirect is live we see part 1's entry; if it silently regressed we
-    // would see part 2's own, and the test could not be fooled by a `first_part`
-    // that returned its input unchanged.
+    // The redirect on a REAL subsequent volume is proven by
+    // `non_first_volume_without_its_first_part_errors`, which opens the genuine
+    // `100M.part00002.rar` fixture (`volume_info() == Subsequent`): the redirect
+    // fires, looks for the real part 1, and reports it missing.
     let td = tempdir().unwrap();
     let p1 = td.path().join("redirect.part00001.rar");
     let p2 = td.path().join("redirect.part00002.rar");
     std::fs::copy(fx("version.rar"), &p1).unwrap(); // entry: VERSION
-    std::fs::copy(fx("solid.rar"), &p2).unwrap(); // entry: .gitignore
+    std::fs::copy(fx("solid.rar"), &p2).unwrap(); // a DIFFERENT standalone archive
 
     let ar = Archive::open(&p2, OpenMode::Read).unwrap();
-    assert_eq!(
-        entry_paths(&ar),
-        vec!["VERSION"],
-        "opening part 2 must read part 1"
+    let names = entry_paths(&ar);
+    assert!(
+        !names.contains(&"VERSION".to_string()),
+        "renamed standalone part 2 must NOT surface part 1's contents; got {names:?}"
     );
-
-    let out = td.path().join("out");
-    extract(&ar, &out).unwrap();
-    assert_eq!(std::fs::read(out.join("VERSION")).unwrap(), b"unrar-0.4.0");
 }
 
 #[test]
@@ -670,4 +671,54 @@ fn rar_update_mode_refused() {
     // The other half of extract-only: no in-place modification either.
     let err = Archive::open(fx("version.rar"), OpenMode::Update).unwrap_err();
     assert!(matches!(err, OtterzipError::FeatureDisabled(_)), "got {err:?}");
+}
+
+// ---------------------------------------------------------------------------
+// C3: first_part() must not hijack an ordinary single-volume name that happens
+// to end in `.<digits>.rar`. The crate's volume regex treats `.2024` / `.2` as
+// a volume number, so `first_part()` rewrote `Backup.2024.rar` -> `Backup.0001.rar`.
+// We only trust the rewrite when the rewritten file actually exists on disk.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn single_volume_name_with_trailing_digits_opens_itself() {
+    // Each of these is a COMPLETE single-volume RAR (a copy of version.rar);
+    // only the name differs. Before the fix all but plain.rar failed because
+    // first_part() redirected to a `.0001`/`.1` sibling that does not exist.
+    let src = fx("version.rar");
+    for name in [
+        "plain.rar",
+        "Backup.2024.rar",
+        "report.2023.rar",
+        "Season.2.rar",
+        "v1.2.rar",
+    ] {
+        let td = tempdir().unwrap();
+        let p = td.path().join(name);
+        std::fs::copy(&src, &p).unwrap();
+        let ar = Archive::open(&p, OpenMode::Read)
+            .unwrap_or_else(|e| panic!("open {name}: {e:?}"));
+        let entries = ar.entries().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(entries.len(), 1, "{name}: wrong entry count");
+        assert_eq!(entries[0].path, "VERSION", "{name}: opened the wrong archive");
+    }
+}
+
+#[test]
+fn trailing_digit_name_does_not_open_an_unrelated_sibling() {
+    // The dangerous variant: `twin.2.rar` (contains VERSION) sits next to an
+    // UNRELATED `twin.1.rar`. Before the fix, opening twin.2.rar redirected to
+    // twin.1.rar and the user saw a different file's contents.
+    let td = tempdir().unwrap();
+    let clicked = td.path().join("twin.2.rar");
+    let sibling = td.path().join("twin.1.rar");
+    std::fs::copy(fx("version.rar"), &clicked).unwrap(); // has "VERSION"
+    std::fs::copy(fx("unicode.rar"), &sibling).unwrap(); // a different archive
+
+    let ar = Archive::open(&clicked, OpenMode::Read).unwrap();
+    let entries = ar.entries().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(
+        entries[0].path, "VERSION",
+        "opening twin.2.rar surfaced twin.1.rar's contents"
+    );
 }

@@ -228,3 +228,68 @@ fn writer_dispatch_rejects_remaining_unimplemented_formats() {
         }
     }
 }
+
+
+// =========================================================================
+// C2: encrypted ZIPX must actually encrypt, not silently write plaintext
+// =========================================================================
+
+#[test]
+fn zipx_with_password_is_actually_encrypted() {
+    // The bug: ZipxWriterBackend took a password parameter and dropped it
+    // (`_password`), so `otterzip a -p pw out.zipx` reported "Created" and
+    // produced a PLAINTEXT archive -- while the ZIP path encrypted correctly,
+    // making the inconsistency invisible. Verify the round-trip end to end.
+    let td = tempdir().unwrap();
+    let secret = b"PASSWORD-PROTECTED-CONTENT-DO-NOT-LEAK";
+    let src = write_source(td.path(), "secret.txt", secret);
+    let archive_path = td.path().join("enc.zipx");
+
+    let opts = CreateOptions {
+        format: ArchiveFormat::Zipx,
+        compression: CompressionMethod::Bzip2,
+        compression_level: 0,
+        // A password with no explicit method resolves to AES-256 in
+        // Archive::create (fail-closed), exactly like the CLI's `-p`.
+        password: Some(zeroize::Zeroizing::new("hunter2".to_string())),
+        ..CreateOptions::default()
+    };
+    let mut archive = Archive::create(&archive_path, opts).expect("create encrypted zipx");
+    archive.add_file(&src, "secret.txt").expect("add_file");
+    archive.commit().expect("commit");
+
+    // Read the archive with the STRICT `zip` crate -- the attacker's view.
+    let f = fs::File::open(&archive_path).unwrap();
+    let mut z = zip::ZipArchive::new(f).unwrap();
+
+    // 1. The central-directory entry must carry the encrypted flag.
+    {
+        let e = z.by_index_raw(0).unwrap();
+        assert!(e.encrypted(), "ZIPX entry is not marked encrypted -- plaintext leak");
+    }
+
+    // 2. Reading WITHOUT the password must fail.
+    match z.by_index(0) {
+        Err(zip::result::ZipError::UnsupportedArchive(_)) => {} // "Password required"
+        Ok(_) => panic!("entry read WITHOUT a password -- the payload is plaintext"),
+        Err(other) => panic!("unexpected error reading without password: {other:?}"),
+    }
+
+    // 3. Reading WITH the password returns the original bytes.
+    {
+        use std::io::Read as _;
+        let mut e = z.by_index_decrypt(0, b"hunter2").expect("decrypt with password");
+        let mut got = Vec::new();
+        e.read_to_end(&mut got).unwrap();
+        assert_eq!(got, secret, "decrypted payload mismatch");
+    }
+
+    // 4. OtterZip's own reader round-trips it too (password supplied at open).
+    let read = Archive::open_with_password(&archive_path, OpenMode::Read, "hunter2".to_owned())
+        .expect("re-open with password");
+    let dest = td.path().join("out");
+    fs::create_dir_all(&dest).unwrap();
+    read.extract_all::<NullSink>(&extract_opts(&dest), None)
+        .expect("extract with password");
+    assert_eq!(fs::read(dest.join("secret.txt")).unwrap(), secret);
+}
