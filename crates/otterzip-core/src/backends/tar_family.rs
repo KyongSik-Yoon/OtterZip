@@ -217,6 +217,7 @@ impl TarBackend {
                     ctx.dest_root,
                     &path_str,
                     ctx.opts,
+                    pod.is_directory,
                 ) {
                     Ok(p) => p,
                     Err(orig) => {

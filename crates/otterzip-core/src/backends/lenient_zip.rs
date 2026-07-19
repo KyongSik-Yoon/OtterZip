@@ -335,7 +335,12 @@ impl LenientZipBackend {
                         return;
                     }
 
-                    let out_path = match resolve_output_path(&dest_root, &entry.path, &opts) {
+                    let out_path = match resolve_output_path(
+                        &dest_root,
+                        &entry.path,
+                        &opts,
+                        entry.is_directory,
+                    ) {
                         Ok(p) => p,
                         Err(orig) => {
                             if opts.block_path_traversal {

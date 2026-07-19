@@ -194,7 +194,10 @@ impl SevenZBackend {
 
                 let out_path =
                     match crate::archive::__resolve_output_path_streaming(
-                        dest_root, &path_str, opts,
+                        dest_root,
+                        &path_str,
+                        opts,
+                        pod.is_directory,
                     ) {
                         Ok(p) => p,
                         Err(orig) => {

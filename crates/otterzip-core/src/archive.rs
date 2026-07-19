@@ -813,7 +813,8 @@ impl Archive {
                 continue;
             }
 
-            let out_path = match resolve_output_path(&dest_root, &entry.path, opts) {
+            let out_path = match resolve_output_path(&dest_root, &entry.path, opts, entry.is_directory)
+        {
                 Ok(p) => p,
                 Err(Skipped::Traversal(orig)) => {
                     if opts.block_path_traversal {
@@ -1509,6 +1510,7 @@ fn resolve_output_path(
     dest_root: &Path,
     entry_path: &str,
     opts: &ExtractOptions,
+    is_dir: bool,
 ) -> std::result::Result<PathBuf, Skipped> {
     // Normalize: ZIP uses forward-slashes always; replace for OS.
     let as_path = Path::new(entry_path);
@@ -1545,14 +1547,23 @@ fn resolve_output_path(
         }
     }
 
-    // An entry that resolves to dest_root ITSELF is not a file we can write:
-    // `""`, `.`, `./`, or any all-CurDir path produces zero Normal components,
-    // so the loop above inspects nothing and `out == dest_root`. Left to run,
-    // the caller opens the destination directory as a file — and under the
-    // keep-both policy `unique_extract_path(dest_root)` walks up to the PARENT
-    // and writes `<dest> (2)` OUTSIDE the destination root. Reject it here, in
-    // the one place every backend shares, so no component-free name escapes.
+    // `""`, `.`, `./` and any all-CurDir path produce zero Normal components,
+    // so the loop above inspects nothing and `out == dest_root`. What that
+    // means depends on the entry KIND:
+    //
+    //  * A DIRECTORY is the destination itself. `./` is the first member of
+    //    every `tar -cf x.tar -C dir .` — the most common tar idiom there is —
+    //    and creating a directory that already exists is a no-op. Accept it, or
+    //    those archives extract to nothing at all.
+    //  * A FILE cannot be the destination directory. Left to run, the caller
+    //    opens the destination as a file, and under the keep-both policy
+    //    `unique_extract_path(dest_root)` walks up to the PARENT and writes
+    //    `<dest> (2)` OUTSIDE the destination root — with every component
+    //    guard skipped, because there were no components to inspect.
     if out == dest_root {
+        if is_dir {
+            return Ok(out);
+        }
         return Err(Skipped::Traversal(entry_path.to_string()));
     }
 
@@ -1578,6 +1589,7 @@ pub(crate) fn __resolve_output_path_streaming(
     dest_root: &Path,
     entry_path: &str,
     opts: &ExtractOptions,
+    is_dir: bool,
 ) -> std::result::Result<PathBuf, String> {
-    resolve_output_path(dest_root, entry_path, opts).map_err(|Skipped::Traversal(p)| p)
+    resolve_output_path(dest_root, entry_path, opts, is_dir).map_err(|Skipped::Traversal(p)| p)
 }
