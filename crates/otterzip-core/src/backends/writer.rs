@@ -10,6 +10,7 @@
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use rayon::prelude::*;
 use zeroize::Zeroizing;
@@ -25,13 +26,18 @@ use crate::options::CreateOptions;
 /// Per-format archive writer. Object-safe — held behind a `Box<dyn>`
 /// inside [`crate::Archive`] when in create / update mode.
 pub(crate) trait ArchiveWriter: Send {
-    /// Append a single entry whose payload is read from `data`.
+    /// Append a single entry whose payload is read from `data`. `modified` is
+    /// the source file's modification time, or `None` when the caller has none
+    /// (directory placeholders, in-memory data). Backends that preserve
+    /// timestamps stamp the entry with it when `CreateOptions::preserve_timestamps`
+    /// was set at create; otherwise they fall back to wall-clock now.
     fn add_entry(
         &mut self,
         entry_path: &str,
         data: &mut dyn Read,
         size_hint: Option<u64>,
         is_directory: bool,
+        modified: Option<SystemTime>,
     ) -> Result<()>;
 
     /// Mark `entry_path` for removal at commit time. Default impl rejects
@@ -168,6 +174,10 @@ pub(crate) struct ZipWriterBackend {
     /// semantics — Phase 8 G7's full remove-after-commit path is
     /// still on the backlog.
     pending_removals: Vec<String>,
+    /// Captured at create time so both the serial `add_entry` and the parallel
+    /// `add_directory_bulk` stamp entries with their source mtime rather than
+    /// wall-clock now.
+    preserve_timestamps: bool,
 }
 
 impl ZipWriterBackend {
@@ -182,6 +192,7 @@ impl ZipWriterBackend {
             inner: Some(inner),
             compression,
             pending_removals: Vec::new(),
+            preserve_timestamps: opts.preserve_timestamps,
         })
     }
 
@@ -319,21 +330,23 @@ impl ArchiveWriter for ZipWriterBackend {
         data: &mut dyn Read,
         _size_hint: Option<u64>,
         is_directory: bool,
+        modified: Option<SystemTime>,
     ) -> Result<()> {
         // If this name was queued for removal earlier, treat the new add
         // as the user replacing the entry — drop the pending removal so
         // the new write survives commit.
         self.pending_removals.retain(|p| p != entry_path);
 
+        let stamp = if self.preserve_timestamps { modified } else { None };
         let writer = self
             .inner
             .as_mut()
             .ok_or(OtterzipError::InvalidArgument("zip writer already committed"))?;
         if is_directory {
-            writer.add_directory(entry_path)?;
+            writer.add_directory(entry_path, stamp)?;
             return Ok(());
         }
-        writer.add_entry(entry_path, data)?;
+        writer.add_entry(entry_path, data, stamp)?;
         Ok(())
     }
 
@@ -429,7 +442,9 @@ impl ArchiveWriter for ZipWriterBackend {
             }
         };
         for dir_name in &dirs {
-            if let Err(e) = writer.add_directory(dir_name) {
+            // Directory mtimes are not preserved on extract (a child write
+            // clobbers them), so the placeholder carries "now".
+            if let Err(e) = writer.add_directory(dir_name, None) {
                 return Some(Err(e));
             }
         }
@@ -472,6 +487,9 @@ impl ArchiveWriter for ZipWriterBackend {
         };
 
         let compression = self.compression;
+        let preserve_timestamps = self.preserve_timestamps;
+        // Batch-wide "now" fallback — used verbatim when preservation is off, or
+        // per-entry when a source file's own mtime can't be read.
         let (mtime, mdate) = zip_writer::now_dos_datetime();
         let mut entries_done: u32 = dirs.len() as u32;
         let mut bytes_done: u64 = 0;
@@ -569,7 +587,7 @@ impl ArchiveWriter for ZipWriterBackend {
                             .for_each_with(tx, |tx, (idx, (path, name))| {
                                 let result = zip_writer::prepare_entry(
                                     path, name, compression, mtime, mdate,
-                                    &bytes_in_flight_ref,
+                                    preserve_timestamps, &bytes_in_flight_ref,
                                 );
                                 let _ = tx.send((idx, result));
                             });
@@ -821,10 +839,15 @@ impl ArchiveWriter for ZipWriterBackend {
                 .ok()
                 .as_deref()
                 == Some("1");
-            let large_result = if use_pigz {
-                writer.add_entry_pigz_parallel(name, path, &pool, &mut on_tick)
+            let modified = if preserve_timestamps {
+                std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
             } else {
-                writer.add_entry_streaming(name, path, &mut on_tick)
+                None
+            };
+            let large_result = if use_pigz {
+                writer.add_entry_pigz_parallel(name, path, modified, &pool, &mut on_tick)
+            } else {
+                writer.add_entry_streaming(name, path, modified, &mut on_tick)
             };
             if let Err(e) = large_result {
                 return Some(Err(e));
@@ -894,6 +917,23 @@ pub(crate) struct SevenZWriterBackend {
     pending_entries: Vec<sevenz_rust2::ArchiveEntry>,
     pending_data: Vec<std::io::Cursor<Vec<u8>>>,
     pending_bytes: u64,
+    preserve_timestamps: bool,
+}
+
+/// Stamp a 7z entry with the source file's modification time (when known).
+/// `NtTime` is the 7z-native 100 ns-since-1601 representation; the read side
+/// (`sevenz::unix_seconds_from_filetime`) decodes the same field, so this
+/// round-trips. No-op when `modified` is `None` — the entry keeps 7z's default
+/// (no timestamp).
+fn apply_sevenz_mtime(entry: &mut sevenz_rust2::ArchiveEntry, modified: Option<SystemTime>) {
+    if let Some(t) = modified {
+        // `try_from` only succeeds for instants representable as NT time
+        // (>= 1601), so a success means the stamp is real — flag it present.
+        if let Ok(nt) = sevenz_rust2::NtTime::try_from(t) {
+            entry.last_modified_date = nt;
+            entry.has_last_modified_date = true;
+        }
+    }
 }
 
 impl SevenZWriterBackend {
@@ -988,6 +1028,7 @@ impl SevenZWriterBackend {
             pending_entries: Vec::new(),
             pending_data: Vec::new(),
             pending_bytes: 0,
+            preserve_timestamps: opts.preserve_timestamps,
         })
     }
 
@@ -1023,7 +1064,9 @@ impl ArchiveWriter for SevenZWriterBackend {
         data: &mut dyn Read,
         size_hint: Option<u64>,
         is_directory: bool,
+        modified: Option<SystemTime>,
     ) -> Result<()> {
+        let stamp = if self.preserve_timestamps { modified } else { None };
         // Directory entries are metadata-only. In solid mode flush the open
         // block first so the on-disk entry order is preserved.
         if is_directory {
@@ -1037,6 +1080,7 @@ impl ArchiveWriter for SevenZWriterBackend {
             let mut entry = sevenz_rust2::ArchiveEntry::default();
             entry.name = entry_path.to_string();
             entry.is_directory = true;
+            apply_sevenz_mtime(&mut entry, stamp);
             writer
                 .push_archive_entry::<&[u8]>(entry, None)
                 .map_err(map_sevenz_err)?;
@@ -1055,6 +1099,7 @@ impl ArchiveWriter for SevenZWriterBackend {
                 let mut entry = sevenz_rust2::ArchiveEntry::default();
                 entry.name = entry_path.to_string();
                 entry.size = size;
+                apply_sevenz_mtime(&mut entry, stamp);
                 writer
                     .push_archive_entry(entry, Some(&mut *data))
                     .map_err(map_sevenz_err)?;
@@ -1069,6 +1114,7 @@ impl ArchiveWriter for SevenZWriterBackend {
             // push_archive_entries trusts the entry's has_stream (unlike
             // push_archive_entry, which sets it from the Some(reader)).
             entry.has_stream = true;
+            apply_sevenz_mtime(&mut entry, stamp);
             self.pending_entries.push(entry);
             self.pending_data.push(std::io::Cursor::new(buf));
             self.pending_bytes += actual;
@@ -1090,6 +1136,7 @@ impl ArchiveWriter for SevenZWriterBackend {
         if let Some(size) = size_hint {
             entry.size = size;
         }
+        apply_sevenz_mtime(&mut entry, stamp);
         writer
             .push_archive_entry(entry, Some(&mut *data))
             .map_err(map_sevenz_err)?;
@@ -1165,6 +1212,7 @@ impl TarBuilderHolder {
         data: &mut dyn Read,
         size_hint: Option<u64>,
         is_directory: bool,
+        modified: Option<SystemTime>,
     ) -> Result<()> {
         let builder = self
             .builder
@@ -1172,6 +1220,16 @@ impl TarBuilderHolder {
             .ok_or(OtterzipError::InvalidArgument("tar writer already committed"))?;
 
         let mut header = tar::Header::new_gnu();
+        // Stamp the source mtime up front so every branch's `set_cksum` covers
+        // it. `Header::new_gnu` defaults mtime to 0 (1970) — without this a
+        // created tar loses every date, the same data loss the extract side
+        // guards against. `None` keeps that 1970 default (caller opted out).
+        if let Some(secs) = modified
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+        {
+            header.set_mtime(secs);
+        }
         // tar's set_path validates against `..` etc. — the entry_path is
         // caller-controlled but we accept that risk here: archives we
         // *create* are written from on-disk filenames the caller
@@ -1234,14 +1292,16 @@ impl TarBuilderHolder {
 
 pub(crate) struct TarPlainWriterBackend {
     holder: TarBuilderHolder,
+    preserve_timestamps: bool,
 }
 
 impl TarPlainWriterBackend {
-    fn create(path: &Path, _opts: &CreateOptions) -> Result<Self> {
+    fn create(path: &Path, opts: &CreateOptions) -> Result<Self> {
         let file = File::create(path)?;
         let inner: Box<dyn TarSink> = Box::new(BufWriter::new(file));
         Ok(Self {
             holder: TarBuilderHolder::new(inner),
+            preserve_timestamps: opts.preserve_timestamps,
         })
     }
 }
@@ -1253,8 +1313,11 @@ impl ArchiveWriter for TarPlainWriterBackend {
         data: &mut dyn Read,
         size_hint: Option<u64>,
         is_directory: bool,
+        modified: Option<SystemTime>,
     ) -> Result<()> {
-        self.holder.add(entry_path, data, size_hint, is_directory)
+        let stamp = if self.preserve_timestamps { modified } else { None };
+        self.holder
+            .add(entry_path, data, size_hint, is_directory, stamp)
     }
 
     fn commit(self: Box<Self>) -> Result<()> {
@@ -1267,6 +1330,7 @@ impl ArchiveWriter for TarPlainWriterBackend {
 
 pub(crate) struct TarGzWriterBackend {
     holder: TarBuilderHolder,
+    preserve_timestamps: bool,
 }
 
 impl TarGzWriterBackend {
@@ -1280,6 +1344,7 @@ impl TarGzWriterBackend {
         let inner: Box<dyn TarSink> = Box::new(gz);
         Ok(Self {
             holder: TarBuilderHolder::new(inner),
+            preserve_timestamps: opts.preserve_timestamps,
         })
     }
 }
@@ -1291,8 +1356,11 @@ impl ArchiveWriter for TarGzWriterBackend {
         data: &mut dyn Read,
         size_hint: Option<u64>,
         is_directory: bool,
+        modified: Option<SystemTime>,
     ) -> Result<()> {
-        self.holder.add(entry_path, data, size_hint, is_directory)
+        let stamp = if self.preserve_timestamps { modified } else { None };
+        self.holder
+            .add(entry_path, data, size_hint, is_directory, stamp)
     }
 
     fn commit(self: Box<Self>) -> Result<()> {
@@ -1558,6 +1626,7 @@ fn walk(
                     &mut std::io::empty(),
                     Some(0),
                     true,
+                    meta.modified().ok(),
                 )?;
             }
             // Push children in reverse so pop order matches alphabetical
@@ -1586,6 +1655,7 @@ fn walk(
             &current,
             &entry_name,
             meta.len(),
+            meta.modified().ok(),
             state,
             snapshot_template,
             &mut *progress,
@@ -1599,6 +1669,7 @@ fn process_file_entry(
     file_path: &Path,
     entry_name: &str,
     file_size: u64,
+    modified: Option<SystemTime>,
     state: &mut WalkState,
     snapshot_template: crate::progress::Progress,
     progress: &mut dyn crate::progress::ProgressSink,
@@ -1612,7 +1683,8 @@ fn process_file_entry(
             snapshot: snapshot_template,
             sink: progress,
         };
-        write_result = writer.add_entry(entry_name, &mut counting, Some(file_size), false);
+        write_result =
+            writer.add_entry(entry_name, &mut counting, Some(file_size), false, modified);
     }
 
     match write_result {
@@ -1749,7 +1821,10 @@ impl ArchiveWriter for XzWriterBackend {
         data: &mut dyn Read,
         _size_hint: Option<u64>,
         is_directory: bool,
+        _modified: Option<SystemTime>,
     ) -> Result<()> {
+        // XZ is a raw single-stream codec with no per-entry metadata slot, so
+        // there is nowhere to record a modification time.
         if is_directory {
             return Err(OtterzipError::FeatureDisabled(
                 "XZ single-stream cannot encode directory entries",
@@ -1877,7 +1952,11 @@ impl ArchiveWriter for ZipxWriterBackend {
         data: &mut dyn Read,
         _size_hint: Option<u64>,
         is_directory: bool,
+        _modified: Option<SystemTime>,
     ) -> Result<()> {
+        // Timestamp preservation for the zip-rs-backed ZIPX writer is a
+        // follow-up: it needs a SystemTime → zip::DateTime civil conversion
+        // distinct from the in-tree DOS path. Mainstream ZIP/tar/7z preserve.
         let writer = self
             .inner
             .as_mut()
@@ -1992,7 +2071,11 @@ impl ArchiveWriter for EncryptedZipWriterBackend {
         data: &mut dyn Read,
         _size_hint: Option<u64>,
         is_directory: bool,
+        _modified: Option<SystemTime>,
     ) -> Result<()> {
+        // Same follow-up as the ZIPX writer: preserving timestamps through
+        // zip-rs needs a SystemTime → zip::DateTime conversion. Plain (unencrypted)
+        // ZIP goes through the in-tree writer, which does preserve.
         if is_directory {
             let opts = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
             let writer = self.inner.as_mut().ok_or(OtterzipError::InvalidArgument(

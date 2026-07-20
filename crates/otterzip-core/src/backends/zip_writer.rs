@@ -191,12 +191,12 @@ impl ZipFileWriter {
 
     /// Append a directory entry. ZIP convention: the name ends in
     /// `'/'` and the payload is empty. Method is always Stored.
-    pub(crate) fn add_directory(&mut self, name: &str) -> Result<()> {
+    pub(crate) fn add_directory(&mut self, name: &str, modified: Option<SystemTime>) -> Result<()> {
         let mut name_bytes = name.as_bytes().to_vec();
         if !name_bytes.ends_with(b"/") {
             name_bytes.push(b'/');
         }
-        let (mtime, mdate) = current_dos_datetime();
+        let (mtime, mdate) = dos_datetime_for(modified);
         let lfh_offset = self.cursor;
         write_lfh(
             &mut self.inner,
@@ -309,10 +309,11 @@ impl ZipFileWriter {
         &mut self,
         name: &str,
         source_path: &Path,
+        modified: Option<SystemTime>,
         progress: &mut dyn FnMut(u64) -> std::result::Result<(), OtterzipError>,
     ) -> Result<()> {
         let name_bytes = name.as_bytes().to_vec();
-        let (mtime, mdate) = current_dos_datetime();
+        let (mtime, mdate) = dos_datetime_for(modified);
         let file_size = std::fs::metadata(source_path)?.len();
         let lfh_offset = self.cursor;
         // ZIP64 escalation policy: any single dimension overflowing
@@ -555,9 +556,14 @@ impl ZipFileWriter {
     /// either staged into memory (small entries → libdeflater
     /// one-shot) or streamed through `flate2` with a seek-back
     /// LFH size/crc patch.
-    pub(crate) fn add_entry(&mut self, name: &str, data: &mut dyn Read) -> Result<()> {
+    pub(crate) fn add_entry(
+        &mut self,
+        name: &str,
+        data: &mut dyn Read,
+        modified: Option<SystemTime>,
+    ) -> Result<()> {
         let name_bytes = name.as_bytes().to_vec();
-        let (mtime, mdate) = current_dos_datetime();
+        let (mtime, mdate) = dos_datetime_for(modified);
         let lfh_offset = self.cursor;
 
         // Stage 1: collect the source bytes. For small entries we
@@ -1240,6 +1246,7 @@ impl ZipFileWriter {
         &mut self,
         name: &str,
         source_path: &Path,
+        modified: Option<SystemTime>,
         pool: &rayon::ThreadPool,
         progress: &mut dyn FnMut(u64) -> Result<()>,
     ) -> Result<()> {
@@ -1248,7 +1255,7 @@ impl ZipFileWriter {
                 // Stored doesn't benefit from parallel — defer to
                 // the existing streaming path which already runs at
                 // disk speed.
-                return self.add_entry_streaming(name, source_path, progress);
+                return self.add_entry_streaming(name, source_path, modified, progress);
             }
             Compression::Deflate { level } => level,
         };
@@ -1260,11 +1267,11 @@ impl ZipFileWriter {
         if is_incompressible_extension(name)
             || probe_is_incompressible(source_path, level)
         {
-            return self.add_entry_streaming(name, source_path, progress);
+            return self.add_entry_streaming(name, source_path, modified, progress);
         }
 
         let name_bytes = name.as_bytes().to_vec();
-        let (mtime, mdate) = current_dos_datetime();
+        let (mtime, mdate) = dos_datetime_for(modified);
         let lfh_offset = self.cursor;
 
         // Stage 1 — read the whole file into memory. Cheap on NVMe
@@ -1399,6 +1406,7 @@ pub(crate) fn prepare_entry(
     compression: Compression,
     mtime: u16,
     mdate: u16,
+    preserve_timestamps: bool,
     bytes_in_flight: &AtomicU64,
 ) -> Result<PreparedEntry> {
     // Chunked 1 MiB read with per-chunk atomic increment so the
@@ -1417,10 +1425,23 @@ pub(crate) fn prepare_entry(
     // never reallocates, so this is byte-for-byte equivalent in
     // memory cost to the previous `read_to_end` path.
     const READ_CHUNK: usize = 1 << 20; // 1 MiB
-    let cap = std::fs::metadata(file_path)
-        .ok()
+    // One metadata stat feeds both the reservation size and — when the caller
+    // asked to preserve timestamps — the DOS stamp derived from this file's own
+    // mtime (overriding the batch-wide "now" fallback the pipeline passes in).
+    let src_meta = std::fs::metadata(file_path).ok();
+    let cap = src_meta
+        .as_ref()
         .and_then(|m| usize::try_from(m.len()).ok())
         .unwrap_or(0);
+    let (mtime, mdate) = if preserve_timestamps {
+        src_meta
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .map(system_time_to_dos)
+            .unwrap_or((mtime, mdate))
+    } else {
+        (mtime, mdate)
+    };
     let mut input = Vec::with_capacity(cap);
     let mut f = File::open(file_path)?;
     let mut buf = vec![0u8; READ_CHUNK];
@@ -1529,13 +1550,14 @@ fn flate2_streaming(input: &[u8], level: u8) -> Result<Vec<u8>> {
     encoder.finish().map_err(OtterzipError::Io)
 }
 
-/// Current wall-clock time formatted as the DOS date + time pair
-/// ZIP stores. 2-second resolution, no timezone — interpret as
-/// local wall-clock (which is what every ZIP tool does in practice,
-/// despite the spec being silent on the matter).
-fn current_dos_datetime() -> (u16, u16) {
-    let now = SystemTime::now();
-    let secs = now
+/// An arbitrary instant formatted as the DOS (time, date) pair ZIP stores.
+/// 2-second resolution, clamped to the format's 1980-2107 window. The epoch
+/// seconds are fed straight through `epoch_to_civil` with no timezone shift —
+/// the read side (`lenient_zip::dos_time_to_system_time`) decodes the same
+/// fields the same way, so a source mtime round-trips byte-identically through
+/// create → extract.
+pub(crate) fn system_time_to_dos(t: SystemTime) -> (u16, u16) {
+    let secs = t
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
@@ -1546,6 +1568,25 @@ fn current_dos_datetime() -> (u16, u16) {
         | (day as u16);
     let dos_time = ((hour as u16) << 11) | ((minute as u16) << 5) | ((second / 2) as u16);
     (dos_time, dos_date)
+}
+
+/// The DOS (time, date) pair to stamp on an entry: the source file's `modified`
+/// instant when preservation is on and it is known, otherwise wall-clock now.
+/// Single decision point shared by every ZIP write path (serial, streaming,
+/// directory, parallel-prepared).
+pub(crate) fn dos_datetime_for(modified: Option<SystemTime>) -> (u16, u16) {
+    match modified {
+        Some(t) => system_time_to_dos(t),
+        None => current_dos_datetime(),
+    }
+}
+
+/// Current wall-clock time formatted as the DOS date + time pair
+/// ZIP stores. 2-second resolution, no timezone — interpret as
+/// local wall-clock (which is what every ZIP tool does in practice,
+/// despite the spec being silent on the matter).
+fn current_dos_datetime() -> (u16, u16) {
+    system_time_to_dos(SystemTime::now())
 }
 
 /// Inverse of Howard Hinnant's `days_from_civil` — turn an epoch
@@ -1606,7 +1647,8 @@ mod tests {
                 },
             )
             .unwrap();
-            w.add_entry("hello.txt", &mut Cursor::new(payload)).unwrap();
+            w.add_entry("hello.txt", &mut Cursor::new(payload), None)
+                .unwrap();
             w.finish().unwrap();
         }
         // Strict zip-rs cross-validate.
@@ -1696,7 +1738,7 @@ mod tests {
                 },
             )
             .unwrap();
-            w.add_entry_pigz_parallel("pigz_input.bin", &src, &pool, &mut |_| Ok(()))
+            w.add_entry_pigz_parallel("pigz_input.bin", &src, None, &pool, &mut |_| Ok(()))
                 .unwrap();
             w.finish().unwrap();
         }
@@ -1944,7 +1986,7 @@ mod tests {
                 },
             )
             .unwrap();
-            w.add_entry_pigz_parallel("pigz_1_5_gib.bin", &src, &pool, &mut |_| Ok(()))
+            w.add_entry_pigz_parallel("pigz_1_5_gib.bin", &src, None, &pool, &mut |_| Ok(()))
                 .unwrap();
             w.finish().unwrap();
         }
@@ -2092,6 +2134,7 @@ mod tests {
             w.add_entry_pigz_parallel(
                 "pigz_zip64.bin",
                 &pigz_src,
+                None,
                 &pool,
                 &mut |_| Ok(()),
             )
@@ -2145,7 +2188,7 @@ mod tests {
                 },
             )
             .unwrap();
-            w.add_entry_pigz_parallel("tiny.bin", &src, &pool, &mut |_| Ok(()))
+            w.add_entry_pigz_parallel("tiny.bin", &src, None, &pool, &mut |_| Ok(()))
                 .unwrap();
             w.finish().unwrap();
         }

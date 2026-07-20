@@ -339,9 +339,10 @@ impl Archive {
         let writer = self.writer_mut()?;
         let src = src.as_ref();
         let meta = fs::metadata(src)?;
+        let modified = meta.modified().ok();
         let file = fs::File::open(src)?;
         let mut reader = std::io::BufReader::new(file);
-        writer.add_entry(entry_path, &mut reader, Some(meta.len()), false)
+        writer.add_entry(entry_path, &mut reader, Some(meta.len()), false, modified)
     }
 
     /// Remove an entry by name from a write-mode archive. Phase 8 G7
