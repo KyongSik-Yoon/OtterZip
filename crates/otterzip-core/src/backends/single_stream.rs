@@ -147,9 +147,13 @@ impl SingleStreamBackend {
         let file = File::open(&self.path)?;
         let reader = BufReader::new(file);
         match self.kind {
-            SingleStreamKind::Gzip => Ok(Box::new(flate2::read::GzDecoder::new(reader))),
-            SingleStreamKind::Bzip2 => Ok(Box::new(bzip2::read::BzDecoder::new(reader))),
-            SingleStreamKind::Xz => Ok(Box::new(xz2::read::XzDecoder::new(reader))),
+            // MULTI-stream decoders — mirror the tar backend: concatenated
+            // members (`cat a.gz b.gz`, pbzip2, bgzip) decode fully instead of
+            // stopping after the first, and xz stream-padding is accepted. A
+            // plain one-member stream reads identically.
+            SingleStreamKind::Gzip => Ok(Box::new(flate2::read::MultiGzDecoder::new(reader))),
+            SingleStreamKind::Bzip2 => Ok(Box::new(bzip2::read::MultiBzDecoder::new(reader))),
+            SingleStreamKind::Xz => Ok(Box::new(xz2::read::XzDecoder::new_multi_decoder(reader))),
             // Raw LZMA1 (.lzma) — xz2 exposes `Stream::new_lzma_decoder`
             // which expects the legacy alone-format header. Wrap it
             // through `XzDecoder::new_stream` to keep the io::Read API.

@@ -104,9 +104,15 @@ impl TarBackend {
         let reader = BufReader::new(file);
         match self.compression {
             Compression::None => Ok(Box::new(reader)),
-            Compression::Gzip => Ok(Box::new(flate2::read::GzDecoder::new(reader))),
-            Compression::Bzip2 => Ok(Box::new(bzip2::read::BzDecoder::new(reader))),
-            Compression::Xz => Ok(Box::new(xz2::read::XzDecoder::new(reader))),
+            // MULTI-stream decoders: parallel compressors (pbzip2/lbzip2, bgzip,
+            // `cat a.gz b.gz`) emit concatenated members. Single-stream decoders
+            // silently drop everything past the first member — a silent data loss
+            // when the boundary lands on a 512-byte tar header. `tar::Archive`
+            // stops at its own end-of-archive marker, so a normal one-member
+            // .tar.gz reads identically (the decoder is never asked past member 1).
+            Compression::Gzip => Ok(Box::new(flate2::read::MultiGzDecoder::new(reader))),
+            Compression::Bzip2 => Ok(Box::new(bzip2::read::MultiBzDecoder::new(reader))),
+            Compression::Xz => Ok(Box::new(xz2::read::XzDecoder::new_multi_decoder(reader))),
             // PR-F4 — .tlz = tar + raw LZMA1. xz2 ships an explicit
             // LZMA1 (alone-format) decoder via `Stream::new_lzma_decoder`,
             // wrapped through `XzDecoder::new_stream` to keep the
