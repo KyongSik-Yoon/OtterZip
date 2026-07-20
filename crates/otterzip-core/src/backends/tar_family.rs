@@ -336,6 +336,58 @@ impl TarBackend {
                 out_path
             };
 
+            // Hard-link entry ('1'): size 0, its payload lives in the target
+            // entry that GNU/BSD tar always emits FIRST, so it is already on
+            // disk. Materialise the link (or a content copy when hard-linking
+            // is unavailable) instead of writing the 0 bytes the header carries
+            // — otherwise every hard-linked member (Linux rootfs, Docker layers,
+            // busybox applets) lands as an empty file with the content lost.
+            if entry.header().entry_type() == tar::EntryType::Link {
+                let target_rel = Self::decode_name(
+                    &entry.link_name_bytes().unwrap_or_default(),
+                    enc,
+                );
+                // The link name is attacker-controlled: route it through the
+                // same traversal guard as real entries so a `../` target can't
+                // alias a file outside dest_root.
+                let target_path = match crate::archive::__resolve_output_path_streaming(
+                    ctx.dest_root,
+                    &target_rel,
+                    ctx.opts,
+                    false,
+                ) {
+                    Ok(p) => p,
+                    Err(orig) => {
+                        if ctx.opts.block_path_traversal {
+                            return Err(OtterzipError::PathTraversalBlocked(orig));
+                        }
+                        ctx.report.warnings.push(ExtractWarning::PathTraversalClamped {
+                            original: orig,
+                            clamped: ctx.dest_root.to_path_buf(),
+                        });
+                        ctx.report.entries_skipped += 1;
+                        continue;
+                    }
+                };
+                if !target_path.exists() {
+                    // Malformed/reordered tar: the target was never extracted.
+                    // Skip rather than abort the whole run.
+                    ctx.report.warnings.push(ExtractWarning::SymlinkSkipped {
+                        path: path_str.clone(),
+                        target: target_rel,
+                    });
+                    ctx.report.entries_skipped += 1;
+                    continue;
+                }
+                if std::fs::hard_link(&target_path, &out_path).is_err() {
+                    // Cross-device or unsupported: fall back to a byte copy so
+                    // the content is still present (weaker semantics, same data).
+                    std::fs::copy(&target_path, &out_path)?;
+                }
+                ctx.report.entries_extracted += 1;
+                continue;
+            }
+
             let file = File::create(&out_path)?;
             let mut writer = BufWriter::new(file);
             // Bounded copy: enforces the absolute output-byte cap. tar's
