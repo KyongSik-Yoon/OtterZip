@@ -368,10 +368,26 @@ impl ArchiveBackend for IsoBackend {
             return Ok(0);
         }
         let mut block_io = self.block_io.borrow_mut();
-        let bytes = iso9660::read_file_vec(&mut *block_io, &iso_entry.file)
-            .map_err(map_iso_err)?;
-        out.write_all(&bytes)?;
-        Ok(bytes.len() as u64)
+        let file = &iso_entry.file;
+        // Clamp the declared size to what the image physically holds BEFORE
+        // sizing the buffer. `size` comes from the directory record's
+        // unvalidated u32 data_length, and `read_file_vec` does
+        // `vec![0u8; size]` up front — so a ~40 KB ISO declaring 4 GiB would
+        // force a multi-GiB zeroed commit before the sector read fails past
+        // EOF. A legitimate entry fits inside the image (extent + size ≤ the
+        // volume), so `safe == file.size` and extraction stays byte-identical;
+        // only a crafted over-declaration is capped.
+        let available = block_io
+            .num_blocks
+            .saturating_sub(u64::from(file.extent_lba))
+            .saturating_mul(SECTOR_SIZE as u64);
+        let safe = file.size.min(available);
+        let cap = usize::try_from(safe).unwrap_or(usize::MAX);
+        let mut buf = vec![0u8; cap];
+        let n = iso9660::read_file(&mut *block_io, file, &mut buf).map_err(map_iso_err)?;
+        buf.truncate(n);
+        out.write_all(&buf)?;
+        Ok(n as u64)
     }
 
     fn open_entry_stream(&self, entry_path: &str) -> Result<Box<dyn Read + Send + '_>> {
