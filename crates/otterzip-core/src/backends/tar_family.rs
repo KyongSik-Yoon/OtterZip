@@ -144,6 +144,9 @@ impl TarBackend {
         let mut pods: Vec<Entry> = Vec::new();
         for entry in archive.entries().map_err(map_tar_err)? {
             let entry = entry.map_err(map_tar_err)?;
+            if is_pax_pseudo_entry(&entry) {
+                continue;
+            }
             raw_names.push(entry.path_bytes().into_owned());
             pods.push(tar_entry_to_pod(&entry)?); // path filled in below
         }
@@ -185,6 +188,9 @@ impl ArchiveBackend for TarBackend {
         let mut archive = tar::Archive::new(stream);
         for entry in archive.entries().map_err(map_tar_err)? {
             let mut entry = entry.map_err(map_tar_err)?;
+            if is_pax_pseudo_entry(&entry) {
+                continue;
+            }
             let path = Self::decode_name(&entry.path_bytes(), enc);
             if path == entry_path {
                 let written = io::copy(&mut entry, out)?;
@@ -230,6 +236,9 @@ impl TarBackend {
         let mut idx: u32 = 0;
         while let Some(entry_res) = iter.next() {
             let mut entry = entry_res.map_err(map_tar_err)?;
+            if is_pax_pseudo_entry(&entry) {
+                continue;
+            }
             let path_str = Self::decode_name(&entry.path_bytes(), enc);
 
             let mut pod = tar_entry_to_pod(&entry)?;
@@ -353,6 +362,20 @@ impl TarBackend {
 
         Ok(())
     }
+}
+
+/// A pax metadata pseudo-entry rather than real file content. The tar crate
+/// consumes per-file pax (`x`) and GNU long-name (`L`/`K`) headers itself, but
+/// yields the `g` pax_global_header — the one `git archive` / GitHub source
+/// tarballs place first — as an ordinary entry. Extracting it would drop a junk
+/// `pax_global_header` file at the destination root and, being a root-level file
+/// with no `/`, flip `detect_root_layout` to Flat and double-nest the real
+/// `proj-1.0/` tree. Filter it (and defensively `x`) out of every walk.
+fn is_pax_pseudo_entry<R: Read>(entry: &tar::Entry<'_, R>) -> bool {
+    matches!(
+        entry.header().entry_type(),
+        tar::EntryType::XGlobalHeader | tar::EntryType::XHeader
+    )
 }
 
 /// Build the pod for one tar entry EXCEPT its `path`, which the caller fills
