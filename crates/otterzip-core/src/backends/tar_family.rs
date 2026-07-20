@@ -335,6 +335,7 @@ impl TarBackend {
                 ctx.opts,
             )?;
             writer.flush()?;
+            crate::archive::__apply_extract_mtime(writer.get_ref(), pod.modified, ctx.opts);
             // PR-7A: MOTW propagation. Best-effort.
             if let Some(payload) = ctx.motw_payload {
                 if let Err(e) = crate::motw::write_zone_identifier(&out_path, payload) {

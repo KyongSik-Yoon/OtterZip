@@ -720,6 +720,7 @@ impl ZipBackend {
                 set_first_err(&first_err, &canceled, OtterzipError::Io(e));
                 return;
             }
+            crate::archive::__apply_extract_mtime(writer.get_ref(), entry.modified, &opts);
             // PR-7A: propagate Zone.Identifier from source archive.
             // Best-effort, never aborts the worker.
             if let Some(p) = motw_payload.as_ref() {

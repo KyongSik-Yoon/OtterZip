@@ -904,6 +904,8 @@ impl Archive {
                 self.reader()?.extract_entry(&entry.path, &mut writer)?
             };
             writer.flush()?;
+            // Restore the archived modification time before the handle drops.
+            __apply_extract_mtime(writer.get_ref(), entry.modified, opts);
             // PR-7A: propagate Zone.Identifier from source archive.
             // Best-effort — log + continue on ADS failure (likely
             // non-NTFS or owner mismatch). Never aborts extraction.
@@ -1290,6 +1292,28 @@ impl<W: std::io::Write + ?Sized> std::io::Write for CappedWriter<'_, W> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
+    }
+}
+
+/// Stamp an extracted file with the archived modification time. tar/zip/7z all
+/// preserve mtimes by default (so a restored backup keeps its dates); OtterZip
+/// defaults `preserve_timestamps` to true to match. Best-effort: a filesystem
+/// that can't represent the instant, or a permission quirk, must never fail the
+/// extraction — a wrong-but-present file beats a lost one. Call AFTER the final
+/// write+flush, on the still-open handle (no extra open). Directory mtimes are
+/// deliberately not set here — a child write would clobber them; that needs a
+/// post-pass and is a follow-up.
+#[doc(hidden)]
+pub(crate) fn __apply_extract_mtime(
+    file: &std::fs::File,
+    modified: Option<std::time::SystemTime>,
+    opts: &ExtractOptions,
+) {
+    if !opts.preserve_timestamps {
+        return;
+    }
+    if let Some(t) = modified {
+        let _ = file.set_modified(t);
     }
 }
 

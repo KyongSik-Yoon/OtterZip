@@ -272,6 +272,7 @@ impl SevenZBackend {
                 };
                 use std::io::Write as _;
                 writer.flush().map_err(map_sevenz_err_io)?;
+                crate::archive::__apply_extract_mtime(writer.get_ref(), pod.modified, opts);
                 // PR-7A: MOTW propagation. Best-effort.
                 if let Some(payload) = motw_payload {
                     if let Err(e) = crate::motw::write_zone_identifier(&out_path, payload) {

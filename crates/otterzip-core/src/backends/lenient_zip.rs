@@ -474,6 +474,7 @@ impl LenientZipBackend {
                         set_first_err(&first_err, &canceled, OtterzipError::Io(e));
                         return;
                     }
+                    crate::archive::__apply_extract_mtime(writer.get_ref(), entry.modified, &opts);
 
                     if let Some(p) = motw_payload.as_ref() {
                         if let Err(e) = crate::motw::write_zone_identifier(&out_path, &p[..]) {
