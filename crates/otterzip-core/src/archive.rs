@@ -412,10 +412,20 @@ impl Archive {
     /// Discard the in-progress writer. Removes the partially-written file
     /// so callers can retry without manual cleanup.
     pub fn rollback(mut self) -> Result<()> {
-        // Drop the writer so the file handle releases.
+        // Guard BEFORE deleting anything: rollback removes `self.path`, so on a
+        // read-mode handle it would delete the user's *source* archive. Refuse
+        // it exactly as commit() refuses a read handle. Taking the inner out
+        // also drops the writer, releasing its file handle.
+        match std::mem::replace(&mut self.inner, ArchiveInner::Reader(Box::new(EmptyBackend))) {
+            ArchiveInner::Writer(_) => {}
+            ArchiveInner::Reader(_) => {
+                return Err(OtterzipError::InvalidArgument(
+                    "rollback called on a read-mode archive",
+                ));
+            }
+        }
         let path = self.path.clone();
         let split = self.volume_size_bytes;
-        self.inner = ArchiveInner::Reader(Box::new(EmptyBackend));
         if split.is_some() {
             // Split writers target a temp file; segments only materialise on
             // a successful commit. Clear the temp plus any segments a partial
