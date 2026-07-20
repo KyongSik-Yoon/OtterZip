@@ -61,8 +61,8 @@ impl SevenZBackend {
         let reader = open_reader(&self.path, self.password.as_ref())?;
         let archive = reader.archive();
         let mut out = Vec::with_capacity(archive.files.len());
-        for f in &archive.files {
-            out.push(meta_to_entry(f));
+        for (i, f) in archive.files.iter().enumerate() {
+            out.push(meta_to_entry(f, sevenz_entry_encrypted(archive, i)));
         }
         Ok(out)
     }
@@ -123,6 +123,13 @@ impl SevenZBackend {
         let entries_meta = self.metadata_pass()?;
         let total_bytes: u64 = entries_meta.iter().map(|e| e.uncompressed_size).sum();
         let total_entries = u32::try_from(entries_meta.len()).unwrap_or(u32::MAX);
+        // Reuse the already-computed per-entry encryption (metadata_pass reads it
+        // from the block coders) so the extract-path pods stay consistent with
+        // the listing, keyed by name to avoid depending on callback ordering.
+        let enc_by_name: std::collections::HashMap<String, bool> = entries_meta
+            .iter()
+            .map(|e| (e.path.clone(), e.encryption != EncryptionMethod::None))
+            .collect();
 
         let mut reader = open_reader(&self.path, self.password.as_ref())?;
 
@@ -152,7 +159,10 @@ impl SevenZBackend {
                     return Ok(false);
                 }
                 let path_str = entry.name.clone();
-                let pod = meta_to_entry(entry);
+                let pod = meta_to_entry(
+                    entry,
+                    enc_by_name.get(&entry.name).copied().unwrap_or(false),
+                );
 
                 // Progress tick.
                 let bytes_processed = report_cell.borrow().bytes_written;
@@ -312,7 +322,29 @@ fn open_reader(path: &Path, password: Option<&Zeroizing<String>>) -> Result<Seve
     SevenZReader::open(path, pw).map_err(map_sevenz_err)
 }
 
-fn meta_to_entry(entry: &SevenZArchiveEntry) -> Entry {
+/// 7z method id for AES-256-SHA-256 (the only encryption 7z defines).
+const AES256_SHA256_METHOD_ID: &[u8] = &[0x06, 0xF1, 0x07, 0x01];
+
+/// Whether file `index`'s compression block carries an AES-256 coder. 7z stores
+/// encryption as a coder in the folder/block method chain, not on the file
+/// entry, so it can only be read via the archive's `stream_map` → `blocks`.
+/// Entries with no stream (directories, empty files) map to `None` → false.
+fn sevenz_entry_encrypted(archive: &sevenz_rust2::Archive, index: usize) -> bool {
+    archive
+        .stream_map
+        .file_block_index
+        .get(index)
+        .and_then(|b| *b)
+        .and_then(|bi| archive.blocks.get(bi))
+        .is_some_and(|block| {
+            block
+                .coders
+                .iter()
+                .any(|c| c.encoder_method_id() == AES256_SHA256_METHOD_ID)
+        })
+}
+
+fn meta_to_entry(entry: &SevenZArchiveEntry, encrypted: bool) -> Entry {
     let modified = unix_seconds_from_filetime(entry.last_modified_date.into())
         .and_then(|s| UNIX_EPOCH.checked_add(Duration::from_secs(s)));
     Entry {
@@ -322,7 +354,11 @@ fn meta_to_entry(entry: &SevenZArchiveEntry) -> Entry {
         uncompressed_size: entry.size,
         compressed_size: entry.compressed_size,
         compression: CompressionMethod::Lzma2,
-        encryption: EncryptionMethod::None,
+        encryption: if encrypted {
+            EncryptionMethod::Aes256
+        } else {
+            EncryptionMethod::None
+        },
         crc32: if entry.has_crc {
             Some(entry.crc as u32)
         } else {
