@@ -200,6 +200,20 @@ impl ArchiveBackend for DebBackend {
             .map_err(OtterzipError::Io)?;
         let mut limited = (&mut f).take(m.content_len);
         let written = io::copy(&mut limited, out).map_err(OtterzipError::Io)?;
+        // A member header can declare more content than the file actually holds
+        // (a half-downloaded .deb keeps the last header but not its bytes).
+        // `take` + `io::copy` silently stops at EOF and returns the short count,
+        // so without this check the truncated member extracts as an incomplete
+        // file and extract_all reports unqualified success.
+        if written < m.content_len {
+            return Err(OtterzipError::Corrupted {
+                reason: format!(
+                    "truncated ar member '{}': {} of {} declared bytes present",
+                    m.name, written, m.content_len
+                ),
+                entry: Some(m.name.clone()),
+            });
+        }
         Ok(written)
     }
 
