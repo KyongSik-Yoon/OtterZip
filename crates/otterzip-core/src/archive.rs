@@ -573,7 +573,18 @@ impl Archive {
                     // decrypted CRC would false-positive every encrypted entry
                     // as corrupt, which also made compress+verify falsely fail
                     // on password-protected archives (CLI-C1 / app verify).
-                    if entry.encryption == crate::format::EncryptionMethod::None {
+                    // RAR: unrar verified the entry's own hash during
+                    // extract_entry above (CRC32 for RAR3/RAR5, BLAKE2sp for
+                    // WinRAR -htb), so genuine corruption already landed in the
+                    // Err arm. Our stored crc32 comes from unrar's HashValue
+                    // union with NO type discriminator (unrar 0.5.8), so for a
+                    // BLAKE2sp archive it is the digest's first 4 bytes, not a
+                    // CRC32 — comparing it here false-flags every -htb RAR as
+                    // corrupt. Skip the comparison and trust unrar, exactly as
+                    // we already do for encrypted entries.
+                    if entry.encryption == crate::format::EncryptionMethod::None
+                        && self.format != ArchiveFormat::Rar
+                    {
                         if let Some(expected) = entry.crc32 {
                             if crc_sink.finalize() != expected {
                                 report.entries_corrupted += 1;
