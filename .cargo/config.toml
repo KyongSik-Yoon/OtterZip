@@ -1,0 +1,22 @@
+# Shipped binaries statically link the MSVC C runtime.
+#
+# The FFI cdylib (otterzip_ffi.dll) and the CLI otherwise import VCRUNTIME140.dll
+# / VCRUNTIME140_1.dll / MSVCP140.dll — the VC++ 2015-2022 Redistributable —
+# which is present on dev boxes (Visual Studio installs it) but NOT on a clean
+# Windows install. On such a machine the DLL fails to load and the app crashes
+# at launch with no error (failed Microsoft Store cert 2026-07-21, policy
+# 10.1.2.10, "product crashes at launch"). `+crt-static` folds the CRT into each
+# binary so there is no external redistributable dependency.
+#
+# It is applied via RUSTFLAGS in the RELEASE build (build-msix.bat), NOT enabled
+# globally here, because the C `zlib-ng` dependency (used by flate2 + the zip
+# crate for deflate speed) is compiled with the dynamic CRT by its CMake build
+# and its DEBUG-profile asserts (`_wassert`) break a static link of the test
+# executables. Release compiles those asserts out, so the shipped release build
+# links cleanly. To reproduce a redistributable build by hand:
+#
+#     RUSTFLAGS="-C target-feature=+crt-static" cargo build -p otterzip-ffi -p otterzip-cli --release
+#
+# Leaving the following enabled would break `cargo test`, so it stays commented:
+# [target.x86_64-pc-windows-msvc]
+# rustflags = ["-C", "target-feature=+crt-static"]
