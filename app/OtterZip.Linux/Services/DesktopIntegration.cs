@@ -20,7 +20,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Text;
 
@@ -163,11 +162,13 @@ public static class DesktopIntegration
         //    who found "Extract here" in their app grid would be confused.
         Write(
             Path.Combine(ApplicationsDir, AppId + ".ExtractHere.desktop"),
-            BuildVerbDesktopEntry(exec, icon, "Shell_ExtractHere_Title", "--invoke", "extract-here"),
+            BuildVerbDesktopEntry(exec, icon, "Shell_ExtractHere_Title", "Extract here", "--invoke", "extract-here"),
             log);
         Write(
             Path.Combine(ApplicationsDir, AppId + ".ExtractTo.desktop"),
-            BuildVerbDesktopEntry(exec, icon, "Shell_ExtractToSubfolder_Tooltip", "--invoke", "extract-to-subfolder"),
+            BuildVerbDesktopEntry(
+                exec, icon, "Shell_ExtractToSubfolder_Tooltip",
+                "Extract into a new folder", "--invoke", "extract-to-subfolder"),
             log);
 
         WriteMimeDefaults(log);
@@ -187,6 +188,7 @@ public static class DesktopIntegration
     public static string Uninstall()
     {
         var log = new StringBuilder();
+        RemoveMimeDefaults(log);
         foreach (string path in InstalledPaths())
         {
             try
@@ -226,7 +228,7 @@ public static class DesktopIntegration
             .Append("Version=1.5\n")
             .Append("Name=OtterZip\n")
             .Append("GenericName=Archive Manager\n")
-            .Append("Comment=").Append(Sanitize(Strings.Get("Shell_OtterzipMenu_Tooltip"))).Append('\n')
+            .Append("Comment=").Append(Localized("Shell_OtterzipMenu_Tooltip", "OtterZip — fast archive tool")).Append('\n')
             // %F, not %f: OtterZip accepts a multi-file selection and
             // compresses it into one archive. With %f the file manager would
             // launch one process per selected file and produce N archives.
@@ -243,21 +245,21 @@ public static class DesktopIntegration
             // to the Windows jump list.
             .Append("Actions=ExtractHere;ExtractTo;\n\n")
             .Append("[Desktop Action ExtractHere]\n")
-            .Append("Name=").Append(Sanitize(Strings.Get("Shell_ExtractHereSubmenu_Title"))).Append('\n')
+            .Append("Name=").Append(Localized("Shell_ExtractHereSubmenu_Title", "Extract here")).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke extract-here --files %F\n\n")
             .Append("[Desktop Action ExtractTo]\n")
-            .Append("Name=").Append(Sanitize(Strings.Get("Shell_ExtractSmart_Title"))).Append('\n')
+            .Append("Name=").Append(Localized("Shell_ExtractSmart_Title", "Smart extract")).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke extract-smart --files %F\n");
         return sb.ToString();
     }
 
     private static string BuildVerbDesktopEntry(
-        string exec, string icon, string nameKey, string flag, string verb)
+        string exec, string icon, string nameKey, string nameFallback, string flag, string verb)
     {
         return new StringBuilder()
             .Append("[Desktop Entry]\n")
             .Append("Type=Application\n")
-            .Append("Name=OtterZip — ").Append(Sanitize(Strings.Get(nameKey))).Append('\n')
+            .Append("Name=OtterZip — ").Append(Localized(nameKey, nameFallback)).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(' ').Append(flag).Append(' ')
             .Append(verb).Append(" --files %F\n")
             .Append("Icon=").Append(icon).Append('\n')
@@ -320,6 +322,51 @@ public static class DesktopIntegration
     }
 
     /// <summary>
+    /// Drop our entries back out of <c>mimeapps.list</c>.
+    /// </summary>
+    /// <remarks>
+    /// Deleting the `.desktop` files alone is not enough: `mimeapps.list`
+    /// would still name OtterZip as the default handler for two dozen archive
+    /// types, so every one of them would open with a program that is no
+    /// longer registered. Only lines pointing at OUR desktop file are
+    /// removed — the rest of the file is the user's associations for every
+    /// other file type on their system.
+    /// </remarks>
+    private static void RemoveMimeDefaults(StringBuilder log)
+    {
+        string path = Path.Combine(ConfigHome, "mimeapps.list");
+        if (!File.Exists(path))
+        {
+            return;
+        }
+        try
+        {
+            string desktopFile = AppId + ".desktop";
+            var kept = new List<string>();
+            bool changed = false;
+            foreach (string line in File.ReadAllLines(path))
+            {
+                if (line.EndsWith("=" + desktopFile, StringComparison.Ordinal))
+                {
+                    changed = true;
+                    continue;
+                }
+                kept.Add(line);
+            }
+            if (!changed)
+            {
+                return;
+            }
+            File.WriteAllLines(path, kept);
+            log.Append("removed OtterZip defaults from ").Append(path).Append('\n');
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Append("could not update ").Append(path).Append(": ").Append(ex.Message).Append('\n');
+        }
+    }
+
+    /// <summary>
     /// Nautilus (GNOME Files) reads executable scripts from
     /// <c>$XDG_DATA_HOME/nautilus/scripts</c> and lists them under
     /// "Scripts" in the right-click menu, passing the selection in
@@ -350,6 +397,7 @@ public static class DesktopIntegration
             EOF
             [ "$#" -gt 0 ] || exit 0
             exec %EXEC% --invoke %VERB% --files "$@"
+
             """;
 
         string body = Template.Replace("%EXEC%", Quote(exec), StringComparison.Ordinal);
@@ -380,14 +428,14 @@ public static class DesktopIntegration
                  with Thunar closed, or add them via Edit → Configure custom actions. -->
             <action>
               <icon>otterzip</icon>
-              <name>{Escape(Strings.Get("Shell_ExtractHere_Title"))}</name>
+              <name>{Escape(Localized("Shell_ExtractHere_Title", "Extract here"))}</name>
               <command>{Escape(exec)} --invoke extract-here --files %F</command>
               <patterns>*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.xz;*.zst;*.lz4;*.iso;*.cab;*.deb;*.jar;*.apk</patterns>
               <other-files/>
             </action>
             <action>
               <icon>otterzip</icon>
-              <name>{Escape(Strings.Get("Shell_CompressDialog_Title"))}</name>
+              <name>{Escape(Localized("Shell_CompressDialog_Title", "Compress with OtterZip…"))}</name>
               <command>{Escape(exec)} --invoke compress --files %F</command>
               <patterns>*</patterns>
               <directories/>
@@ -426,19 +474,19 @@ public static class DesktopIntegration
             .Append("X-KDE-Submenu=OtterZip\n")
             .Append("Actions=ExtractHere;ExtractSmart;CompressZip;Compress7z;\n\n")
             .Append("[Desktop Action ExtractHere]\n")
-            .Append("Name=").Append(Sanitize(Strings.Get("Shell_ExtractHere_Title"))).Append('\n')
+            .Append("Name=").Append(Localized("Shell_ExtractHere_Title", "Extract here")).Append('\n')
             .Append("Icon=").Append(icon).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke extract-here --files %F\n\n")
             .Append("[Desktop Action ExtractSmart]\n")
-            .Append("Name=").Append(Sanitize(Strings.Get("Shell_ExtractSmart_Title"))).Append('\n')
+            .Append("Name=").Append(Localized("Shell_ExtractSmart_Title", "Smart extract")).Append('\n')
             .Append("Icon=").Append(icon).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke extract-smart --files %F\n\n")
             .Append("[Desktop Action CompressZip]\n")
-            .Append("Name=").Append(Sanitize(Strings.Get("Shell_CompressZipQuick_Tooltip"))).Append('\n')
+            .Append("Name=").Append(QuickCompressLabel(".zip", "Z")).Append('\n')
             .Append("Icon=").Append(icon).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke compress-zip --files %F\n\n")
             .Append("[Desktop Action Compress7z]\n")
-            .Append("Name=").Append(Sanitize(Strings.Get("Shell_Compress7zQuick_Tooltip"))).Append('\n')
+            .Append("Name=").Append(QuickCompressLabel(".7z", "7")).Append('\n')
             .Append("Icon=").Append(icon).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke compress-7z --files %F\n")
             .ToString();
@@ -573,6 +621,48 @@ public static class DesktopIntegration
     }
 
     /// <summary>
+    /// Menu label for a quick-compress action, e.g. "Compress to .zip".
+    /// </summary>
+    /// <remarks>
+    /// Built from the catalogue's `Shell_CompressQuick_TitleFormat`
+    /// ("Compress to {0}{1} (&amp;{2})") with an empty stem, because a
+    /// desktop menu entry is written once at install time and cannot know
+    /// what the user will later select — unlike the Windows shell extension,
+    /// which builds its label per right-click and fills in the real stem.
+    /// Falls back to English when the catalogue is unavailable, for the same
+    /// reason <see cref="Localized"/> does.
+    /// </remarks>
+    private static string QuickCompressLabel(string extension, string accelerator)
+    {
+        const string Key = "Shell_CompressQuick_TitleFormat";
+        string template = Strings.Get(Key);
+        if (string.Equals(template, Key, StringComparison.Ordinal))
+        {
+            return "Compress to " + extension;
+        }
+        return Sanitize(Strings.Format(Key, string.Empty, extension, accelerator));
+    }
+
+    /// <summary>
+    /// Look up a catalogue string, falling back to plain English when the
+    /// catalogue is unavailable.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Strings.Get"/> returns the KEY when a lookup misses, which
+    /// is the right behaviour in the UI — a stray <c>Job_StatusStarting</c>
+    /// on screen is an obvious bug report. It is the wrong behaviour here:
+    /// these strings are written into files that outlive the process and
+    /// become the labels in the user's file-manager menu, so a miss would
+    /// leave <c>Comment=Shell_OtterzipMenu_Tooltip</c> sitting in their
+    /// desktop database until the next reinstall.
+    /// </remarks>
+    private static string Localized(string key, string fallback)
+    {
+        string value = Strings.Get(key);
+        return string.Equals(value, key, StringComparison.Ordinal) ? fallback : Sanitize(value);
+    }
+
+    /// <summary>
     /// Strip the Windows accelerator markers (<c>&amp;X</c>) and any newline
     /// out of a catalogue string before it goes into a key=value line — the
     /// `.desktop` format is line-oriented and has no notion of accelerators.
@@ -588,12 +678,21 @@ public static class DesktopIntegration
             }
             sb.Append(c);
         }
-        // Drop a trailing " (X)" accelerator hint left behind by the removal.
+        // Drop the trailing "(X)" accelerator hint the `&` removal leaves
+        // behind. Both spacings occur in the catalogue: English writes
+        // "Extract here (&X)", Korean writes "여기에 풀기(&X)" with no space,
+        // so matching on " (" alone left the Korean menus reading
+        // "여기에 풀기(X)". The hint is always exactly one character between
+        // the parentheses, which is what makes this safe to strip without
+        // eating a real parenthetical.
         string s = sb.ToString().Trim();
-        int paren = s.LastIndexOf(" (", StringComparison.Ordinal);
-        if (paren > 0 && s.EndsWith(')') && s.Length - paren <= 5)
+        if (s.Length >= 3 && s.EndsWith(')'))
         {
-            s = s[..paren];
+            int open = s.Length - 3;
+            if (s[open] == '(')
+            {
+                s = s[..open].TrimEnd();
+            }
         }
         return s;
     }
@@ -607,9 +706,7 @@ public static class DesktopIntegration
     /// Human-readable one-liner for the Settings pane, e.g.
     /// "Installed — 7 files under ~/.local/share".
     /// </summary>
-    public static string DescribeState() => string.Format(
-        CultureInfo.CurrentCulture,
-        IsInstalled ? "{0} — {1}" : "{0}",
-        IsInstalled ? Strings.Get("Settings_ShellIntegration_On") : Strings.Get("Settings_ShellIntegration_Off"),
-        ApplicationsDir);
+    public static string DescribeState() => IsInstalled
+        ? Strings.Format("Linux_IntegrationInstalled", ApplicationsDir)
+        : Strings.Get("Linux_IntegrationNotInstalled");
 }

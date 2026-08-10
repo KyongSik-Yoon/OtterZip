@@ -50,6 +50,78 @@ jobs:
         run: |
           dotnet publish app\OtterZip.App\OtterZip.App.csproj -c Release -r win-x64 /p:Platform=x64 /p:WarningsAsErrors=true
 
+  # The Linux front end. Built separately from OtterZip.sln because the
+  # solution carries the WinUI project and the C++/WinRT shell extension,
+  # neither of which can even be restored off Windows.
+  build-linux:
+    name: Build (Linux GUI + CLI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # libotterzip_ffi.so — the Interop project stages it as a native asset,
+      # and the GUI P/Invokes into it at startup.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p otterzip-ffi -p otterzip-cli
+
+      - name: Build
+        run: dotnet build app/OtterZip.Linux/OtterZip.Linux.csproj -c Release
+
+      # Packaging is the deliverable, so build it here rather than only at
+      # release time — a publish that only works on the release runner is a
+      # publish that breaks on the release runner.
+      - name: Package
+        run: tools/build-linux.sh --skip-rust
+
+      - name: Smoke test the CLI
+        run: |
+          set -eu
+          mkdir -p /tmp/smoke/src
+          printf '#!/bin/sh\ntrue\n' > /tmp/smoke/src/run.sh
+          chmod 755 /tmp/smoke/src/run.sh
+          echo 'hello' > /tmp/smoke/src/a.txt
+          ./target/release/otterzip-cli a /tmp/smoke/out.zip /tmp/smoke/src
+          ./target/release/otterzip-cli x /tmp/smoke/out.zip -o /tmp/smoke/out
+          # The execute bit surviving a round trip is the single behaviour
+          # that was silently broken before the Linux port, and it is invisible
+          # to any check that only compares file contents.
+          test -x /tmp/smoke/out/run.sh \
+            || { echo "::error::execute bit lost through the archive round trip"; exit 1; }
+
+      # A .desktop file with a syntax error is accepted silently by the
+      # desktop and simply never appears in the menu, so validate the
+      # generator's output rather than trusting it.
+      - name: Validate generated desktop entries
+        run: |
+          set -eu
+          sudo apt-get update -qq && sudo apt-get install -y -qq desktop-file-utils
+          export HOME=/tmp/dihome XDG_DATA_HOME=/tmp/dihome/.local/share XDG_CONFIG_HOME=/tmp/dihome/.config
+          mkdir -p "$HOME"
+          ./dist/linux-x64/otterzip-gui --install-integration
+          found=0
+          for f in "$XDG_DATA_HOME"/applications/*.desktop \
+                   "$XDG_DATA_HOME"/kio/servicemenus/*.desktop; do
+            [ -e "$f" ] || continue
+            found=$((found + 1))
+            desktop-file-validate "$f"
+          done
+          # A silent zero would let a broken installer pass this step.
+          test "$found" -gt 0 \
+            || { echo "::error::the integration installer wrote no desktop entries"; exit 1; }
+          ./dist/linux-x64/otterzip-gui --uninstall-integration
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: otterzip-linux-x64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
   hardcoding-scan:
     name: UI Hard rules (no literals)
     runs-on: ubuntu-latest

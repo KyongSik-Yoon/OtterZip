@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OtterZip.App", "app\OtterZi
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OtterZip.Interop", "app\OtterZip.Interop\OtterZip.Interop.csproj", "{28719299-077B-435E-9065-C1E878CDA1D1}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OtterZip.Linux", "app\OtterZip.Linux\OtterZip.Linux.csproj", "{7C1F2B4E-95D3-4B1A-9E62-3F0A5C8D71B4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -22,6 +24,10 @@ Global
 		{28719299-077B-435E-9065-C1E878CDA1D1}.Debug|x64.Build.0 = Debug|x64
 		{28719299-077B-435E-9065-C1E878CDA1D1}.Release|x64.ActiveCfg = Release|x64
 		{28719299-077B-435E-9065-C1E878CDA1D1}.Release|x64.Build.0 = Release|x64
+		{7C1F2B4E-95D3-4B1A-9E62-3F0A5C8D71B4}.Debug|x64.ActiveCfg = Debug|x64
+		{7C1F2B4E-95D3-4B1A-9E62-3F0A5C8D71B4}.Debug|x64.Build.0 = Debug|x64
+		{7C1F2B4E-95D3-4B1A-9E62-3F0A5C8D71B4}.Release|x64.ActiveCfg = Release|x64
+		{7C1F2B4E-95D3-4B1A-9E62-3F0A5C8D71B4}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

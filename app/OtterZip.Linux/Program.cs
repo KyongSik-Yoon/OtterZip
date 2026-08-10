@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Avalonia;
+using OtterZip.App.Services;
 
 namespace OtterZip.Linux;
 
@@ -26,6 +27,22 @@ internal static class Program
         if (args.Length > 0 && IsHelpFlag(args[0]))
         {
             Console.WriteLine(UsageText());
+            return 0;
+        }
+
+        // Desktop integration is normally driven from Settings → Integration,
+        // but a scripted install (a distro postinst, a dotfiles bootstrap, a
+        // CI check) has no display server to open a window on. These two
+        // flags run the same code path headlessly, before Avalonia starts,
+        // and print exactly which files were touched.
+        if (args.Length > 0 && string.Equals(args[0], "--install-integration", StringComparison.Ordinal))
+        {
+            Console.Write(DesktopIntegration.Install());
+            return 0;
+        }
+        if (args.Length > 0 && string.Equals(args[0], "--uninstall-integration", StringComparison.Ordinal))
+        {
+            Console.Write(DesktopIntegration.Uninstall());
             return 0;
         }
 
@@ -58,6 +75,12 @@ internal static class Program
           otterzip-gui --invoke VERB --files FILE [FILE…]
               Run a context-menu verb. Installed into the file manager by
               Settings → Integration.
+
+          otterzip-gui --install-integration
+          otterzip-gui --uninstall-integration
+              Add or remove the file-manager integration without opening the
+              window (for scripted installs). Writes only under your home
+              directory, and prints every path it touches.
 
         Verbs:
           extract-here          Extract next to the archive.

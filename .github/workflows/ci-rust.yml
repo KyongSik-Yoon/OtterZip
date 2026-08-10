@@ -54,6 +54,37 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --all-features
 
+  # The engine is the same code on both platforms, but the file-system
+  # semantics it sits on are not: path separators, POSIX permission bits,
+  # symlinks, and the OS locale all behave differently, and each of those had
+  # a real bug that only Linux could catch. Running the suite here is what
+  # keeps them fixed.
+  test-linux:
+    name: test (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features
+
+  # The legacy-codepage cascade used to fall back to the OS locale, so a
+  # CP949 archive decoded correctly on a Korean desktop and turned into
+  # replacement characters everywhere else. The fallback is content-based
+  # now; this job pins that by running the suite under a locale that can
+  # give the detector no help at all.
+  test-linux-c-locale:
+    name: test (linux, LC_ALL=C)
+    runs-on: ubuntu-latest
+    env:
+      LC_ALL: C
+      LANG: C
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features
+
   deny:
     name: cargo-deny (licenses, advisories)
     runs-on: ubuntu-latest

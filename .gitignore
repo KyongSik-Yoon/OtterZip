@@ -22,6 +22,8 @@ generated/
 
 # Publish output
 publish/
+# Linux distribution tree + tarballs (tools/build-linux.sh)
+/dist/
 AppPackages/
 BundleArtifacts/
 _pkginfo.txt
