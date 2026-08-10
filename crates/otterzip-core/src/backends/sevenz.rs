@@ -227,6 +227,12 @@ impl SevenZBackend {
 
                 if pod.is_directory {
                     std::fs::create_dir_all(&out_path).map_err(map_sevenz_err_io)?;
+                    crate::posix::apply_dir_mode(
+                        &out_path,
+                        pod.attributes,
+                        pod.host_os,
+                        opts.preserve_permissions,
+                    );
                     report_cell.borrow_mut().entries_extracted += 1;
                     return Ok(true);
                 }
@@ -282,7 +288,7 @@ impl SevenZBackend {
                 };
                 use std::io::Write as _;
                 writer.flush().map_err(map_sevenz_err_io)?;
-                crate::archive::__apply_extract_mtime(writer.get_ref(), pod.modified, opts);
+                crate::archive::__apply_extract_metadata(writer.get_ref(), &pod, opts);
                 // PR-7A: MOTW propagation. Best-effort.
                 if let Some(payload) = motw_payload {
                     if let Err(e) = crate::motw::write_zone_identifier(&out_path, payload) {

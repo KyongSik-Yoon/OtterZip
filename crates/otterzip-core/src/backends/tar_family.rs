@@ -308,6 +308,12 @@ impl TarBackend {
 
             if pod.is_directory {
                 std::fs::create_dir_all(&out_path)?;
+                crate::posix::apply_dir_mode(
+                    &out_path,
+                    pod.attributes,
+                    pod.host_os,
+                    ctx.opts.preserve_permissions,
+                );
                 ctx.report.entries_extracted += 1;
                 continue;
             }
@@ -335,6 +341,41 @@ impl TarBackend {
             } else {
                 out_path
             };
+
+            // Symlink entry ('2'): the payload is empty and the target lives
+            // in the header's `linkname` field. Reaching here means the caller
+            // opted in via `follow_symlinks` (the filter above skips symlinks
+            // otherwise), so materialise a real link — writing a regular file
+            // would silently turn every symlink in a Linux rootfs / node_modules
+            // tarball into an empty file, which is the failure this branch
+            // exists to prevent.
+            if pod.is_symlink {
+                let target = Self::decode_name(&entry.link_name_bytes().unwrap_or_default(), enc);
+                match crate::posix::create_symlink(ctx.dest_root, &out_path, &target) {
+                    Ok(()) => {
+                        ctx.report.entries_extracted += 1;
+                    }
+                    Err(reason) => {
+                        // Rejected targets (absolute, or `../` past the root)
+                        // and non-Unix hosts both land here. Skip + warn: a
+                        // link we refuse to create is not a corrupt archive.
+                        tracing::warn!(
+                            target: "otterzip::security",
+                            event = "symlink_rejected",
+                            entry = %path_str,
+                            link_target = %target,
+                            reason = ?reason,
+                            "symlink entry not materialised"
+                        );
+                        ctx.report.warnings.push(ExtractWarning::SymlinkSkipped {
+                            path: path_str.clone(),
+                            target,
+                        });
+                        ctx.report.entries_skipped += 1;
+                    }
+                }
+                continue;
+            }
 
             // Hard-link entry ('1'): size 0, its payload lives in the target
             // entry that GNU/BSD tar always emits FIRST, so it is already on
@@ -402,7 +443,7 @@ impl TarBackend {
                 ctx.opts,
             )?;
             writer.flush()?;
-            crate::archive::__apply_extract_mtime(writer.get_ref(), pod.modified, ctx.opts);
+            crate::archive::__apply_extract_metadata(writer.get_ref(), &pod, ctx.opts);
             // PR-7A: MOTW propagation. Best-effort.
             if let Some(payload) = ctx.motw_payload {
                 if let Err(e) = crate::motw::write_zone_identifier(&out_path, payload) {

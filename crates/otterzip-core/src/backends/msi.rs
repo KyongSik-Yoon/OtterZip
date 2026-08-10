@@ -153,10 +153,14 @@ impl ArchiveBackend for MsiBackend {
             return Ok(0);
         }
         let mut comp = open_compound(&self.path)?;
-        // CFB's open_stream wants a leading slash + backslash
-        // separators. Reverse the normalisation we did at walk-time
-        // so the lookup matches.
-        let cfb_path = format!("/{}", entry_path.replace('/', "\\"));
+        // CFB's `open_stream` takes a `std::path::Path`, so it only ever
+        // splits on the HOST's separator: `/Inner\StreamTwo` resolves on
+        // Windows and is one nonsense component named `Inner\StreamTwo` on
+        // Unix ("No such stream"). Forward slashes parse identically on both,
+        // and are what the crate itself emits from `path_from_name_chain`, so
+        // the walk-time normalisation needs no reversing at all — only the
+        // leading slash that makes the path absolute within the compound file.
+        let cfb_path = format!("/{entry_path}");
         let mut stream = comp
             .open_stream(&cfb_path)
             .map_err(|e| OtterzipError::BackendError(format!("msi open_stream: {e}")))?;

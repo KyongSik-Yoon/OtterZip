@@ -368,6 +368,12 @@ impl LenientZipBackend {
                             set_first_err(&first_err, &canceled, OtterzipError::Io(e));
                             return;
                         }
+                        crate::posix::apply_dir_mode(
+                            &out_path,
+                            entry.attributes,
+                            entry.host_os,
+                            opts.preserve_permissions,
+                        );
                         entries_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         return;
                     }
@@ -474,7 +480,7 @@ impl LenientZipBackend {
                         set_first_err(&first_err, &canceled, OtterzipError::Io(e));
                         return;
                     }
-                    crate::archive::__apply_extract_mtime(writer.get_ref(), entry.modified, &opts);
+                    crate::archive::__apply_extract_metadata(writer.get_ref(), entry, &opts);
 
                     if let Some(p) = motw_payload.as_ref() {
                         if let Err(e) = crate::motw::write_zone_identifier(&out_path, &p[..]) {
