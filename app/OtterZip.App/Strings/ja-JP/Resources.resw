@@ -337,4 +337,18 @@
   <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>この項目はドロップできません</value></data>
   <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>閉じる</value></data>
   <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>ジョブをキャンセル</value></data>
+
+  <!-- Linux front end (app/OtterZip.Linux). The Avalonia views cover the
+       same ground as the WinUI ones, but the drop panel offers explicit
+       pickers and the Explorer-registration pane is replaced by the
+       freedesktop desktop-integration installer, so these keys have no
+       Windows counterpart to reuse. -->
+  <data name="Linux_AddFiles.Text" xml:space="preserve"><value>ファイルを追加…</value></data>
+  <data name="Linux_AddFolder.Text" xml:space="preserve"><value>フォルダーを追加…</value></data>
+  <data name="Linux_PendingCountFormat.Text" xml:space="preserve"><value>圧縮する項目 {0} 件</value></data>
+  <data name="Linux_IntegrationDesc.Text" xml:space="preserve"><value>ファイルマネージャーの右クリックメニューに OtterZip を追加し、書庫ファイルの既定のアプリとして登録します。</value></data>
+  <data name="Linux_IntegrationInstalled.Text" xml:space="preserve"><value>インストール済み · {0}</value></data>
+  <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>未インストール</value></data>
+  <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>インストール</value></data>
+  <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>削除</value></data>
 </root>

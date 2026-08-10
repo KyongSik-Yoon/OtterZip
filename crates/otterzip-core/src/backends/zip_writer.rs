@@ -90,6 +90,68 @@ const DOS_ATTR_DIRECTORY: u32 = 0x10;
 const UNIX_MODE_FILE: u32 = 0o100_644;
 const UNIX_MODE_DIR: u32 = 0o040_755;
 
+/// `S_IFREG` / `S_IFDIR` — the file-type nibble the Unix mode carries in the
+/// high 16 bits of the external attributes.
+const S_IFREG: u32 = 0o100_000;
+const S_IFDIR: u32 = 0o040_000;
+
+/// Compose the external-attributes word for a file entry from the source
+/// file's permission bits.
+///
+/// `None` (a Windows host, or in-memory data with no file behind it) keeps
+/// the historical `0o644` default, so archives written on Windows are
+/// byte-identical to what they were before this existed.
+///
+/// The point of recording the real mode is round-trip fidelity on Unix: the
+/// extract side reads exactly this word back, so hardcoding 0o644 here meant
+/// `otterzip a scripts.zip ./scripts` silently stripped `+x` from every
+/// script — a data loss the user only discovers when the extracted tree
+/// refuses to run.
+const fn file_external_attr(source_mode: Option<u32>) -> u32 {
+    match source_mode {
+        Some(mode) => (S_IFREG | (mode & 0o777)) << 16,
+        None => UNIX_MODE_FILE << 16,
+    }
+}
+
+/// Directory counterpart of [`file_external_attr`]. Keeps the DOS directory
+/// bit, which is what Windows tools actually read.
+/// Read the POSIX permission bits of `path`, or `None` off Unix / on any
+/// stat failure. Used by the paths that already hold a source path, so the
+/// mode does not have to be threaded through their signatures.
+#[allow(unused_variables)]
+fn unix_mode_of_meta(meta: Option<&std::fs::Metadata>) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.map(|m| m.permissions().mode() & 0o777)
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+#[allow(unused_variables)]
+fn mode_of_path(path: &Path) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).ok().map(|m| m.permissions().mode() & 0o777)
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+const fn dir_external_attr(source_mode: Option<u32>) -> u32 {
+    match source_mode {
+        Some(mode) => ((S_IFDIR | (mode & 0o777)) << 16) | DOS_ATTR_DIRECTORY,
+        None => (UNIX_MODE_DIR << 16) | DOS_ATTR_DIRECTORY,
+    }
+}
+
 // === Public types ====================================================
 
 /// Compression method chosen at writer creation. Per-entry dispatch
@@ -191,7 +253,12 @@ impl ZipFileWriter {
 
     /// Append a directory entry. ZIP convention: the name ends in
     /// `'/'` and the payload is empty. Method is always Stored.
-    pub(crate) fn add_directory(&mut self, name: &str, modified: Option<SystemTime>) -> Result<()> {
+    pub(crate) fn add_directory(
+        &mut self,
+        name: &str,
+        modified: Option<SystemTime>,
+        source_mode: Option<u32>,
+    ) -> Result<()> {
         let mut name_bytes = name.as_bytes().to_vec();
         if !name_bytes.ends_with(b"/") {
             name_bytes.push(b'/');
@@ -220,7 +287,7 @@ impl ZipFileWriter {
             uncompressed_size: 0,
             lfh_offset,
             is_directory: true,
-            external_attr: (UNIX_MODE_DIR << 16) | DOS_ATTR_DIRECTORY,
+            external_attr: dir_external_attr(source_mode),
             mtime,
             mdate,
             used_zip64_extra: false,
@@ -276,7 +343,7 @@ impl ZipFileWriter {
             uncompressed_size: prepared.uncompressed_size,
             lfh_offset,
             is_directory: false,
-            external_attr: UNIX_MODE_FILE << 16,
+            external_attr: file_external_attr(prepared.source_mode),
             mtime: prepared.mtime,
             mdate: prepared.mdate,
             used_zip64_extra,
@@ -541,7 +608,7 @@ impl ZipFileWriter {
             uncompressed_size: file_size,
             lfh_offset,
             is_directory: false,
-            external_attr: UNIX_MODE_FILE << 16,
+            external_attr: file_external_attr(mode_of_path(source_path)),
             mtime,
             mdate,
             used_zip64_extra,
@@ -561,6 +628,7 @@ impl ZipFileWriter {
         name: &str,
         data: &mut dyn Read,
         modified: Option<SystemTime>,
+        source_mode: Option<u32>,
     ) -> Result<()> {
         let name_bytes = name.as_bytes().to_vec();
         let (mtime, mdate) = dos_datetime_for(modified);
@@ -638,7 +706,7 @@ impl ZipFileWriter {
             uncompressed_size,
             lfh_offset,
             is_directory: false,
-            external_attr: UNIX_MODE_FILE << 16,
+            external_attr: file_external_attr(source_mode),
             mtime,
             mdate,
             used_zip64_extra,
@@ -1349,7 +1417,7 @@ impl ZipFileWriter {
             uncompressed_size,
             lfh_offset,
             is_directory: false,
-            external_attr: UNIX_MODE_FILE << 16,
+            external_attr: file_external_attr(mode_of_path(source_path)),
             mtime,
             mdate,
             used_zip64_extra,
@@ -1382,6 +1450,12 @@ pub(crate) struct PreparedEntry {
     pub deflated: Vec<u8>,
     pub mtime: u16,
     pub mdate: u16,
+    /// Source file's POSIX permission bits, `None` off Unix. Carried on the
+    /// prepared entry rather than re-stat'd on the main thread: the worker
+    /// already stats the file for its size reservation, and the main thread
+    /// splicing entries is the serialisation point we do not want to add
+    /// syscalls to.
+    pub source_mode: Option<u32>,
 }
 
 /// Off-thread encoder — read `file_path`, optionally deflate, and
@@ -1504,6 +1578,10 @@ pub(crate) fn prepare_entry(
     };
     let compressed_size = deflated.len() as u64;
     Ok(PreparedEntry {
+        // The worker already stat'd this file for its size reservation, so
+        // the mode comes free — no extra syscall, and none on the main
+        // thread's serialisation path.
+        source_mode: unix_mode_of_meta(src_meta.as_ref()),
         name: name.as_bytes().to_vec(),
         method,
         crc32,
@@ -1647,7 +1725,7 @@ mod tests {
                 },
             )
             .unwrap();
-            w.add_entry("hello.txt", &mut Cursor::new(payload), None)
+            w.add_entry("hello.txt", &mut Cursor::new(payload), None, None)
                 .unwrap();
             w.finish().unwrap();
         }

@@ -14,6 +14,16 @@
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.6.*" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.*" />
 
+    <!-- Avalonia — the Linux front end (app/OtterZip.Linux). WinUI 3 is
+         Windows-only by construction, so the Linux port needs a second
+         toolkit; Avalonia is the one that keeps the front end in C# and lets
+         it share OtterZip.Interop and the platform-neutral services with the
+         WinUI build instead of forking them. -->
+    <PackageVersion Include="Avalonia" Version="11.2.*" />
+    <PackageVersion Include="Avalonia.Desktop" Version="11.2.*" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.2.*" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.2.*" />
+
     <!-- MVVM -->
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.*" />
 

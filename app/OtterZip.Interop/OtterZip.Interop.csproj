@@ -1,7 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+    <!--
+      Plain `net9.0`, not `net9.0-windows`. Nothing in this project touches
+      a Windows-only API — it is P/Invoke declarations, POD mirrors of the C
+      ABI, and a Sentry wrapper — and the Windows-flavoured TFM was the only
+      thing stopping the Linux front end from referencing it. A
+      `net9.0-windows` consumer (OtterZip.App, WinUI 3) can still reference a
+      `net9.0` library, so the Windows build is unaffected.
+    -->
+    <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>OtterZip.Interop</RootNamespace>
     <AssemblyName>OtterZip.Interop</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -29,50 +37,65 @@
   </ItemGroup>
 
   <!--
-    Map .NET Configuration to Rust cargo profile directory name.
+    Map .NET Configuration to Rust cargo profile directory name, and the host
+    OS to the shared-library naming convention cargo emits for a `cdylib`:
+
+        Windows   target/<profile>/otterzip_ffi.dll
+        Linux     target/<profile>/libotterzip_ffi.so
+        macOS     target/<profile>/libotterzip_ffi.dylib
+
+    `[LibraryImport("otterzip_ffi")]` resolves all three without a per-platform
+    entry point — .NET's probing already tries the `lib` prefix and the
+    platform suffix — so only the *staging* below has to know the difference.
 
     Resolution order:
-      1. target/<config-matched>/otterzip_ffi.dll
-         (debug for .NET Debug, release for .NET Release)
-      2. target/release/otterzip_ffi.dll  (fallback)
-      3. target/debug/otterzip_ffi.dll    (last-resort fallback)
+      1. target/<config-matched>/<lib>   (debug for .NET Debug, release for .NET Release)
+      2. target/release/<lib>            (fallback)
+      3. target/debug/<lib>              (last-resort fallback)
 
-    Why the fallback chain: WinUI 3 Debug builds are mostly used for
-    fast UI iteration. Cargo Debug binaries are notably slower at
-    runtime, and most devs only run cargo release-build once and then
-    cycle the .NET project repeatedly. Without the fallback, those
-    Debug F5 launches crashed with "Unable to load DLL otterzip_ffi"
-    (0x8007007E) because target/debug/ was empty.
+    Why the fallback chain: Debug builds are mostly used for fast UI
+    iteration. Cargo Debug binaries are notably slower at runtime, and most
+    devs only run cargo release-build once and then cycle the .NET project
+    repeatedly. Without the fallback, those Debug launches crashed with
+    "Unable to load DLL otterzip_ffi" (0x8007007E on Windows, a
+    DllNotFoundException on Linux) because target/debug/ was empty.
 
-    The fallback only trips when the matched profile dll is missing,
-    so once you do run "cargo build", the Debug dll naturally takes
+    The fallback only trips when the matched profile library is missing, so
+    once you do run "cargo build", the Debug library naturally takes
     precedence on the next .NET build.
   -->
   <PropertyGroup>
     <_RustProfile Condition="'$(Configuration)' == 'Release'">release</_RustProfile>
     <_RustProfile Condition="'$(_RustProfile)' == ''">debug</_RustProfile>
-    <_RustDllMatched>$(MSBuildThisFileDirectory)..\..\target\$(_RustProfile)\otterzip_ffi.dll</_RustDllMatched>
-    <_RustDllRelease>$(MSBuildThisFileDirectory)..\..\target\release\otterzip_ffi.dll</_RustDllRelease>
-    <_RustDllDebug>$(MSBuildThisFileDirectory)..\..\target\debug\otterzip_ffi.dll</_RustDllDebug>
 
-    <_RustDllPath Condition="Exists('$(_RustDllMatched)')">$(_RustDllMatched)</_RustDllPath>
-    <_RustDllPath Condition="'$(_RustDllPath)' == '' and Exists('$(_RustDllRelease)')">$(_RustDllRelease)</_RustDllPath>
-    <_RustDllPath Condition="'$(_RustDllPath)' == '' and Exists('$(_RustDllDebug)')">$(_RustDllDebug)</_RustDllPath>
+    <_RustLibName Condition="$([MSBuild]::IsOSPlatform('Windows'))">otterzip_ffi.dll</_RustLibName>
+    <_RustLibName Condition="$([MSBuild]::IsOSPlatform('OSX'))">libotterzip_ffi.dylib</_RustLibName>
+    <_RustLibName Condition="'$(_RustLibName)' == ''">libotterzip_ffi.so</_RustLibName>
+
+    <_RustTargetDir>$(MSBuildThisFileDirectory)../../target</_RustTargetDir>
+    <_RustLibMatched>$(_RustTargetDir)/$(_RustProfile)/$(_RustLibName)</_RustLibMatched>
+    <_RustLibRelease>$(_RustTargetDir)/release/$(_RustLibName)</_RustLibRelease>
+    <_RustLibDebug>$(_RustTargetDir)/debug/$(_RustLibName)</_RustLibDebug>
+
+    <_RustLibPath Condition="Exists('$(_RustLibMatched)')">$(_RustLibMatched)</_RustLibPath>
+    <_RustLibPath Condition="'$(_RustLibPath)' == '' and Exists('$(_RustLibRelease)')">$(_RustLibRelease)</_RustLibPath>
+    <_RustLibPath Condition="'$(_RustLibPath)' == '' and Exists('$(_RustLibDebug)')">$(_RustLibDebug)</_RustLibPath>
   </PropertyGroup>
 
-  <!-- Include the Rust-built otterzip_ffi.dll as a native asset so it
-       propagates to consuming projects (OtterZip.App) automatically. -->
-  <ItemGroup Condition="'$(_RustDllPath)' != '' and Exists('$(_RustDllPath)')">
-    <Content Include="$(_RustDllPath)" Link="otterzip_ffi.dll">
+  <!-- Include the Rust-built shared library as a native asset so it
+       propagates to consuming projects (OtterZip.App / OtterZip.Gtk)
+       automatically. -->
+  <ItemGroup Condition="'$(_RustLibPath)' != '' and Exists('$(_RustLibPath)')">
+    <Content Include="$(_RustLibPath)" Link="$(_RustLibName)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
-  <!-- Loud warning when no DLL is available at all. Prevents silent
-       runtime crash with the 0x8007007E "module not found" error. -->
-  <Target Name="WarnMissingRustDll" BeforeTargets="Build"
-          Condition="'$(_RustDllPath)' == ''">
-    <Warning Text="otterzip_ffi.dll not found in target/$(_RustProfile)/, target/release/, or target/debug/. Run 'cargo build --release' from the workspace root before building OtterZip.App, or P/Invoke will fail at startup with HRESULT 0x8007007E." />
+  <!-- Loud warning when no library is available at all. Prevents a silent
+       runtime crash at the first P/Invoke. -->
+  <Target Name="WarnMissingRustLib" BeforeTargets="Build"
+          Condition="'$(_RustLibPath)' == ''">
+    <Warning Text="$(_RustLibName) not found in target/$(_RustProfile)/, target/release/, or target/debug/. Run 'cargo build --release -p otterzip-ffi' from the workspace root before building the app, or P/Invoke will fail at startup." />
   </Target>
 
 </Project>

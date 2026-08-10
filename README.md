@@ -4,7 +4,7 @@
 
 # OtterZip
 
-**The quiet archive tool for Windows.**
+**The quiet archive tool for Windows and Linux.**
 
 Right-click to compress or extract. No ads, no accounts, no tracking.
 
@@ -28,7 +28,7 @@ Right-click a file — it's zipped. Right-click an archive — it's out. You bar
 - **One thing, done well** — no modes, no clutter, no learning curve.
 - **No ads. No accounts. No tracking.** No bundles, no nagging, nothing to sign up for. Crash reports are strictly opt-in.
 - **A native core, quietly fast** — the engine is written in Rust. It does the work and doesn't leave you waiting.
-- **Looks like Windows, because it is** — built with C# and WinUI 3. A real native interface, not a web page in a window.
+- **Looks like Windows, because it is** — built with C# and WinUI 3. A real native interface, not a web page in a window. On Linux, a native Avalonia window over the same engine.
 - **Yours to tune** — light, dark, or follow system. Ten languages built in.
 
 ## Install
@@ -49,6 +49,15 @@ The bundle is signed by LumiBear Studio rather than by the Store, so the first i
 
 Both channels are the exact same app.
 
+### Linux
+
+Download the `linux-x64` tarball, extract it, and run `./install.sh` — it
+installs under `~/.local` and needs no root. Add OtterZip to your file
+manager's right-click menu from **Settings → Integration**.
+
+Full details, including the command line and what differs from Windows:
+[**OtterZip on Linux**](readme/LINUX.md).
+
 ## Formats
 
 **Create** — ZIP · 7z · TAR · TAR.GZ
@@ -65,7 +74,10 @@ Theme, language, overwrite rules and more — tuned however you like, and out of
 
 ## Requirements
 
-Windows 10 (version 2004) or later · x64
+**Windows** — Windows 10 (version 2004) or later · x64
+
+**Linux** — x64 or arm64, X11 or Wayland. The release tarball is
+self-contained, so no runtime needs to be installed first.
 
 ## License
 

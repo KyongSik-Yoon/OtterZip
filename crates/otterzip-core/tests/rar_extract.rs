@@ -507,20 +507,39 @@ fn backslash_names_normalize() {
 
 #[test]
 fn absolute_path_entry_is_contained() {
-    // The entry is authored as `C:\ev.t`, but unrar rewrites the drive colon and
-    // hands back `C_\ev.t`. Documents the boundary precisely: our colon check is
-    // NOT what saves us from absolute paths here — unrar got there first — so
-    // the `..` rejection in `traversal_entry_blocked` is carrying the load. If
-    // unrar ever stops sanitising, this test flips to a containment failure and
-    // tells us.
+    // The entry is authored as `C:\ev.t`. Both platforms contain it; they
+    // just divide the labour differently, and asserting one shape everywhere
+    // is what made this test fail the Linux port.
+    //
+    //   Windows — unrar rewrites the drive colon itself (`C_\ev.t`) before we
+    //   ever see the name, so the entry is an ordinary relative path by the
+    //   time our guard runs. Our colon check is NOT what saves us here; the
+    //   `..` rejection in `traversal_entry_blocked` carries the load. If unrar
+    //   ever stops sanitising, this flips to a containment failure and says so.
+    //
+    //   Unix — unrar has no drive letters to rewrite and hands back `C:/ev.t`
+    //   verbatim, so `__validate_component`'s colon rule is the thing that
+    //   fires, and the entry is rejected outright rather than extracted under
+    //   a mangled name. Fail-closed: strictly safer than the Windows path.
     let td = tempdir().unwrap();
     let out = td.path().join("out");
     let ar = open("absolute.rar");
 
-    assert_eq!(entry_paths(&ar), vec!["C_/ev.t"]);
-    extract(&ar, &out).unwrap();
+    if cfg!(windows) {
+        assert_eq!(entry_paths(&ar), vec!["C_/ev.t"]);
+        extract(&ar, &out).unwrap();
+        assert!(out.join("C_").join("ev.t").exists());
+    } else {
+        assert_eq!(entry_paths(&ar), vec!["C:/ev.t"]);
+        // `block_path_traversal` is on by default, so the colon component is
+        // a hard error rather than a skip.
+        let err = extract(&ar, &out).unwrap_err();
+        assert!(
+            matches!(err, otterzip_core::OtterzipError::PathTraversalBlocked(ref p) if p == "C:/ev.t"),
+            "expected the drive-letter component to be blocked, got {err:?}"
+        );
+    }
 
-    assert!(out.join("C_").join("ev.t").exists());
     assert!(
         walk(&out).iter().all(|p| out.join(p).starts_with(&out)),
         "entry escaped dest_root"

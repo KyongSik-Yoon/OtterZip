@@ -6,7 +6,7 @@
 
 use std::fs;
 use std::io::{BufWriter, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use zeroize::Zeroizing;
@@ -15,7 +15,7 @@ use crate::backends::{
     add_dir_recursive_through, open_backend, open_writer, ArchiveBackend, ArchiveWriter,
     StreamingExtractCtx,
 };
-use crate::entry::EntryIter;
+use crate::entry::{Entry, EntryIter};
 use crate::error::{Result, OtterzipError};
 use crate::format::{detect, ArchiveFormat};
 use crate::options::{CreateOptions, ExtractOptions, OverwritePolicy};
@@ -340,9 +340,10 @@ impl Archive {
         let src = src.as_ref();
         let meta = fs::metadata(src)?;
         let modified = meta.modified().ok();
+        let mode = crate::backends::__unix_mode_of(&meta);
         let file = fs::File::open(src)?;
         let mut reader = std::io::BufReader::new(file);
-        writer.add_entry(entry_path, &mut reader, Some(meta.len()), false, modified)
+        writer.add_entry(entry_path, &mut reader, Some(meta.len()), false, modified, mode)
     }
 
     /// Remove an entry by name from a write-mode archive. Phase 8 G7
@@ -644,10 +645,15 @@ impl Archive {
             let entry = entry_result?;
             probed += 1;
 
-            // OtterZip paths are forward-slash normalised at backend
-            // ingest (see `glossary.md`). The split below relies on
-            // that invariant.
-            let top = match entry.path.find('/') {
+            // Most backends forward-slash normalise at ingest (see
+            // `glossary.md`), but the ZIP family deliberately does NOT:
+            // `extract_entry` keys on the verbatim central-directory name,
+            // so rewriting it here would break the lookup. Old Windows
+            // tools store `\`, so accept either separator — exactly what
+            // `split_archive_path` does on the extraction side. Without
+            // this, a `\`-separated archive reads as Flat and smart-extract
+            // adds a redundant `<stem>/` wrapper.
+            let top = match entry.path.find(['/', '\\']) {
                 Some(idx) => &entry.path[..idx],
                 None => {
                     // Entry at archive root with no sub-component —
@@ -870,6 +876,12 @@ impl Archive {
 
             if entry.is_directory {
                 fs::create_dir_all(&out_path)?;
+                crate::posix::apply_dir_mode(
+                    &out_path,
+                    entry.attributes,
+                    entry.host_os,
+                    opts.preserve_permissions,
+                );
                 report.entries_extracted += 1;
                 continue;
             }
@@ -897,6 +909,37 @@ impl Archive {
             } else {
                 out_path
             };
+
+            // Symlink entry with `follow_symlinks` on (the filter above
+            // returns early otherwise). The target is the entry payload for
+            // every format that reaches this generic loop — tar carries it in
+            // the header instead and never gets here, because tar installs its
+            // own streaming extractor.
+            if entry.is_symlink {
+                let target = __read_symlink_target(&*self.reader()?, &entry);
+                let outcome = target.as_deref().map_or(
+                    Err(crate::posix::SymlinkRejected::EmptyTarget),
+                    |t| crate::posix::create_symlink(&dest_root, &out_path, t),
+                );
+                match outcome {
+                    Ok(()) => report.entries_extracted += 1,
+                    Err(reason) => {
+                        tracing::warn!(
+                            target: "otterzip::security",
+                            event = "symlink_rejected",
+                            entry = %entry.path,
+                            reason = ?reason,
+                            "symlink entry not materialised"
+                        );
+                        report.warnings.push(ExtractWarning::SymlinkSkipped {
+                            path: entry.path.clone(),
+                            target: target.unwrap_or_default(),
+                        });
+                        report.entries_skipped += 1;
+                    }
+                }
+                continue;
+            }
 
             let file = fs::File::create(&out_path)?;
             let mut writer = BufWriter::new(file);
@@ -927,7 +970,7 @@ impl Archive {
             };
             writer.flush()?;
             // Restore the archived modification time before the handle drops.
-            __apply_extract_mtime(writer.get_ref(), entry.modified, opts);
+            __apply_extract_metadata(writer.get_ref(), &entry, opts);
             // PR-7A: propagate Zone.Identifier from source archive.
             // Best-effort — log + continue on ADS failure (likely
             // non-NTFS or owner mismatch). Never aborts extraction.
@@ -1339,6 +1382,67 @@ pub(crate) fn __apply_extract_mtime(
     }
 }
 
+/// Read a symlink entry's payload as its link target.
+///
+/// In the ZIP family the target IS the entry content (Info-ZIP convention;
+/// the `S_IFLNK` nibble in the external attributes is the only thing marking
+/// it as a link). Returns `None` when the payload is not a plausible target —
+/// oversized, unreadable, or not UTF-8 — so the caller can skip+warn rather
+/// than create a nonsense link.
+///
+/// The 4 KiB ceiling is `PATH_MAX` with room to spare, and it is applied to
+/// the DECLARED size before reading as well as to the read itself: a symlink
+/// entry claiming gigabytes is either corrupt or an attempt to make us
+/// allocate on its behalf.
+#[doc(hidden)]
+fn __read_symlink_target(backend: &dyn ArchiveBackend, entry: &Entry) -> Option<String> {
+    const MAX_TARGET_BYTES: u64 = 4096;
+
+    if entry.uncompressed_size > MAX_TARGET_BYTES {
+        return None;
+    }
+    use std::io::Read as _;
+
+    let mut buf = Vec::new();
+    let mut stream = backend.open_entry_stream(&entry.path).ok()?;
+    stream
+        .by_ref()
+        .take(MAX_TARGET_BYTES)
+        .read_to_end(&mut buf)
+        .ok()?;
+    let target = String::from_utf8(buf).ok()?;
+    let target = target.trim_end_matches('\0');
+    if target.is_empty() {
+        None
+    } else {
+        Some(target.to_string())
+    }
+}
+
+/// Stamp an extracted file with every piece of archived metadata that this
+/// platform can carry: the modification time everywhere, plus the POSIX
+/// permission bits on Unix.
+///
+/// Every extract path (serial, parallel ZIP, lenient ZIP, 7z, tar) calls
+/// exactly this one function so the two stamps cannot drift apart per
+/// backend the way the traversal check once did. Order matters: the mode is
+/// applied LAST, because `set_permissions` on a read-only mode would make a
+/// subsequent `set_modified` on the same handle fail on some filesystems.
+#[doc(hidden)]
+pub(crate) fn __apply_extract_metadata(
+    file: &std::fs::File,
+    entry: &Entry,
+    opts: &ExtractOptions,
+) {
+    __apply_extract_mtime(file, entry.modified, opts);
+    crate::posix::apply_mode(
+        file,
+        entry.attributes,
+        entry.host_os,
+        opts.preserve_permissions,
+    );
+}
+
 /// The parallel-extract analogue of [`CappedWriter`]. Rayon workers each write
 /// a different entry concurrently, so the running total lives in a shared
 /// [`AtomicU64`] rather than a per-instance field. Every write reserves its
@@ -1629,6 +1733,29 @@ pub(crate) fn reserve_unique_extract_path(path: &Path) -> std::io::Result<PathBu
     Ok(path.to_path_buf())
 }
 
+/// Split an in-archive path into segments, treating BOTH `/` and `\` as
+/// separators regardless of host platform.
+///
+/// `std::path::Path::components` cannot be used here. It is host-dependent:
+/// on Windows it splits `dir\file.txt` into two components, on Unix it
+/// yields ONE component whose name contains a backslash — which
+/// [`validate_component_phase7`] then rejects outright ("embedded
+/// backslash"). Archives authored by pre-APPNOTE-6.3.0 Windows tools store
+/// `\` verbatim (real corpora: old WinZip, InfoZip on DOS, plenty of
+/// vendor installers), so relying on `Path` meant every entry of such an
+/// archive extracted into nested directories on Windows and was rejected
+/// as *path traversal* on Linux — a total extraction failure on the exact
+/// archives the feature exists for.
+///
+/// Splitting on both separators everywhere makes the ruleset host-neutral:
+/// the same archive resolves to the same relative layout on every platform,
+/// which is also what 7-Zip and unar do. Note this is strictly SAFER than
+/// the old Unix behaviour rather than laxer — a segment can no longer hide
+/// a separator from the per-component validation below.
+fn split_archive_path(entry_path: &str) -> impl DoubleEndedIterator<Item = &str> {
+    entry_path.split(['/', '\\'])
+}
+
 /// Combine an entry's in-archive path with the destination root.
 ///
 /// Rejects absolute paths and `..` components (per the default
@@ -1640,37 +1767,47 @@ fn resolve_output_path(
     opts: &ExtractOptions,
     is_dir: bool,
 ) -> std::result::Result<PathBuf, Skipped> {
-    // Normalize: ZIP uses forward-slashes always; replace for OS.
-    let as_path = Path::new(entry_path);
+    // A leading separator is an absolute path (`/etc/passwd`, `\Windows\..`).
+    // `Path::components` surfaced that as `Component::RootDir`; with the
+    // host-neutral splitter it shows up as a leading EMPTY segment, so it has
+    // to be caught explicitly — an empty first segment must never be silently
+    // skipped the way interior `//` noise is.
+    if entry_path.starts_with('/') || entry_path.starts_with('\\') {
+        return Err(Skipped::Traversal(entry_path.to_string()));
+    }
 
     if opts.flatten_paths {
         // Validate the flattened component like the non-flatten path below,
-        // and reject `file_name() == None` (entry is `.`/`..`/root) instead
-        // of falling back to the raw entry_path — a bare `..` would otherwise
-        // resolve to dest_root.join("..") and escape the destination (FFI-M2).
-        let name = match as_path.file_name() {
+        // and reject a path with no usable final segment (entry is `.`/`..`/
+        // root) instead of falling back to the raw entry_path — a bare `..`
+        // would otherwise resolve to dest_root.join("..") and escape the
+        // destination (FFI-M2). Trailing separators (`dir/`) are stripped
+        // first so `a/b/` flattens to `b`, matching `Path::file_name`.
+        let name = match split_archive_path(entry_path)
+            .filter(|s| !s.is_empty() && *s != ".")
+            .next_back()
+        {
             Some(n) => n,
             None => return Err(Skipped::Traversal(entry_path.to_string())),
         };
-        if validate_component_phase7(&name.to_string_lossy()).is_err() {
+        if name == ".." || validate_component_phase7(name).is_err() {
             return Err(Skipped::Traversal(entry_path.to_string()));
         }
         return Ok(dest_root.join(name));
     }
 
     let mut out = dest_root.to_path_buf();
-    for comp in as_path.components() {
-        match comp {
-            Component::Normal(c) => {
-                let s = c.to_string_lossy();
-                if validate_component_phase7(&s).is_err() {
+    for seg in split_archive_path(entry_path) {
+        match seg {
+            // Interior `//` / trailing separator — no component, no meaning.
+            // (A LEADING empty segment was rejected above as absolute.)
+            "" | "." => {}
+            ".." => return Err(Skipped::Traversal(entry_path.to_string())),
+            _ => {
+                if validate_component_phase7(seg).is_err() {
                     return Err(Skipped::Traversal(entry_path.to_string()));
                 }
-                out.push(c);
-            }
-            Component::CurDir => {}
-            Component::RootDir | Component::Prefix(_) | Component::ParentDir => {
-                return Err(Skipped::Traversal(entry_path.to_string()));
+                out.push(seg);
             }
         }
     }

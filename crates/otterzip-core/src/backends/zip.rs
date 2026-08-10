@@ -604,6 +604,12 @@ impl ZipBackend {
                     set_first_err(&first_err, &canceled, OtterzipError::Io(e));
                     return;
                 }
+                crate::posix::apply_dir_mode(
+                    &out_path,
+                    entry.attributes,
+                    entry.host_os,
+                    opts.preserve_permissions,
+                );
                 entries_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return;
             }
@@ -680,6 +686,52 @@ impl ZipBackend {
                     return;
                 }
             };
+
+            // Symlink entry: in ZIP the link TARGET is the entry's payload
+            // (the `S_IFLNK` nibble in the external attributes is what makes
+            // it a link, per Info-ZIP). Reaching here means `follow_symlinks`
+            // is on — the filter above returns early otherwise. Without this
+            // branch the target string would land on disk as a regular file's
+            // contents, which is how a `zip -y` archive round-trips into a
+            // tree of one-line text files.
+            if entry.is_symlink {
+                let mut target = String::new();
+                // A link target is a path — bounded by definition. Read it
+                // through the same size gate as any other entry rather than
+                // trusting the header, then treat anything oversized as not a
+                // link we are willing to create.
+                let target_ok = entry.uncompressed_size <= 4096
+                    && std::io::Read::take(&mut zf, 4096)
+                        .read_to_string(&mut target)
+                        .is_ok();
+                let outcome = if target_ok {
+                    crate::posix::create_symlink(&dest_root, &out_path, target.trim_end_matches('\0'))
+                } else {
+                    Err(crate::posix::SymlinkRejected::EmptyTarget)
+                };
+                match outcome {
+                    Ok(()) => {
+                        entries_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Err(reason) => {
+                        tracing::warn!(
+                            target: "otterzip::security",
+                            event = "symlink_rejected",
+                            entry = %entry.path,
+                            link_target = %target,
+                            reason = ?reason,
+                            "symlink entry not materialised"
+                        );
+                        warnings.lock().unwrap().push(ExtractWarning::SymlinkSkipped {
+                            path: entry.path.clone(),
+                            target,
+                        });
+                        entries_skipped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                return;
+            }
+
             let file = match File::create(&out_path) {
                 Ok(f) => f,
                 Err(e) => {
@@ -720,7 +772,7 @@ impl ZipBackend {
                 set_first_err(&first_err, &canceled, OtterzipError::Io(e));
                 return;
             }
-            crate::archive::__apply_extract_mtime(writer.get_ref(), entry.modified, &opts);
+            crate::archive::__apply_extract_metadata(writer.get_ref(), entry, &opts);
             // PR-7A: propagate Zone.Identifier from source archive.
             // Best-effort, never aborts the worker.
             if let Some(p) = motw_payload.as_ref() {

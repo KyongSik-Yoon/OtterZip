@@ -31,6 +31,14 @@ pub(crate) trait ArchiveWriter: Send {
     /// (directory placeholders, in-memory data). Backends that preserve
     /// timestamps stamp the entry with it when `CreateOptions::preserve_timestamps`
     /// was set at create; otherwise they fall back to wall-clock now.
+    ///
+    /// `source_mode` is the source file's POSIX permission bits, and is
+    /// `Some` only on Unix hosts for entries that came from a real file.
+    /// Formats that can record a mode (tar, ZIP's external attributes) store
+    /// it; the rest ignore it. Without this the writers hardcoded `0o644`
+    /// and every executable in an archive built on Linux lost its `+x` —
+    /// which the extract side then faithfully restored as 644, so a
+    /// round-tripped script tree came back unusable.
     fn add_entry(
         &mut self,
         entry_path: &str,
@@ -38,6 +46,7 @@ pub(crate) trait ArchiveWriter: Send {
         size_hint: Option<u64>,
         is_directory: bool,
         modified: Option<SystemTime>,
+        source_mode: Option<u32>,
     ) -> Result<()>;
 
     /// Mark `entry_path` for removal at commit time. Default impl rejects
@@ -331,6 +340,7 @@ impl ArchiveWriter for ZipWriterBackend {
         _size_hint: Option<u64>,
         is_directory: bool,
         modified: Option<SystemTime>,
+        source_mode: Option<u32>,
     ) -> Result<()> {
         // If this name was queued for removal earlier, treat the new add
         // as the user replacing the entry — drop the pending removal so
@@ -343,10 +353,10 @@ impl ArchiveWriter for ZipWriterBackend {
             .as_mut()
             .ok_or(OtterzipError::InvalidArgument("zip writer already committed"))?;
         if is_directory {
-            writer.add_directory(entry_path, stamp)?;
+            writer.add_directory(entry_path, stamp, source_mode)?;
             return Ok(());
         }
-        writer.add_entry(entry_path, data, stamp)?;
+        writer.add_entry(entry_path, data, stamp, source_mode)?;
         Ok(())
     }
 
@@ -443,8 +453,13 @@ impl ArchiveWriter for ZipWriterBackend {
         };
         for dir_name in &dirs {
             // Directory mtimes are not preserved on extract (a child write
-            // clobbers them), so the placeholder carries "now".
-            if let Err(e) = writer.add_directory(dir_name, None) {
+            // clobbers them), so the placeholder carries "now". `None` for the
+            // mode likewise: `collect_entries` yields entry NAMES, not source
+            // paths, so there is nothing to stat here, and the default 0o755
+            // is what a directory carries in practice. File modes — the ones
+            // that actually matter, because they hold the execute bit — are
+            // captured per entry by the workers below.
+            if let Err(e) = writer.add_directory(dir_name, None, None) {
                 return Some(Err(e));
             }
         }
@@ -1065,6 +1080,12 @@ impl ArchiveWriter for SevenZWriterBackend {
         size_hint: Option<u64>,
         is_directory: bool,
         modified: Option<SystemTime>,
+        // 7z records Windows FILE_ATTRIBUTE_* words, not a POSIX mode, and
+        // `sevenz-rust2` exposes no attribute slot on ArchiveEntry — so there
+        // is nowhere to put this. Extract-side `unix_mode_from_attributes`
+        // correctly reads 7z entries as "no Unix metadata" and leaves the
+        // extracted files at the umask default.
+        _source_mode: Option<u32>,
     ) -> Result<()> {
         let stamp = if self.preserve_timestamps { modified } else { None };
         // Directory entries are metadata-only. In solid mode flush the open
@@ -1213,6 +1234,7 @@ impl TarBuilderHolder {
         size_hint: Option<u64>,
         is_directory: bool,
         modified: Option<SystemTime>,
+        source_mode: Option<u32>,
     ) -> Result<()> {
         let builder = self
             .builder
@@ -1237,7 +1259,7 @@ impl TarBuilderHolder {
         if is_directory {
             header.set_entry_type(tar::EntryType::Directory);
             header.set_size(0);
-            header.set_mode(0o755);
+            header.set_mode(source_mode.unwrap_or(0o755));
             header.set_cksum();
             builder
                 .append_data(&mut header, entry_path, std::io::empty())
@@ -1256,9 +1278,9 @@ impl TarBuilderHolder {
             std::io::copy(data, &mut buf)?;
             header.set_size(buf.len() as u64);
             // Re-bind to a reader over the buffer.
-            return self.append_with_buffer(entry_path, &buf, &mut header);
+            return self.append_with_buffer(entry_path, &buf, &mut header, source_mode);
         };
-        header.set_mode(0o644);
+        header.set_mode(source_mode.unwrap_or(0o644));
         header.set_cksum();
         builder
             .append_data(&mut header, entry_path, payload)
@@ -1271,8 +1293,9 @@ impl TarBuilderHolder {
         entry_path: &str,
         buf: &[u8],
         header: &mut tar::Header,
+        source_mode: Option<u32>,
     ) -> Result<()> {
-        header.set_mode(0o644);
+        header.set_mode(source_mode.unwrap_or(0o644));
         header.set_cksum();
         let builder = self.builder.as_mut().expect("checked above");
         builder
@@ -1314,10 +1337,11 @@ impl ArchiveWriter for TarPlainWriterBackend {
         size_hint: Option<u64>,
         is_directory: bool,
         modified: Option<SystemTime>,
+        source_mode: Option<u32>,
     ) -> Result<()> {
         let stamp = if self.preserve_timestamps { modified } else { None };
         self.holder
-            .add(entry_path, data, size_hint, is_directory, stamp)
+            .add(entry_path, data, size_hint, is_directory, stamp, source_mode)
     }
 
     fn commit(self: Box<Self>) -> Result<()> {
@@ -1357,10 +1381,11 @@ impl ArchiveWriter for TarGzWriterBackend {
         size_hint: Option<u64>,
         is_directory: bool,
         modified: Option<SystemTime>,
+        source_mode: Option<u32>,
     ) -> Result<()> {
         let stamp = if self.preserve_timestamps { modified } else { None };
         self.holder
-            .add(entry_path, data, size_hint, is_directory, stamp)
+            .add(entry_path, data, size_hint, is_directory, stamp, source_mode)
     }
 
     fn commit(self: Box<Self>) -> Result<()> {
@@ -1627,6 +1652,7 @@ fn walk(
                     Some(0),
                     true,
                     meta.modified().ok(),
+                    unix_mode_of(&meta),
                 )?;
             }
             // Push children in reverse so pop order matches alphabetical
@@ -1656,6 +1682,7 @@ fn walk(
             &entry_name,
             meta.len(),
             meta.modified().ok(),
+            unix_mode_of(&meta),
             state,
             snapshot_template,
             &mut *progress,
@@ -1664,12 +1691,35 @@ fn walk(
     Ok(())
 }
 
+/// The source file's POSIX permission bits, or `None` off Unix.
+///
+/// Only the low 12 bits are read: the file-type nibble is the writer's to
+/// decide from `is_directory`, and setuid/setgid/sticky are dropped here
+/// rather than at extract time as well, so an archive OtterZip creates never
+/// carries them in the first place.
+#[allow(clippy::needless_pass_by_value, unused_variables)]
+pub(crate) fn unix_mode_of(meta: &std::fs::Metadata) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        Some(meta.permissions().mode() & 0o777)
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows has no mode to record. Leaving it `None` keeps the writers
+        // on their documented defaults (0o644 / 0o755), which is what every
+        // Windows-authored archive has always carried.
+        None
+    }
+}
+
 fn process_file_entry(
     writer: &mut dyn ArchiveWriter,
     file_path: &Path,
     entry_name: &str,
     file_size: u64,
     modified: Option<SystemTime>,
+    source_mode: Option<u32>,
     state: &mut WalkState,
     snapshot_template: crate::progress::Progress,
     progress: &mut dyn crate::progress::ProgressSink,
@@ -1683,8 +1733,14 @@ fn process_file_entry(
             snapshot: snapshot_template,
             sink: progress,
         };
-        write_result =
-            writer.add_entry(entry_name, &mut counting, Some(file_size), false, modified);
+        write_result = writer.add_entry(
+            entry_name,
+            &mut counting,
+            Some(file_size),
+            false,
+            modified,
+            source_mode,
+        );
     }
 
     match write_result {
@@ -1822,6 +1878,7 @@ impl ArchiveWriter for XzWriterBackend {
         _size_hint: Option<u64>,
         is_directory: bool,
         _modified: Option<SystemTime>,
+        _source_mode: Option<u32>,
     ) -> Result<()> {
         // XZ is a raw single-stream codec with no per-entry metadata slot, so
         // there is nowhere to record a modification time.
@@ -1953,6 +2010,7 @@ impl ArchiveWriter for ZipxWriterBackend {
         _size_hint: Option<u64>,
         is_directory: bool,
         _modified: Option<SystemTime>,
+        _source_mode: Option<u32>,
     ) -> Result<()> {
         // Timestamp preservation for the zip-rs-backed ZIPX writer is a
         // follow-up: it needs a SystemTime → zip::DateTime civil conversion
@@ -2072,6 +2130,7 @@ impl ArchiveWriter for EncryptedZipWriterBackend {
         _size_hint: Option<u64>,
         is_directory: bool,
         _modified: Option<SystemTime>,
+        _source_mode: Option<u32>,
     ) -> Result<()> {
         // Same follow-up as the ZIPX writer: preserving timestamps through
         // zip-rs needs a SystemTime → zip::DateTime conversion. Plain (unencrypted)

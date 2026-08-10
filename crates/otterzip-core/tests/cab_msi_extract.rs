@@ -151,13 +151,19 @@ fn random_bytes_in_cab_extension_yield_unsupported() {
 // MSI fixture
 // =========================================================================
 
+// CFB paths are addressed with `/`, never `\`. The `cfb` crate routes them
+// through `std::path::Path::components`, which is host-dependent: on Windows
+// a `\Inner\StreamTwo` splits into two components, on Unix it stays ONE
+// component whose name contains backslashes — and `validate_name` rejects
+// those, tripping a debug assertion inside the crate. `/` parses identically
+// on both hosts, so the fixture uses it.
 fn write_msi(path: &Path, streams: &[(&str, &[u8])]) {
     let f = fs::File::create(path).unwrap();
     let mut comp = CompoundFile::create(f).expect("cfb create");
     for (cfb_path, body) in streams {
         // Auto-create any parent storages so a path like
-        // `\Binary\Foo` works without a separate setup step.
-        if let Some(parent_idx) = cfb_path.rfind('\\') {
+        // `/Binary/Foo` works without a separate setup step.
+        if let Some(parent_idx) = cfb_path.rfind('/') {
             if parent_idx > 0 {
                 let parent = &cfb_path[..parent_idx];
                 let _ = comp.create_storage_all(parent);
@@ -178,8 +184,8 @@ fn msi_basic_round_trip() {
     write_msi(
         &src,
         &[
-            ("\\StreamOne", payload_a),
-            ("\\Inner\\StreamTwo", payload_b),
+            ("/StreamOne", payload_a),
+            ("/Inner/StreamTwo", payload_b),
         ],
     );
 
@@ -260,7 +266,7 @@ fn cab_and_msi_creation_modes_rejected() {
     let cab_src = td.path().join("seed.cab");
     write_cab(&cab_src, &[("X.TXT", b"x")]);
     let msi_src = td.path().join("seed.msi");
-    write_msi(&msi_src, &[("\\X", b"x")]);
+    write_msi(&msi_src, &[("/X", b"x")]);
 
     for src in [&cab_src, &msi_src] {
         for mode in [

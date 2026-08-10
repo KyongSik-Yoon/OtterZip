@@ -365,4 +365,18 @@
   <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>无法拖放此项目</value></data>
   <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>关闭</value></data>
   <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>取消任务</value></data>
+
+  <!-- Linux front end (app/OtterZip.Linux). The Avalonia views cover the
+       same ground as the WinUI ones, but the drop panel offers explicit
+       pickers and the Explorer-registration pane is replaced by the
+       freedesktop desktop-integration installer, so these keys have no
+       Windows counterpart to reuse. -->
+  <data name="Linux_AddFiles.Text" xml:space="preserve"><value>添加文件…</value></data>
+  <data name="Linux_AddFolder.Text" xml:space="preserve"><value>添加文件夹…</value></data>
+  <data name="Linux_PendingCountFormat.Text" xml:space="preserve"><value>待压缩项目 {0} 个</value></data>
+  <data name="Linux_IntegrationDesc.Text" xml:space="preserve"><value>将 OtterZip 添加到文件管理器的右键菜单，并设为压缩文件的默认打开方式。</value></data>
+  <data name="Linux_IntegrationInstalled.Text" xml:space="preserve"><value>已安装 · {0}</value></data>
+  <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>未安装</value></data>
+  <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>安装</value></data>
+  <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>移除</value></data>
 </root>

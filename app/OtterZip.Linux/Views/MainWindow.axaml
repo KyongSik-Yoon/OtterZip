@@ -1,0 +1,129 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:OtterZip.App.Models"
+        x:Class="OtterZip.Linux.Views.MainWindow"
+        x:DataType="models:JobItem"
+        Width="720" Height="560"
+        MinWidth="520" MinHeight="400"
+        WindowStartupLocation="CenterScreen"
+        Title="OtterZip">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+    <!-- Header: title + settings. Deliberately flat — the Windows build's
+         custom title bar has no Linux counterpart worth reproducing, because
+         the window decorations belong to the compositor here. -->
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
+      <Image Grid.Column="0" Width="28" Height="28" Margin="0,0,10,0"
+             Source="avares://otterzip-gui/Assets/otterzip.png" />
+      <TextBlock Grid.Column="1" Classes="h1" Text="OtterZip"
+                 VerticalAlignment="Center" />
+      <Button Grid.Column="2" x:Name="SettingsButton" Click="OnSettingsClick"
+              Padding="10,6" />
+    </Grid>
+
+    <!-- Body: the drop zone on top, the job list below. The drop zone keeps
+         a fixed height so the job list grows into the remaining space
+         instead of the two fighting over it. -->
+    <Grid Grid.Row="1" RowDefinitions="Auto,*">
+
+      <Border Grid.Row="0" x:Name="DropZone" Classes="dropzone"
+              Height="150" Margin="0,0,0,12">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
+          <TextBlock x:Name="DropTitle" HorizontalAlignment="Center"
+                     FontSize="15" FontWeight="SemiBold" />
+          <TextBlock x:Name="DropSubtitle" Classes="caption"
+                     HorizontalAlignment="Center" TextAlignment="Center" />
+          <StackPanel Orientation="Horizontal" Spacing="8"
+                      HorizontalAlignment="Center" Margin="0,8,0,0">
+            <Button x:Name="AddFilesButton" Click="OnAddFilesClick" Padding="12,6" />
+            <Button x:Name="AddFolderButton" Click="OnAddFolderClick" Padding="12,6" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="1" Classes="card" Padding="0">
+        <Grid RowDefinitions="Auto,*">
+          <!-- Compress bar: only meaningful when non-archive sources are
+               pending, so it hides itself the rest of the time. -->
+          <Border Grid.Row="0" x:Name="PendingBar" IsVisible="False"
+                  Padding="12,10" BorderThickness="0,0,0,1"
+                  BorderBrush="{DynamicResource CardBorder}">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+              <TextBlock Grid.Column="0" x:Name="PendingLabel"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              <ComboBox Grid.Column="1" x:Name="FormatCombo" Width="110"
+                        Margin="8,0" VerticalAlignment="Center" />
+              <Button Grid.Column="2" x:Name="CompressButton" Click="OnCompressClick"
+                      Classes="accent" Padding="14,6" />
+              <Button Grid.Column="3" x:Name="ClearButton" Click="OnClearClick"
+                      Margin="8,0,0,0" Padding="10,6" />
+            </Grid>
+          </Border>
+
+          <ScrollViewer Grid.Row="1">
+            <ItemsControl x:Name="JobList" Margin="12">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:JobItem">
+                  <Border Classes="card" Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                      <TextBlock Grid.Row="0" Grid.Column="0"
+                                 Text="{Binding DisplayName}"
+                                 FontWeight="SemiBold"
+                                 TextTrimming="CharacterEllipsis" />
+
+                      <!-- Cancel while running, dismiss once settled. Two
+                           buttons rather than one with a converter: the
+                           actions differ and so should the affordance. -->
+                      <Button Grid.Row="0" Grid.Column="1"
+                              x:Name="CancelJobButton"
+                              Content="✕" Padding="8,2"
+                              IsVisible="{Binding IsRunning}"
+                              Click="OnCancelJobClick" />
+                      <Button Grid.Row="0" Grid.Column="1"
+                              Content="✕" Padding="8,2"
+                              IsVisible="{Binding !IsRunning}"
+                              Click="OnDismissJobClick" />
+
+                      <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                   Margin="0,8,0,0" Height="4"
+                                   Minimum="0" Maximum="100"
+                                   Value="{Binding ProgressPercent}"
+                                   IsIndeterminate="{Binding IsIndeterminate}"
+                                   IsVisible="{Binding IsRunning}" />
+
+                      <!-- Per-entry bar: only the streaming compress path
+                           feeds this, so it stays collapsed elsewhere rather
+                           than showing a permanently-zero second bar. -->
+                      <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                  IsVisible="{Binding CurrentEntryProgressVisible}"
+                                  Margin="0,6,0,0" Spacing="2">
+                        <ProgressBar Height="3" Minimum="0" Maximum="100"
+                                     Value="{Binding CurrentEntryProgressPercent}" />
+                        <TextBlock Classes="caption"
+                                   Text="{Binding CurrentEntryName}"
+                                   TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+
+                      <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                            ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+                        <TextBlock Grid.Column="0" Classes="caption"
+                                   Text="{Binding StatusText}" />
+                        <Button Grid.Column="1" x:Name="RevealButton"
+                                Padding="8,2" FontSize="12"
+                                IsVisible="{Binding IsFinished}"
+                                Click="OnRevealClick" />
+                      </Grid>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <TextBlock Grid.Row="2" x:Name="StatusBar" Classes="caption" Margin="2,10,0,0" />
+  </Grid>
+</Window>

@@ -28,6 +28,7 @@ pub mod error;
 pub mod format;
 pub mod motw;
 pub mod options;
+pub mod posix;
 pub mod progress;
 
 mod backends;
