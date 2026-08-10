@@ -4,7 +4,7 @@
 
 # OtterZip
 
-**A ferramenta de arquivos discreta para o Windows.**
+**A ferramenta de arquivos discreta para o Windows e o Linux.**
 
 Clique com o botão direito para compactar ou extrair. Sem anúncios, sem contas, sem rastreamento.
 
@@ -28,7 +28,7 @@ Botão direito em um arquivo — está zipado. Botão direito em um arquivo comp
 - **Uma coisa, bem feita** — sem modos, sem excessos, sem curva de aprendizado.
 - **Sem anúncios. Sem contas. Sem rastreamento.** Sem programas embutidos, sem insistência, nada para se cadastrar. Relatórios de falha só são enviados se você ativar.
 - **Um núcleo nativo, discretamente rápido** — o motor é escrito em Rust. Ele faz o trabalho e não deixa você esperando.
-- **Parece o Windows, porque é** — feito com C# e WinUI 3. Uma interface nativa de verdade, não uma página web dentro de uma janela.
+- **Parece o Windows, porque é** — feito com C# e WinUI 3. Uma interface nativa de verdade, não uma página web dentro de uma janela. No Linux, uma janela Avalonia nativa sobre o mesmo motor.
 - **Ajuste do seu jeito** — claro, escuro ou seguir o sistema. Dez idiomas incluídos.
 
 ## Instalação
@@ -49,6 +49,12 @@ O pacote é assinado pela LumiBear Studio, e não pela Store, então a primeira 
 
 Os dois canais são exatamente o mesmo aplicativo.
 
+### Linux
+
+Baixe o tarball `linux-x64`, extraia e execute `./install.sh` — a instalação vai para `~/.local` e não precisa de root. Adicione o OtterZip ao menu de contexto do seu gerenciador de arquivos em **Configurações → Integração**.
+
+Todos os detalhes, incluindo a linha de comando e as diferenças em relação ao Windows: [**OtterZip no Linux**](LINUX.md).
+
 ## Formatos
 
 **Criar** — ZIP · 7z · TAR · TAR.GZ
@@ -65,7 +71,9 @@ Tema, idioma, regras de substituição e mais — ajustados como você quiser, e
 
 ## Requisitos
 
-Windows 10 (versão 2004) ou posterior · x64
+**Windows** — Windows 10 (versão 2004) ou posterior · x64
+
+**Linux** — x64 ou arm64, X11 ou Wayland. O tarball de lançamento é autocontido, então não é preciso instalar nenhum runtime antes.
 
 ## Licença
 
