@@ -1,0 +1,101 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OtterZip.Linux.Views.SettingsWindow"
+        Width="560" Height="620"
+        WindowStartupLocation="CenterOwner"
+        Title="Settings">
+
+  <Grid RowDefinitions="*,Auto" Margin="16">
+    <ScrollViewer Grid.Row="0">
+      <StackPanel Spacing="18">
+
+        <!-- Appearance -->
+        <StackPanel Spacing="8">
+          <TextBlock x:Name="AppearanceHeader" Classes="h1" />
+
+          <Grid ColumnDefinitions="180,*">
+            <TextBlock Grid.Column="0" x:Name="ThemeLabel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" x:Name="ThemeCombo" HorizontalAlignment="Stretch" />
+          </Grid>
+
+          <Grid ColumnDefinitions="180,*">
+            <TextBlock Grid.Column="0" x:Name="LanguageLabel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" x:Name="LanguageCombo" HorizontalAlignment="Stretch" />
+          </Grid>
+        </StackPanel>
+
+        <!-- Compression defaults -->
+        <StackPanel Spacing="8">
+          <TextBlock x:Name="DefaultsHeader" Classes="h1" />
+
+          <Grid ColumnDefinitions="180,*">
+            <TextBlock Grid.Column="0" x:Name="FormatLabel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" x:Name="FormatCombo" HorizontalAlignment="Stretch" />
+          </Grid>
+          <TextBlock x:Name="FormatDesc" Classes="caption" />
+
+          <Grid ColumnDefinitions="180,*">
+            <TextBlock Grid.Column="0" x:Name="MethodLabel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" x:Name="MethodCombo" HorizontalAlignment="Stretch" />
+          </Grid>
+          <TextBlock x:Name="MethodDesc" Classes="caption" />
+
+          <Grid ColumnDefinitions="180,*">
+            <TextBlock Grid.Column="0" x:Name="SaveLocationLabel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" x:Name="SaveLocationCombo" HorizontalAlignment="Stretch" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" x:Name="CustomDirRow">
+            <TextBox Grid.Column="0" x:Name="CustomDirBox" IsReadOnly="True" />
+            <Button Grid.Column="1" x:Name="BrowseButton" Margin="8,0,0,0"
+                    Click="OnBrowseClick" />
+          </Grid>
+        </StackPanel>
+
+        <!-- Extraction -->
+        <StackPanel Spacing="8">
+          <TextBlock x:Name="ExtractHeader" Classes="h1" />
+
+          <Grid ColumnDefinitions="180,*">
+            <TextBlock Grid.Column="0" x:Name="OverwriteLabel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" x:Name="OverwriteCombo" HorizontalAlignment="Stretch" />
+          </Grid>
+          <TextBlock x:Name="OverwriteDesc" Classes="caption" />
+
+          <CheckBox x:Name="DeleteArchiveCheck" />
+          <CheckBox x:Name="SoundExtractCheck" />
+          <CheckBox x:Name="SoundCompressCheck" />
+          <CheckBox x:Name="VerifyCheck" />
+          <CheckBox x:Name="DeleteSourceCheck" />
+        </StackPanel>
+
+        <!-- Desktop integration — the Linux stand-in for the Explorer
+             shell extension. -->
+        <StackPanel Spacing="8">
+          <TextBlock x:Name="IntegrationHeader" Classes="h1" />
+          <TextBlock x:Name="IntegrationDesc" Classes="caption" />
+          <TextBlock x:Name="IntegrationState" Classes="caption" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="InstallButton" Click="OnInstallClick" Padding="14,6" />
+            <Button x:Name="RemoveButton" Click="OnRemoveClick" Padding="14,6" />
+          </StackPanel>
+          <Border Classes="card" x:Name="IntegrationLogBox" IsVisible="False" MaxHeight="160">
+            <ScrollViewer>
+              <SelectableTextBlock x:Name="IntegrationLog" FontFamily="monospace" FontSize="11" />
+            </ScrollViewer>
+          </Border>
+        </StackPanel>
+
+        <!-- Info -->
+        <StackPanel Spacing="4">
+          <TextBlock x:Name="InfoHeader" Classes="h1" />
+          <SelectableTextBlock x:Name="VersionText" Classes="caption" />
+          <SelectableTextBlock x:Name="ConfigPathText" Classes="caption" />
+        </StackPanel>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <Button Grid.Row="1" x:Name="CloseButton" HorizontalAlignment="Right"
+            Margin="0,12,0,0" Padding="16,7" Click="OnCloseClick" />
+  </Grid>
+</Window>

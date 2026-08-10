@@ -1,0 +1,126 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    OtterZip for Linux — the Avalonia front end.
+
+    WinUI 3 (app/OtterZip.App) cannot run outside Windows: it is bound to the
+    Windows App SDK, the XAML compiler targets `net9.0-windows`, and the shell
+    extension is a COM in-proc server. So the Linux port needs a second view
+    layer. What it does NOT need is a second *application*: the archive engine
+    is the Rust core behind a C ABI, and everything between that ABI and the
+    views — output naming, split detection, the compress plan builder, size
+    formatting — is ordinary portable C#. Those files are LINKED from
+    OtterZip.App below rather than copied, so a fix lands in both front ends
+    at once.
+
+    What is NOT shared, and why:
+      * Views — WinUI XAML and Avalonia XAML are different dialects.
+      * SettingsService — WinUI persists through `Windows.Storage.
+        ApplicationData`; the Linux build writes JSON under `$XDG_CONFIG_HOME`.
+      * Strings — WinUI resolves `.resw` through the MRT resource loader,
+        which has no Linux equivalent, so the Linux build parses the same
+        `.resw` files directly (same catalogue, same keys, all ten languages).
+      * JobQueue / JobItem — they marshal to the UI thread through
+        `Microsoft.UI.Dispatching.DispatcherQueue`; Avalonia has its own.
+      * Win32Helper — replaced by a freedesktop.org implementation (XDG
+        trash spec, `xdg-open`, `canberra-gtk-play`).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>OtterZip.Linux</RootNamespace>
+    <AssemblyName>otterzip-gui</AssemblyName>
+    <Nullable>enable</Nullable>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+
+    <!--
+      Avalonia's XAML compiler emits code this repo's `AnalysisMode=
+      AllEnabledByDefault` + `TreatWarningsAsErrors` combination rejects, and
+      the generated `*.g.cs` files cannot be edited. Rather than turn the
+      whole analyzer suite off, suppress the specific rules the generated code
+      and the view-model plumbing trip:
+        CA1515          — Avalonia XAML codegen requires public partial views.
+        CA1031          — UI event handlers must not let one failed job kill
+                          the window; every catch-all logs and shows a toast.
+        CA1812          — views are instantiated by the XAML loader.
+        CA1848/CA1849   — no ILogger source-gen in a UI this small.
+        CA2007          — a UI app has no synchronization-context deadlock to
+                          avoid; ConfigureAwait(false) on every await would
+                          throw the continuation off the UI thread.
+        MA0004          — same reason as CA2007.
+        MA0048/MA0047   — small view + view-model pairs live in one file.
+        CA1303          — user-facing strings come from the .resw catalogue at
+                          runtime; the literals left are diagnostics.
+    -->
+    <NoWarn>$(NoWarn);CA1515;CA1031;CA1812;CA1848;CA1849;CA2007;MA0004;MA0048;MA0047;CA1303</NoWarn>
+    <!--
+      CA1724      — the Avalonia entry class must be named `App`, and it sits
+                    beside the shared `OtterZip.App` namespace. Renaming
+                    either would be worse than the partial-name overlap.
+      CA1003/MA0046 — JobSettled carries the settled JobItem, not an
+                    EventArgs subclass. Same signature as the WinUI queue's,
+                    which suppresses the same pair for the same reason.
+      CA1001      — MainWindow disposes its JobQueue from the Closed event
+                    (a Window is not disposed by its host, so IDisposable on
+                    it would never be called).
+    -->
+    <NoWarn>$(NoWarn);CA1724;CA1003;MA0046;CA1001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" />
+    <PackageReference Include="Meziantou.Analyzer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OtterZip.Interop\OtterZip.Interop.csproj" />
+  </ItemGroup>
+
+  <!--
+    Platform-neutral logic shared verbatim with the WinUI front end. These
+    files reference only System.*, System.IO and OtterZip.Interop; the two
+    services they call into that ARE platform-specific (SettingsService,
+    Win32Helper) are re-implemented in this project under the same namespace
+    and with the same signatures, so the linked sources compile unchanged.
+  -->
+  <ItemGroup>
+    <Compile Include="..\OtterZip.App\Services\CompressEngine.cs" Link="Shared\CompressEngine.cs" />
+    <Compile Include="..\OtterZip.App\Services\ExtractDefaults.cs" Link="Shared\ExtractDefaults.cs" />
+    <Compile Include="..\OtterZip.App\Services\OperationSummary.cs" Link="Shared\OperationSummary.cs" />
+    <Compile Include="..\OtterZip.App\Services\OutputNamer.cs" Link="Shared\OutputNamer.cs" />
+    <Compile Include="..\OtterZip.App\Services\SettingsChangedEventArgs.cs" Link="Shared\SettingsChangedEventArgs.cs" />
+    <Compile Include="..\OtterZip.App\Services\SplitArchiveDetector.cs" Link="Shared\SplitArchiveDetector.cs" />
+    <Compile Include="..\OtterZip.App\Services\SplitKind.cs" Link="Shared\SplitKind.cs" />
+    <Compile Include="..\OtterZip.App\Models\JobKind.cs" Link="Shared\JobKind.cs" />
+    <Compile Include="..\OtterZip.App\Models\JobState.cs" Link="Shared\JobState.cs" />
+  </ItemGroup>
+
+  <!--
+    The ten-language string catalogue, shared byte-for-byte with the WinUI
+    build. Copied next to the executable and parsed at runtime by
+    Services/Strings.cs — the keys, the values and the translations are the
+    same files the Windows build compiles into its MRT resource map, so the
+    two front ends can never drift apart on wording.
+  -->
+  <ItemGroup>
+    <Content Include="..\OtterZip.App\Strings\**\Resources.resw"
+             Link="Strings\%(RecursiveDir)Resources.resw">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\readme\images\otter.png" Link="Assets\otterzip.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <AvaloniaResource Include="..\..\readme\images\otter.png" Link="Assets\otterzip.png" />
+  </ItemGroup>
+
+</Project>

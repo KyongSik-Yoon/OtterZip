@@ -415,4 +415,18 @@
   <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>이 항목은 놓을 수 없습니다</value></data>
   <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>닫기</value></data>
   <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>작업 취소</value></data>
+
+  <!-- Linux front end (app/OtterZip.Linux). The Avalonia views cover the
+       same ground as the WinUI ones, but the drop panel offers explicit
+       pickers and the Explorer-registration pane is replaced by the
+       freedesktop desktop-integration installer, so these keys have no
+       Windows counterpart to reuse. -->
+  <data name="Linux_AddFiles.Text" xml:space="preserve"><value>파일 추가…</value></data>
+  <data name="Linux_AddFolder.Text" xml:space="preserve"><value>폴더 추가…</value></data>
+  <data name="Linux_PendingCountFormat.Text" xml:space="preserve"><value>압축할 항목 {0}개</value></data>
+  <data name="Linux_IntegrationDesc.Text" xml:space="preserve"><value>파일 관리자의 마우스 오른쪽 버튼 메뉴에 OtterZip을 추가하고, 압축 파일의 기본 프로그램으로 등록합니다.</value></data>
+  <data name="Linux_IntegrationInstalled.Text" xml:space="preserve"><value>설치됨 · {0}</value></data>
+  <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>설치되지 않음</value></data>
+  <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>설치</value></data>
+  <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>제거</value></data>
 </root>

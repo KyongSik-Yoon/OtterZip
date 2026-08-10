@@ -337,4 +337,18 @@
   <data name="DropOverlay_RejectTitle.Text" xml:space="preserve"><value>No se pueden soltar estos elementos</value></data>
   <data name="ExtractPanel_CloseButton.AutomationProperties.Name" xml:space="preserve"><value>Cerrar</value></data>
   <data name="JobCard_CancelButton.AutomationProperties.Name" xml:space="preserve"><value>Cancelar tarea</value></data>
+
+  <!-- Linux front end (app/OtterZip.Linux). The Avalonia views cover the
+       same ground as the WinUI ones, but the drop panel offers explicit
+       pickers and the Explorer-registration pane is replaced by the
+       freedesktop desktop-integration installer, so these keys have no
+       Windows counterpart to reuse. -->
+  <data name="Linux_AddFiles.Text" xml:space="preserve"><value>Añadir archivos…</value></data>
+  <data name="Linux_AddFolder.Text" xml:space="preserve"><value>Añadir carpeta…</value></data>
+  <data name="Linux_PendingCountFormat.Text" xml:space="preserve"><value>{0} elemento(s) para comprimir</value></data>
+  <data name="Linux_IntegrationDesc.Text" xml:space="preserve"><value>Añadir OtterZip al menú contextual del gestor de archivos y establecerlo como aplicación predeterminada para los archivos comprimidos.</value></data>
+  <data name="Linux_IntegrationInstalled.Text" xml:space="preserve"><value>Instalado · {0}</value></data>
+  <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>No instalado</value></data>
+  <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>Instalar</value></data>
+  <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>Quitar</value></data>
 </root>

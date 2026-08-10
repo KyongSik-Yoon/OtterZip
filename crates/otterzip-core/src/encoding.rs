@@ -30,7 +30,7 @@
 //! "why did this archive's names look right / wrong?" stays
 //! diagnosable from the same log file the FFI subscriber writes.
 
-use encoding_rs::{Encoding, BIG5, EUC_KR, GBK, SHIFT_JIS, UTF_8};
+use encoding_rs::{Encoding, BIG5, EUC_KR, GBK, SHIFT_JIS};
 
 /// What the cascade decided. Held alongside the decoded archive in
 /// case downstream code (UI, audit log, tests) wants to surface

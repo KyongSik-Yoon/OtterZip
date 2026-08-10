@@ -47,6 +47,7 @@ pub(crate) mod zip;
 pub(crate) mod zip_writer;
 
 pub(crate) use writer::{add_dir_recursive_through, open_writer, ArchiveWriter};
+pub(crate) use writer::unix_mode_of as __unix_mode_of;
 
 /// Trait implemented by every archive-format backend.
 ///

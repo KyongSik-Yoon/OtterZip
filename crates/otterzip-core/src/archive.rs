@@ -340,9 +340,10 @@ impl Archive {
         let src = src.as_ref();
         let meta = fs::metadata(src)?;
         let modified = meta.modified().ok();
+        let mode = crate::backends::__unix_mode_of(&meta);
         let file = fs::File::open(src)?;
         let mut reader = std::io::BufReader::new(file);
-        writer.add_entry(entry_path, &mut reader, Some(meta.len()), false, modified)
+        writer.add_entry(entry_path, &mut reader, Some(meta.len()), false, modified, mode)
     }
 
     /// Remove an entry by name from a write-mode archive. Phase 8 G7

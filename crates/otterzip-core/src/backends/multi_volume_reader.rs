@@ -22,7 +22,9 @@
 //!   back to the serial `extract_all` loop, which is fine for the
 //!   one-archive-at-a-time UX we ship today.
 
-use std::fs::{File, OpenOptions};
+use std::fs::File;
+#[cfg(windows)]
+use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
