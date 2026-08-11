@@ -123,11 +123,11 @@ Double-clicking an archive (or dropping a single one onto the window) opens a
 contents view listing its entries. From there:
 
 * **Extract** unpacks everything to a folder you pick.
-* **Add files… / Add folder…** appends to the archive in place — ZIP only.
-  Existing entries are preserved as-is (nothing is recompressed); a name that
-  is already inside the archive is skipped rather than duplicated. (Dragging
-  files from the file manager onto the window is not supported on Linux yet —
-  see *Differences from the Windows build* below.)
+* **Add files… / Add folder…**, or **dragging files and folders straight onto
+  the list** (from your file manager or anywhere else), appends to the archive
+  in place — ZIP only. Existing entries are preserved as-is (nothing is
+  recompressed); a name that is already inside the archive is skipped rather
+  than duplicated.
 
 The command line does the same append:
 
@@ -170,14 +170,12 @@ rather than being rewritten, because there is no drive to strip.
 
 **RAR is still extract-only**, for licensing reasons, not technical ones.
 
-**No drag-and-drop from the file manager (yet).** Avalonia's X11 backend — the
-one this build uses — does not implement receiving drops from other
-applications; that support landed only in Avalonia 12.1 and is not backported
-to the 11.x line OtterZip ships on. So files dragged out of Dolphin, Nautilus
-or Thunar never reach the window. Use **Add files… / Add folder…**, "Open
-With", or the right-click **context-menu actions** instead — all of which do
-work. The drop wiring is already in the code and will start working if OtterZip
-moves to Avalonia 12+.
+**Drag-and-drop needs Avalonia 12.1+.** Receiving a drop from another
+application on X11 (the XDND protocol) is not something Avalonia's X11 backend
+implemented until 12.1 — the 11.x line never had it. OtterZip builds against
+12.1, so dragging files out of Dolphin, Nautilus or Thunar onto the window
+works; on an older toolkit it silently would not, which is why the minimum is
+called out here.
 
 **Wayland.** OtterZip runs on the X11 backend, which is Avalonia's production
 Linux path; on a Wayland session it runs through XWayland with no configuration

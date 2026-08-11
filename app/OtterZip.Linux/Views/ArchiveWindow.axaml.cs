@@ -66,19 +66,12 @@ public partial class ArchiveWindow : Window
     /// </summary>
     private void SetUpDragAndDrop()
     {
-        // IMPORTANT: dropping files FROM a file manager does not reach the app
-        // on Linux/X11 in this build. Avalonia 11's X11 backend implements no
-        // XDND drop target — external-drop receive landed only in Avalonia
-        // 12.1 (AvaloniaUI/Avalonia#20926, "wont-backport" to 11.x), so no
-        // drag event is ever delivered to these handlers here. They are kept
-        // because they are correct and already work on the Windows/macOS
-        // backends, and they light up automatically the day this front end
-        // moves to Avalonia 12+. Until then, Add files… / Add folder… (and the
-        // file-manager context-menu actions) are the supported way in.
-        //
-        // handledEventsToo matters once events DO fire: a drop over the entry
-        // list bubbles through the ListBox and its scroll viewer, either of
-        // which can mark it handled before it reaches the window.
+        // External file drops (from a file manager) reach the app on Linux/X11
+        // as of Avalonia 12.1, which added the XDND drop-target protocol
+        // (AvaloniaUI/Avalonia#20926) — 11.x had no such support.
+        // handledEventsToo: a drop over the entry list bubbles through the
+        // ListBox and its scroll viewer, either of which can mark the drag
+        // handled before it reaches the window.
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragEnterEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -88,7 +81,7 @@ public partial class ArchiveWindow : Window
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        bool hasFiles = e.Data.Contains(DataFormats.Files);
+        bool hasFiles = e.DataTransfer.Contains(DataFormat.File);
         e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
         DropArea.Classes.Set("active", hasFiles);
         e.Handled = true;
@@ -101,13 +94,13 @@ public partial class ArchiveWindow : Window
     {
         DropArea.Classes.Set("active", false);
         e.Handled = true;
-        await AddPathsAsync(DropPaths(e.Data));
+        await AddPathsAsync(DropPaths(e.DataTransfer));
     }
 
-    private static List<string> DropPaths(IDataObject data)
+    private static List<string> DropPaths(IDataTransfer data)
     {
         var paths = new List<string>();
-        IEnumerable<IStorageItem>? items = data.GetFiles();
+        IStorageItem[]? items = data.TryGetFiles();
         if (items is null)
         {
             return paths;

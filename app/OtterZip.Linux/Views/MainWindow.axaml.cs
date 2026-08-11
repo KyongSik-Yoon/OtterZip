@@ -133,13 +133,10 @@ public partial class MainWindow : Window
     private void SetUpDragAndDrop()
     {
         DragDrop.SetAllowDrop(this, true);
-        // NOTE: external file drops do not reach the app on Linux/X11 in this
-        // build — Avalonia 11's X11 backend has no XDND drop target (it arrives
-        // in Avalonia 12.1). These handlers work on Windows/macOS and become
-        // live on a future Avalonia 12+; on Linux the buttons and context-menu
-        // actions are the way in. handledEventsToo lets the window still see a
-        // drop the job list marked handled once events do fire. See
-        // ArchiveWindow.SetUpDragAndDrop for the full reasoning.
+        // External file drops reach the app on Linux/X11 as of Avalonia 12.1
+        // (XDND drop target, AvaloniaUI/Avalonia#20926). handledEventsToo lets
+        // the window still see a drop the job list marked handled on the way
+        // up. See ArchiveWindow.SetUpDragAndDrop for the same reasoning.
         AddHandler(DragDrop.DragEnterEvent, OnDragEnter, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -150,7 +147,7 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        bool hasFiles = e.Data.Contains(DataFormats.Files);
+        bool hasFiles = e.DataTransfer.Contains(DataFormat.File);
         e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
         DropZone.Classes.Set("active", hasFiles);
         e.Handled = true;
@@ -164,7 +161,7 @@ public partial class MainWindow : Window
         DropZone.Classes.Set("active", false);
         e.Handled = true;
 
-        List<string> paths = PathsFrom(e.Data);
+        List<string> paths = PathsFrom(e.DataTransfer);
         if (paths.Count == 0)
         {
             return;
@@ -172,10 +169,10 @@ public partial class MainWindow : Window
         Accept(paths);
     }
 
-    private static List<string> PathsFrom(IDataObject data)
+    private static List<string> PathsFrom(IDataTransfer data)
     {
         var paths = new List<string>();
-        IEnumerable<IStorageItem>? items = data.GetFiles();
+        IStorageItem[]? items = data.TryGetFiles();
         if (items is null)
         {
             return paths;

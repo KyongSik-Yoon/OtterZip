@@ -24,9 +24,10 @@
 
     <!-- Entry list. A ListBox with a three-column row template rather than a
          DataGrid, so no extra package is pulled in for what is a read-only
-         listing. Named as a drop target for the forward-compatible DnD wiring
-         in the code-behind, which is inert on Linux/X11 today (see
-         SetUpDragAndDrop) — the Add buttons are the supported path there. -->
+         listing. Doubles as a drop target: dropping files or folders here
+         appends them to the archive (ZIP), the same as the Add buttons —
+         including drops from a file manager, which work on Linux as of the
+         Avalonia 12.1 the app builds against. -->
     <Border Grid.Row="1" x:Name="DropArea" Classes="card" Padding="0">
       <DockPanel>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,110,150"
