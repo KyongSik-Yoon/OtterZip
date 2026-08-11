@@ -94,28 +94,99 @@ public partial class ArchiveWindow : Window
     {
         DropArea.Classes.Set("active", false);
         e.Handled = true;
-        await AddPathsAsync(DropPaths(e.DataTransfer));
+
+        List<string> paths = DropPaths(e.DataTransfer);
+        if (paths.Count == 0)
+        {
+            // The drop was recognised (the card highlighted) but nothing
+            // usable came out of it. Show what the payload actually carried,
+            // so a format we did not handle is visible in the window instead
+            // of the drop silently doing nothing.
+            ShowStatus(Strings.Format("Linux_DropUnreadableFormat", DescribeFormats(e.DataTransfer)));
+            return;
+        }
+        await AddPathsAsync(paths);
     }
 
     private static List<string> DropPaths(IDataTransfer data)
     {
         var paths = new List<string>();
+
+        // Preferred: file items. On X11 an external drop arrives as file://
+        // URIs, which Avalonia usually wraps as storage items.
         IStorageItem[]? items = data.TryGetFiles();
-        if (items is null)
+        if (items is not null)
         {
-            return paths;
-        }
-        foreach (IStorageItem item in items)
-        {
-            // Skip non-local drops (a remote URI, a GVfs mount the CLI cannot
-            // open by path) rather than fail later with "file not found".
-            string? local = item.TryGetLocalPath();
-            if (!string.IsNullOrEmpty(local))
+            foreach (IStorageItem item in items)
             {
-                paths.Add(local);
+                string? local = LocalPathOf(item);
+                if (local is not null)
+                {
+                    paths.Add(local);
+                }
+            }
+        }
+
+        // Fallback: a text/uri-list (or plain text) payload of file:// URIs or
+        // bare paths — what some file managers hand over instead of, or as well
+        // as, file items, and what a storage item resolves to no local path for.
+        if (paths.Count == 0)
+        {
+            string? text = data.TryGetText();
+            if (!string.IsNullOrEmpty(text))
+            {
+                foreach (string raw in text.Split('\n'))
+                {
+                    string s = raw.Trim();
+                    if (s.Length == 0 || s[0] == '#') // uri-list comment lines
+                    {
+                        continue;
+                    }
+                    if (Uri.TryCreate(s, UriKind.Absolute, out Uri? uri) && uri.IsFile)
+                    {
+                        paths.Add(uri.LocalPath);
+                    }
+                    else if (s[0] == '/')
+                    {
+                        paths.Add(s);
+                    }
+                }
             }
         }
         return paths;
+    }
+
+    /// <summary>
+    /// Best-effort local filesystem path for a dropped item. A storage item
+    /// built straight from a <c>file://</c> URI (the external-drop case) can
+    /// return null from <see cref="StorageProviderExtensions.TryGetLocalPath"/>
+    /// yet still carry the URI on <see cref="IStorageItem.Path"/>, so try that
+    /// too before giving up. Genuinely non-local drops (a remote URI, a GVfs
+    /// mount the CLI cannot open by path) yield null and are skipped.
+    /// </summary>
+    private static string? LocalPathOf(IStorageItem item)
+    {
+        string? local = item.TryGetLocalPath();
+        if (!string.IsNullOrEmpty(local))
+        {
+            return local;
+        }
+        Uri? p = item.Path;
+        return p is { IsAbsoluteUri: true, IsFile: true } ? p.LocalPath : null;
+    }
+
+    /// <summary>
+    /// A comma-separated list of the format identifiers a data transfer
+    /// carries, for the "drop produced nothing" diagnostic line.
+    /// </summary>
+    private static string DescribeFormats(IDataTransfer data)
+    {
+        var names = new List<string>();
+        foreach (DataFormat format in data.Formats)
+        {
+            names.Add(format.Identifier);
+        }
+        return names.Count > 0 ? string.Join(", ", names) : "(none)";
     }
 
     private void ApplyStrings()

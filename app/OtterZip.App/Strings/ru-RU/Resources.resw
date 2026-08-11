@@ -357,4 +357,5 @@
   <data name="Linux_ColSize.Text" xml:space="preserve"><value>Размер</value></data>
   <data name="Linux_ColModified.Text" xml:space="preserve"><value>Изменён</value></data>
   <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>Файлов: {0} · {1}</value></data>
+  <data name="Linux_DropUnreadableFormat.Text" xml:space="preserve"><value>Не удалось прочитать перетащенные элементы (форматы: {0})</value></data>
 </root>

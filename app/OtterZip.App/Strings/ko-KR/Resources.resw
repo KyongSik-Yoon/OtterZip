@@ -435,4 +435,5 @@
   <data name="Linux_ColSize.Text" xml:space="preserve"><value>크기</value></data>
   <data name="Linux_ColModified.Text" xml:space="preserve"><value>수정한 날짜</value></data>
   <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>파일 {0}개 · {1}</value></data>
+  <data name="Linux_DropUnreadableFormat.Text" xml:space="preserve"><value>끌어다 놓은 항목을 읽지 못했습니다 (형식: {0})</value></data>
 </root>

@@ -357,4 +357,5 @@
   <data name="Linux_ColSize.Text" xml:space="preserve"><value>Taille</value></data>
   <data name="Linux_ColModified.Text" xml:space="preserve"><value>Modifié</value></data>
   <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>{0} fichier(s) · {1}</value></data>
+  <data name="Linux_DropUnreadableFormat.Text" xml:space="preserve"><value>Impossible de lire les éléments déposés (formats : {0})</value></data>
 </root>

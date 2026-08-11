@@ -172,21 +172,53 @@ public partial class MainWindow : Window
     private static List<string> PathsFrom(IDataTransfer data)
     {
         var paths = new List<string>();
+
         IStorageItem[]? items = data.TryGetFiles();
-        if (items is null)
+        if (items is not null)
         {
-            return paths;
-        }
-        foreach (IStorageItem item in items)
-        {
-            // A drop can carry non-local items (a remote URI from a browser,
-            // a GVfs mount the core cannot open by path). TryGetLocalPath
-            // returns null for those; skipping is honest — we would only fail
-            // later with a confusing "file not found".
-            string? local = item.TryGetLocalPath();
-            if (!string.IsNullOrEmpty(local))
+            foreach (IStorageItem item in items)
             {
-                paths.Add(local);
+                // On X11 an external drop arrives as file:// URIs. A storage
+                // item wrapping one can return null from TryGetLocalPath yet
+                // still carry the URI on Path, so fall back to that. Genuinely
+                // non-local drops (a remote URI, a GVfs mount) yield null and
+                // are skipped rather than failing later with "file not found".
+                string? local = item.TryGetLocalPath();
+                if (string.IsNullOrEmpty(local)
+                    && item.Path is { IsAbsoluteUri: true, IsFile: true } uri)
+                {
+                    local = uri.LocalPath;
+                }
+                if (!string.IsNullOrEmpty(local))
+                {
+                    paths.Add(local);
+                }
+            }
+        }
+
+        // Fallback: a text/uri-list (or plain text) payload of file:// URIs or
+        // bare paths — what some file managers hand over instead of file items.
+        if (paths.Count == 0)
+        {
+            string? text = data.TryGetText();
+            if (!string.IsNullOrEmpty(text))
+            {
+                foreach (string raw in text.Split('\n'))
+                {
+                    string s = raw.Trim();
+                    if (s.Length == 0 || s[0] == '#')
+                    {
+                        continue;
+                    }
+                    if (Uri.TryCreate(s, UriKind.Absolute, out Uri? uri) && uri.IsFile)
+                    {
+                        paths.Add(uri.LocalPath);
+                    }
+                    else if (s[0] == '/')
+                    {
+                        paths.Add(s);
+                    }
+                }
             }
         }
         return paths;

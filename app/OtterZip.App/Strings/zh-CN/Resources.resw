@@ -385,4 +385,5 @@
   <data name="Linux_ColSize.Text" xml:space="preserve"><value>大小</value></data>
   <data name="Linux_ColModified.Text" xml:space="preserve"><value>修改时间</value></data>
   <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>{0} 个文件 · {1}</value></data>
+  <data name="Linux_DropUnreadableFormat.Text" xml:space="preserve"><value>无法读取拖放的项目（格式：{0}）</value></data>
 </root>
