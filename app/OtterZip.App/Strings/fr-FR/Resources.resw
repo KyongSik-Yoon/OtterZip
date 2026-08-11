@@ -351,4 +351,10 @@
   <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>Non installé</value></data>
   <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>Installer</value></data>
   <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>Supprimer</value></data>
+
+  <!-- Archive contents window (app/OtterZip.Linux ArchiveWindow) -->
+  <data name="Linux_ColName.Text" xml:space="preserve"><value>Nom</value></data>
+  <data name="Linux_ColSize.Text" xml:space="preserve"><value>Taille</value></data>
+  <data name="Linux_ColModified.Text" xml:space="preserve"><value>Modifié</value></data>
+  <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>{0} fichier(s) · {1}</value></data>
 </root>

@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:OtterZip.Linux.Views"
+        x:Class="OtterZip.Linux.Views.ArchiveWindow"
+        x:DataType="vm:EntryRow"
+        Width="640" Height="480"
+        MinWidth="420" MinHeight="300"
+        WindowStartupLocation="CenterScreen"
+        Title="OtterZip">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="14">
+
+    <!-- Header: which archive, and how many entries. -->
+    <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,10">
+      <TextBlock x:Name="ArchiveName" Classes="h1" TextTrimming="CharacterEllipsis" />
+      <TextBlock x:Name="ArchiveSummary" Classes="caption" />
+    </StackPanel>
+
+    <!-- Entry list. A ListBox with a three-column row template rather than a
+         DataGrid, so no extra package is pulled in for what is a read-only
+         listing. -->
+    <Border Grid.Row="1" Classes="card" Padding="0">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,110,150"
+              Margin="12,8" >
+          <TextBlock Grid.Column="0" x:Name="ColName" Classes="caption" FontWeight="SemiBold" />
+          <TextBlock Grid.Column="1" x:Name="ColSize" Classes="caption" FontWeight="SemiBold"
+                     HorizontalAlignment="Right" />
+          <TextBlock Grid.Column="2" x:Name="ColModified" Classes="caption" FontWeight="SemiBold"
+                     Margin="12,0,0,0" />
+        </Grid>
+        <ListBox x:Name="EntryList" Background="Transparent" BorderThickness="0">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EntryRow">
+              <Grid ColumnDefinitions="*,110,150">
+                <TextBlock Grid.Column="0" Text="{Binding Name}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding SizeText}"
+                           HorizontalAlignment="Right" Classes="caption" />
+                <TextBlock Grid.Column="2" Text="{Binding ModifiedText}"
+                           Margin="12,0,0,0" Classes="caption" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <!-- Actions. -->
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,12,0,0">
+      <Button Grid.Column="0" x:Name="AddFilesButton" Click="OnAddFilesClick"
+              Padding="12,6" />
+      <Button Grid.Column="1" x:Name="AddFolderButton" Click="OnAddFolderClick"
+              Margin="8,0,0,0" Padding="12,6" />
+      <Button Grid.Column="3" x:Name="ExtractButton" Click="OnExtractClick"
+              Classes="accent" Padding="14,6" />
+    </Grid>
+
+    <!-- A thin status line, reused for "adding…", "extracted N", errors. -->
+    <TextBlock Grid.Row="2" x:Name="StatusLine" Classes="caption"
+               VerticalAlignment="Center" HorizontalAlignment="Center"
+               IsVisible="False" />
+  </Grid>
+</Window>

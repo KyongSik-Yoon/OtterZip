@@ -379,4 +379,10 @@
   <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>未安装</value></data>
   <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>安装</value></data>
   <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>移除</value></data>
+
+  <!-- Archive contents window (app/OtterZip.Linux ArchiveWindow) -->
+  <data name="Linux_ColName.Text" xml:space="preserve"><value>名称</value></data>
+  <data name="Linux_ColSize.Text" xml:space="preserve"><value>大小</value></data>
+  <data name="Linux_ColModified.Text" xml:space="preserve"><value>修改时间</value></data>
+  <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>{0} 个文件 · {1}</value></data>
 </root>

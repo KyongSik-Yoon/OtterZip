@@ -209,6 +209,19 @@ public partial class MainWindow : Window
             }
         }
 
+        // A single archive on its own means "show me what's inside" — the
+        // thing a double-click or a lone drop most naturally asks for, and
+        // what every other archive tool does. It opens the contents window,
+        // from which the user can extract or add files. Directly extracting a
+        // dropped archive (the old behaviour) surprised people who only wanted
+        // to look; the explicit extract-here / extract-smart context-menu
+        // verbs still extract without opening a window.
+        if (archives.Count == 1 && others.Count == 0)
+        {
+            OpenArchiveWindow(archives[0]);
+            return;
+        }
+
         foreach (string archive in archives)
         {
             QueueExtract(archive, ShellExtractMode.Smart);
@@ -217,6 +230,38 @@ public partial class MainWindow : Window
         {
             _pending.AddRange(others);
             RefreshPendingBar();
+        }
+    }
+
+    /// <summary>
+    /// Open the archive contents window for <paramref name="path"/>. A verb
+    /// launch (double-click) counts it as a job to wait for, so the process
+    /// does not exit out from under a window the user is still looking at.
+    /// </summary>
+    private void OpenArchiveWindow(string path)
+    {
+        var window = new ArchiveWindow(path);
+        // A double-click launch would otherwise close the moment its (zero)
+        // jobs settle. Keep the process alive until the contents window closes.
+        if (_invoke is not null && !string.Equals(_invoke.Verb, "open", StringComparison.Ordinal))
+        {
+            Interlocked.Increment(ref _headlessOutstanding);
+        }
+        window.Closed += (_, _) => OnArchiveWindowClosed();
+        window.Show();
+    }
+
+    private void OnArchiveWindowClosed()
+    {
+        // Mirror the headless-job accounting so a context-menu "open" launch
+        // exits when its window closes, and a plain launch stays open.
+        if (_invoke is null || string.Equals(_invoke.Verb, "open", StringComparison.Ordinal))
+        {
+            return;
+        }
+        if (Interlocked.Decrement(ref _headlessOutstanding) <= 0)
+        {
+            Close();
         }
     }
 

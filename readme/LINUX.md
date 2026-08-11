@@ -117,6 +117,26 @@ otterzip-gui --invoke compress-zip --files ./project
 otterzip-gui --help
 ```
 
+## Viewing and adding to an archive
+
+Double-clicking an archive (or dropping a single one onto the window) opens a
+contents view listing its entries. From there:
+
+* **Extract** unpacks everything to a folder you pick.
+* **Add files… / Add folder…** appends to the archive in place — ZIP only.
+  Existing entries are preserved as-is (nothing is recompressed); a name that
+  is already inside the archive is skipped rather than duplicated.
+
+The command line does the same append:
+
+```sh
+otterzip a existing.zip newfile.txt morestuff/   # appends to an existing ZIP
+otterzip a new.zip files/                         # creates when it doesn't exist
+```
+
+Append is ZIP-only by design. 7z, tar and the rest stay create-only; RAR is
+extract-only by licence.
+
 ## Differences from the Windows build
 
 **Permissions are preserved.** Both directions. A `.tar.gz` or `.zip` created

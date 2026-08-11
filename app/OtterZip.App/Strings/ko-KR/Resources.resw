@@ -429,4 +429,10 @@
   <data name="Linux_IntegrationNotInstalled.Text" xml:space="preserve"><value>설치되지 않음</value></data>
   <data name="Linux_IntegrationInstall.Text" xml:space="preserve"><value>설치</value></data>
   <data name="Linux_IntegrationRemove.Text" xml:space="preserve"><value>제거</value></data>
+
+  <!-- Archive contents window (app/OtterZip.Linux ArchiveWindow) -->
+  <data name="Linux_ColName.Text" xml:space="preserve"><value>이름</value></data>
+  <data name="Linux_ColSize.Text" xml:space="preserve"><value>크기</value></data>
+  <data name="Linux_ColModified.Text" xml:space="preserve"><value>수정한 날짜</value></data>
+  <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>파일 {0}개 · {1}</value></data>
 </root>
