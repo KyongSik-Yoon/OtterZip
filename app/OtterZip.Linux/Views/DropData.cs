@@ -36,6 +36,9 @@ internal static class DropData
         "x-special/nautilus-clipboard",
     ];
 
+    /// <summary>The document-portal transfer-key format (KDE / Wayland drops).</summary>
+    private const string PortalFormat = "application/vnd.portal.filetransfer";
+
     /// <summary>Local paths carried by the drop, in the order they appear.</summary>
     public static List<string> LocalPaths(IDataTransfer data)
     {
@@ -56,29 +59,33 @@ internal static class DropData
             }
         }
 
-        // 2) A raw uri-list under a desktop-specific format.
+        // Only formats the drop actually advertises are worth reading — asking
+        // the X server for one the source does not offer just burns the wait.
+        HashSet<string> offered = OfferedFormats(data);
+
+        // 2) Read the selection ourselves for a uri-list format. Avalonia
+        //    12.1's X11 raw read is unreliable (it returns the same buffer for
+        //    every format), so go straight to the X server for the real bytes.
         if (paths.Count == 0)
         {
-            foreach (string uriList in RawValues(data, UriListFormats))
-            {
-                AddUriListPaths(uriList, paths);
-            }
+            AppendUriListsFromX11(paths, offered);
         }
 
         // 3) A portal-mediated drop (KDE Plasma, and Wayland→XWayland drags
         //    routed through the document portal) carries only a transfer key
         //    in application/vnd.portal.filetransfer; the real paths come from
-        //    the FileTransfer portal over D-Bus. This is the KDE path — its
-        //    x-kde4-urilist is advertised but left empty.
-        if (paths.Count == 0)
+        //    the FileTransfer portal over D-Bus. Read the key straight from X11
+        //    for the same reason as (2), then resolve it through the portal.
+        if (paths.Count == 0 && offered.Contains(PortalFormat))
         {
-            foreach (string key in RawValues(data, "application/vnd.portal.filetransfer"))
+            string? key = X11Selection.Read(PortalFormat);
+            if (!string.IsNullOrEmpty(key))
             {
                 paths.AddRange(PortalFileTransfer.Retrieve(key));
             }
         }
 
-        // 4) Last resort: a plain-text payload of URIs or bare paths.
+        // 4) Last resort: Avalonia's plain-text view of the drop.
         if (paths.Count == 0)
         {
             string? text = data.TryGetText();
@@ -126,16 +133,26 @@ internal static class DropData
                 parts.Add(format.Identifier + "=" + info);
             }
         }
-        // If a portal key is present, show the outcome of actually calling the
-        // FileTransfer portal with it — the decisive fact when file items and
-        // raw uri-lists both came up empty.
-        foreach (string key in RawValues(data, "application/vnd.portal.filetransfer"))
+        // What our own X11 read recovers — the values Avalonia's TryGetRaw
+        // could not — and, if a portal key comes through, the portal's verdict
+        // on it. This is the decisive line: it distinguishes "we now read the
+        // key but the portal rejected it" from "the X read itself came up null".
+        string? kde = X11Selection.Read("application/x-kde4-urilist");
+        parts.Add("x11.kde4=" + Describe(kde));
+        string? key = X11Selection.Read("application/vnd.portal.filetransfer");
+        parts.Add("x11.portal=" + Describe(key));
+        if (!string.IsNullOrEmpty(key))
         {
             parts.Add("portal→" + PortalFileTransfer.Describe(key));
-            break;
         }
         return parts.Count > 0 ? string.Join(", ", parts) : "(none)";
     }
+
+    private static string Describe(string? value) =>
+        value is null
+            ? "null"
+            : "s" + value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + "[" + Preview(Encoding.UTF8.GetBytes(value)) + "]";
 
     /// <summary>
     /// Up to 24 bytes of a raw value rendered as printable ASCII (other bytes
@@ -154,6 +171,48 @@ internal static class DropData
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Try each offered uri-list-shaped format by reading the X11 selection
+    /// directly, stopping at the first that yields paths.
+    /// </summary>
+    private static void AppendUriListsFromX11(List<string> paths, HashSet<string> offered)
+    {
+        foreach (string format in UriListFormats)
+        {
+            if (!offered.Contains(format))
+            {
+                continue;
+            }
+            string? value = X11Selection.Read(format);
+            if (!string.IsNullOrEmpty(value))
+            {
+                AddUriListPaths(value, paths);
+            }
+            if (paths.Count > 0)
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>Every format identifier the drop advertises, transfer- and item-level.</summary>
+    private static HashSet<string> OfferedFormats(IDataTransfer data)
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        foreach (DataFormat format in data.Formats)
+        {
+            set.Add(format.Identifier);
+        }
+        foreach (IDataTransferItem item in data.Items)
+        {
+            foreach (DataFormat format in item.Formats)
+            {
+                set.Add(format.Identifier);
+            }
+        }
+        return set;
+    }
+
     private static string? LocalPathOf(IStorageItem item)
     {
         string? local = item.TryGetLocalPath();
@@ -165,48 +224,6 @@ internal static class DropData
         // case) can resolve no BCL path yet still carry the URI on Path.
         Uri? p = item.Path;
         return p is { IsAbsoluteUri: true, IsFile: true } ? p.LocalPath : null;
-    }
-
-    /// <summary>
-    /// Decoded raw value (bytes as UTF-8, or a string) of every drop item
-    /// whose format identifier is one of <paramref name="identifiers"/>. The
-    /// lookup uses the actual <see cref="DataFormat"/> object from the drop, so
-    /// its kind (platform vs application) matches and
-    /// <see cref="IDataTransferItem.TryGetRaw"/> does not miss.
-    /// </summary>
-    private static IEnumerable<string> RawValues(IDataTransfer data, params string[] identifiers)
-    {
-        foreach (IDataTransferItem item in data.Items)
-        {
-            foreach (DataFormat format in item.Formats)
-            {
-                if (Array.IndexOf(identifiers, format.Identifier) < 0)
-                {
-                    continue;
-                }
-                object? raw;
-                try
-                {
-                    raw = item.TryGetRaw(format);
-                }
-                catch (Exception)
-                {
-                    // A format that advertised itself but cannot actually be
-                    // read: try the next one rather than failing the drop.
-                    continue;
-                }
-                string? text = raw switch
-                {
-                    byte[] bytes => Encoding.UTF8.GetString(bytes),
-                    string s => s,
-                    _ => null,
-                };
-                if (!string.IsNullOrEmpty(text))
-                {
-                    yield return text;
-                }
-            }
-        }
     }
 
     private static void AddUriListPaths(string text, List<string> into)

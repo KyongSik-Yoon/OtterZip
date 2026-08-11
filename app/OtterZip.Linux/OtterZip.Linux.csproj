@@ -31,6 +31,10 @@
     <RootNamespace>OtterZip.Linux</RootNamespace>
     <AssemblyName>otterzip-gui</AssemblyName>
     <Nullable>enable</Nullable>
+    <!-- Required by the [LibraryImport] source generator (X11Selection's
+         libX11 P/Invoke), whose generated marshalling stubs use unsafe code.
+         This only permits unsafe blocks; none are written by hand. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <InvariantGlobalization>false</InvariantGlobalization>
@@ -68,6 +72,13 @@
                     it would never be called).
     -->
     <NoWarn>$(NoWarn);CA1724;CA1003;MA0046;CA1001</NoWarn>
+    <!--
+      CA5392 — DefaultDllImportSearchPaths hardens against DLL search-order
+               hijacking on Windows; it does not apply to the libX11 P/Invokes
+               in X11Selection, which load a Linux .so by soname. This project
+               only ever runs on Linux.
+    -->
+    <NoWarn>$(NoWarn);CA5392</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
