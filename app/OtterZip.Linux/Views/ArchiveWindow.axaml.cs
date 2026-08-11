@@ -66,13 +66,20 @@ public partial class ArchiveWindow : Window
     /// </summary>
     private void SetUpDragAndDrop()
     {
+        // IMPORTANT: dropping files FROM a file manager does not reach the app
+        // on Linux/X11 in this build. Avalonia 11's X11 backend implements no
+        // XDND drop target — external-drop receive landed only in Avalonia
+        // 12.1 (AvaloniaUI/Avalonia#20926, "wont-backport" to 11.x), so no
+        // drag event is ever delivered to these handlers here. They are kept
+        // because they are correct and already work on the Windows/macOS
+        // backends, and they light up automatically the day this front end
+        // moves to Avalonia 12+. Until then, Add files… / Add folder… (and the
+        // file-manager context-menu actions) are the supported way in.
+        //
+        // handledEventsToo matters once events DO fire: a drop over the entry
+        // list bubbles through the ListBox and its scroll viewer, either of
+        // which can mark it handled before it reaches the window.
         DragDrop.SetAllowDrop(this, true);
-        // handledEventsToo: a drop that lands on the entry list bubbles up
-        // through the ListBox and its scroll viewer, either of which can mark
-        // the drag event handled first. Without this the window-level handler
-        // never sees a drop over a row — which is most of the window — so the
-        // drag appears to do nothing. Registering for handled events too lets
-        // the window receive it regardless of who touched it on the way up.
         AddHandler(DragDrop.DragEnterEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);

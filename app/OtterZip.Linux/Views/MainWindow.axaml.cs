@@ -133,10 +133,13 @@ public partial class MainWindow : Window
     private void SetUpDragAndDrop()
     {
         DragDrop.SetAllowDrop(this, true);
-        // handledEventsToo: a child (the job list, its scroll viewer) can mark
-        // a drag event handled before it bubbles to the window, so the window
-        // handler must opt in to handled events or a drop over the list does
-        // nothing. See ArchiveWindow.SetUpDragAndDrop for the same reasoning.
+        // NOTE: external file drops do not reach the app on Linux/X11 in this
+        // build — Avalonia 11's X11 backend has no XDND drop target (it arrives
+        // in Avalonia 12.1). These handlers work on Windows/macOS and become
+        // live on a future Avalonia 12+; on Linux the buttons and context-menu
+        // actions are the way in. handledEventsToo lets the window still see a
+        // drop the job list marked handled once events do fire. See
+        // ArchiveWindow.SetUpDragAndDrop for the full reasoning.
         AddHandler(DragDrop.DragEnterEvent, OnDragEnter, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
