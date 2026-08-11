@@ -102,7 +102,7 @@ public partial class ArchiveWindow : Window
             // usable came out of it. Show what the payload actually carried,
             // so a format we did not handle is visible in the window instead
             // of the drop silently doing nothing.
-            ShowStatus(Strings.Format("Linux_DropUnreadableFormat", DropData.DescribeFormats(e.DataTransfer)));
+            ShowStatus(Strings.Format("Linux_DropUnreadableFormat", DropData.Diagnose(e.DataTransfer)));
             return;
         }
         await AddPathsAsync(paths);

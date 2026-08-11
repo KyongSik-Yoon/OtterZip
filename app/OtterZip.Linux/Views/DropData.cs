@@ -56,16 +56,29 @@ internal static class DropData
             }
         }
 
-        // 2) A raw uri-list under a desktop-specific format (KDE especially).
+        // 2) A raw uri-list under a desktop-specific format.
         if (paths.Count == 0)
         {
-            foreach (string uriList in RawUriLists(data))
+            foreach (string uriList in RawValues(data, UriListFormats))
             {
                 AddUriListPaths(uriList, paths);
             }
         }
 
-        // 3) Last resort: a plain-text payload of URIs or bare paths.
+        // 3) A portal-mediated drop (KDE Plasma, and Wayland→XWayland drags
+        //    routed through the document portal) carries only a transfer key
+        //    in application/vnd.portal.filetransfer; the real paths come from
+        //    the FileTransfer portal over D-Bus. This is the KDE path — its
+        //    x-kde4-urilist is advertised but left empty.
+        if (paths.Count == 0)
+        {
+            foreach (string key in RawValues(data, "application/vnd.portal.filetransfer"))
+            {
+                paths.AddRange(PortalFileTransfer.Retrieve(key));
+            }
+        }
+
+        // 4) Last resort: a plain-text payload of URIs or bare paths.
         if (paths.Count == 0)
         {
             string? text = data.TryGetText();
@@ -78,17 +91,40 @@ internal static class DropData
     }
 
     /// <summary>
-    /// Comma-separated format identifiers the drop carried, for the
-    /// "drop produced nothing" diagnostic line.
+    /// Per-format diagnostic for the "drop produced nothing" line: each
+    /// format identifier with what its raw value came back as — <c>null</c>,
+    /// <c>b&lt;n&gt;</c> for n bytes, <c>s&lt;n&gt;</c> for an n-char string, or
+    /// <c>err</c>. This says whether the payload was empty or simply in a shape
+    /// we do not decode, which is the difference between "KDE left it blank" and
+    /// "we missed a format".
     /// </summary>
-    public static string DescribeFormats(IDataTransfer data)
+    public static string Diagnose(IDataTransfer data)
     {
-        var names = new List<string>();
-        foreach (DataFormat format in data.Formats)
+        var parts = new List<string>();
+        foreach (IDataTransferItem item in data.Items)
         {
-            names.Add(format.Identifier);
+            foreach (DataFormat format in item.Formats)
+            {
+                string info;
+                try
+                {
+                    object? raw = item.TryGetRaw(format);
+                    info = raw switch
+                    {
+                        null => "null",
+                        byte[] b => "b" + b.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        string s => "s" + s.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        _ => raw.GetType().Name,
+                    };
+                }
+                catch (Exception)
+                {
+                    info = "err";
+                }
+                parts.Add(format.Identifier + "=" + info);
+            }
         }
-        return names.Count > 0 ? string.Join(", ", names) : "(none)";
+        return parts.Count > 0 ? string.Join(", ", parts) : "(none)";
     }
 
     private static string? LocalPathOf(IStorageItem item)
@@ -105,18 +141,19 @@ internal static class DropData
     }
 
     /// <summary>
-    /// Every uri-list-shaped payload the drop carries, decoded from each item's
-    /// raw value. The lookup uses the actual <see cref="DataFormat"/> object
-    /// from the drop, so its kind (platform vs application) matches and
+    /// Decoded raw value (bytes as UTF-8, or a string) of every drop item
+    /// whose format identifier is one of <paramref name="identifiers"/>. The
+    /// lookup uses the actual <see cref="DataFormat"/> object from the drop, so
+    /// its kind (platform vs application) matches and
     /// <see cref="IDataTransferItem.TryGetRaw"/> does not miss.
     /// </summary>
-    private static IEnumerable<string> RawUriLists(IDataTransfer data)
+    private static IEnumerable<string> RawValues(IDataTransfer data, params string[] identifiers)
     {
         foreach (IDataTransferItem item in data.Items)
         {
             foreach (DataFormat format in item.Formats)
             {
-                if (Array.IndexOf(UriListFormats, format.Identifier) < 0)
+                if (Array.IndexOf(identifiers, format.Identifier) < 0)
                 {
                     continue;
                 }
