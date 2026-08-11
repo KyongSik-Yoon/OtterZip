@@ -67,10 +67,16 @@ public partial class ArchiveWindow : Window
     private void SetUpDragAndDrop()
     {
         DragDrop.SetAllowDrop(this, true);
-        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
-        AddHandler(DragDrop.DragOverEvent, OnDragOver);
-        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
-        AddHandler(DragDrop.DropEvent, OnDrop);
+        // handledEventsToo: a drop that lands on the entry list bubbles up
+        // through the ListBox and its scroll viewer, either of which can mark
+        // the drag event handled first. Without this the window-level handler
+        // never sees a drop over a row — which is most of the window — so the
+        // drag appears to do nothing. Registering for handled events too lets
+        // the window receive it regardless of who touched it on the way up.
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
     private void OnDragOver(object? sender, DragEventArgs e)

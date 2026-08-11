@@ -133,10 +133,14 @@ public partial class MainWindow : Window
     private void SetUpDragAndDrop()
     {
         DragDrop.SetAllowDrop(this, true);
-        AddHandler(DragDrop.DragEnterEvent, OnDragEnter);
-        AddHandler(DragDrop.DragOverEvent, OnDragOver);
-        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
-        AddHandler(DragDrop.DropEvent, OnDrop);
+        // handledEventsToo: a child (the job list, its scroll viewer) can mark
+        // a drag event handled before it bubbles to the window, so the window
+        // handler must opt in to handled events or a drop over the list does
+        // nothing. See ArchiveWindow.SetUpDragAndDrop for the same reasoning.
+        AddHandler(DragDrop.DragEnterEvent, OnDragEnter, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(DragDrop.DropEvent, OnDrop, RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
     private void OnDragEnter(object? sender, DragEventArgs e) => OnDragOver(sender, e);
