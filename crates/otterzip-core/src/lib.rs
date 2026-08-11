@@ -21,6 +21,7 @@
     clippy::missing_errors_doc,
 )]
 
+pub mod append;
 pub mod archive;
 pub mod encoding;
 pub mod entry;
@@ -37,6 +38,7 @@ mod backends;
 pub use archive::{
     Archive, ExtractReport, ExtractWarning, OpenMode, RootLayout, TestReport, VolumeInfo,
 };
+pub use append::{append_to_zip, ZipAppendReport};
 pub use entry::{Entry, EntryIter, HostOs};
 pub use error::{Result, OtterzipError};
 pub use format::{detect, detect_bytes, ArchiveFormat, CompressionMethod, EncryptionMethod};

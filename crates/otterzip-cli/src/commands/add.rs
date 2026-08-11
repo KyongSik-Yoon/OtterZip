@@ -1,8 +1,10 @@
-//! `a` — create a NEW archive from files/folders.
+//! `a` — create a new archive, or add files to an existing ZIP.
 //!
-//! Create-only: the core has no Update mode (`open()` rejects non-Read),
-//! so we guard against an existing target rather than silently
-//! overwriting (`Archive::create` would clobber it).
+//! For a target that does not exist, this creates it (the create path below).
+//! For an existing ZIP it appends (`append_to_existing`) via the core's
+//! `append_to_zip`, which preserves the existing entries without recompressing
+//! them. Every other existing target stays refused — the in-tree writer is
+//! create-only, and append is ZIP-only.
 
 use crate::cli::AddArgs;
 use crate::format_map::{codec_for, format_from_output_ext, parse_format, parse_size};
@@ -42,10 +44,16 @@ pub fn create_archive(
     spec: &CreateSpec,
     quiet: bool,
 ) -> Result<i32> {
+    // An existing ZIP is appended to rather than refused — the common "drop one
+    // more file into an archive I already have" case. Other formats stay
+    // create-only (the core append path is ZIP-only), so they keep the guard.
     if output.exists() {
+        if otterzip_core::detect(output).ok() == Some(ArchiveFormat::Zip) && spec.volume.is_none() {
+            return append_to_existing(output, inputs, spec, quiet);
+        }
         bail!(
-            "'{}' already exists. Adding to an existing archive is not supported yet \
-             (create-only) — use a new name or delete the file first.",
+            "'{}' already exists. Adding to an existing archive is supported for ZIP only \
+             — use a new name, or delete the file first.",
             output.display()
         );
     }
@@ -88,6 +96,37 @@ pub fn create_archive(
             Err(e)
         }
     }
+}
+
+/// Append `inputs` to an existing ZIP. Split off from the create path because
+/// appending shares none of it — no format inference, no writer, no rollback,
+/// just the core's surgical [`append_to_zip`](otterzip_core::append_to_zip).
+fn append_to_existing(
+    output: &Path,
+    inputs: &[std::path::PathBuf],
+    spec: &CreateSpec,
+    quiet: bool,
+) -> Result<i32> {
+    if spec.password.is_some() {
+        // Appending an encrypted entry to an existing ZIP is a can of worms
+        // (the archive may be unencrypted, or use a different password); refuse
+        // rather than silently produce a mixed archive.
+        bail!("adding to an existing archive does not support --password");
+    }
+    let report = otterzip_core::append_to_zip(output, inputs, spec.storeroot, spec.level)
+        .with_context(|| format!("adding to '{}'", output.display()))?;
+
+    if !quiet {
+        eprintln!(
+            "Added {} file(s) to {}",
+            report.added,
+            output.display()
+        );
+        for name in &report.skipped_existing {
+            eprintln!("  skipped (already in archive): {name}");
+        }
+    }
+    Ok(exit::EXIT_OK)
 }
 
 fn build_options(output: &Path, spec: &CreateSpec) -> Result<CreateOptions> {

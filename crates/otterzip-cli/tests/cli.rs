@@ -58,14 +58,42 @@ fn list_missing_archive_is_io_error() {
 }
 
 #[test]
-fn create_only_guards_existing_target() {
+fn a_appends_to_an_existing_zip() {
+    let dir = tempdir().unwrap();
+    let first = dir.path().join("a.txt");
+    let second = dir.path().join("b.txt");
+    fs::write(&first, b"x").unwrap();
+    fs::write(&second, b"y").unwrap();
+    let archive = dir.path().join("out.zip");
+
+    // Create with one file, then add a second to the SAME archive.
+    otterzip().arg("a").arg(&archive).arg(&first).assert().success();
+    otterzip()
+        .arg("a")
+        .arg(&archive)
+        .arg(&second)
+        .assert()
+        .success();
+
+    // Both entries are now present.
+    otterzip()
+        .arg("l")
+        .arg(&archive)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("a.txt").and(predicates::str::contains("b.txt")));
+}
+
+#[test]
+fn a_still_refuses_an_existing_non_zip_target() {
     let dir = tempdir().unwrap();
     let src = dir.path().join("a.txt");
     fs::write(&src, b"x").unwrap();
-    let archive = dir.path().join("out.zip");
+    // A pre-existing file that is not a ZIP (a plain .7z name with junk).
+    let archive = dir.path().join("out.7z");
+    fs::write(&archive, b"not really 7z").unwrap();
 
-    otterzip().arg("a").arg(&archive).arg(&src).assert().success();
-    // Second create against the same path must refuse (exit 2).
+    // Append is ZIP-only, so this must refuse rather than clobber (exit 2).
     otterzip()
         .arg("a")
         .arg(&archive)
