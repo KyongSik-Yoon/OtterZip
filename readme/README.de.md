@@ -4,7 +4,7 @@
 
 # OtterZip
 
-**Das stille Archivwerkzeug für Windows.**
+**Das stille Archivwerkzeug für Windows und Linux.**
 
 Mit einem Rechtsklick komprimieren oder entpacken. Keine Werbung, keine Konten, kein Tracking.
 
@@ -28,7 +28,7 @@ Rechtsklick auf eine Datei — sie ist gezippt. Rechtsklick auf ein Archiv — e
 - **Eine Sache, richtig gemacht** — keine Modi, kein Ballast, keine Einarbeitung.
 - **Keine Werbung. Keine Konten. Kein Tracking.** Keine Beipacksoftware, kein Nachhaken, nichts zum Anmelden. Absturzberichte sind ausschließlich opt-in.
 - **Ein nativer Kern, still und schnell** — die Engine ist in Rust geschrieben. Sie erledigt die Arbeit und lässt Sie nicht warten.
-- **Sieht aus wie Windows, weil es Windows ist** — gebaut mit C# und WinUI 3. Eine echte native Oberfläche, keine Webseite in einem Fenster.
+- **Sieht aus wie Windows, weil es Windows ist** — gebaut mit C# und WinUI 3. Eine echte native Oberfläche, keine Webseite in einem Fenster. Unter Linux ein natives Avalonia-Fenster auf derselben Engine.
 - **Nach Ihrem Maß** — hell, dunkel oder dem System folgend. Zehn Sprachen sind eingebaut.
 
 ## Installation
@@ -49,6 +49,12 @@ Das Paket ist von LumiBear Studio signiert und nicht vom Store, deshalb registri
 
 Beide Kanäle liefern exakt dieselbe App.
 
+### Linux
+
+Laden Sie das `linux-x64`-Tarball herunter, entpacken Sie es und führen Sie `./install.sh` aus — installiert wird unter `~/.local`, ganz ohne root. Über **Einstellungen → Integration** fügen Sie OtterZip dem Kontextmenü Ihres Dateimanagers hinzu.
+
+Alle Details, einschließlich Kommandozeile und Unterschieden zu Windows: [**OtterZip unter Linux**](LINUX.md).
+
 ## Formate
 
 **Erstellen** — ZIP · 7z · TAR · TAR.GZ
@@ -65,7 +71,9 @@ Design, Sprache, Überschreibregeln und mehr — eingestellt, wie Sie möchten, 
 
 ## Voraussetzungen
 
-Windows 10 (Version 2004) oder neuer · x64
+**Windows** — Windows 10 (Version 2004) oder neuer · x64
+
+**Linux** — x64 oder arm64, X11 oder Wayland. Das Release-Tarball ist eigenständig, es muss vorher keine Laufzeitumgebung installiert werden.
 
 ## Lizenz
 

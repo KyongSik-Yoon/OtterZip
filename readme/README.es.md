@@ -4,7 +4,7 @@
 
 # OtterZip
 
-**La herramienta de archivos discreta para Windows.**
+**La herramienta de archivos discreta para Windows y Linux.**
 
 Haz clic derecho para comprimir o extraer. Sin anuncios, sin cuentas, sin rastreo.
 
@@ -28,7 +28,7 @@ Clic derecho en un archivo: está comprimido. Clic derecho en un archivo comprim
 - **Una cosa, bien hecha** — sin modos, sin desorden, sin curva de aprendizaje.
 - **Sin anuncios. Sin cuentas. Sin rastreo.** Sin software agrupado, sin insistencias, nada que registrar. Los informes de fallos son estrictamente opcionales.
 - **Un núcleo nativo, silenciosamente rápido** — el motor está escrito en Rust. Hace el trabajo y no te deja esperando.
-- **Parece Windows, porque lo es** — creado con C# y WinUI 3. Una interfaz nativa de verdad, no una página web en una ventana.
+- **Parece Windows, porque lo es** — creado con C# y WinUI 3. Una interfaz nativa de verdad, no una página web en una ventana. En Linux, una ventana Avalonia nativa sobre el mismo motor.
 - **A tu medida** — claro, oscuro o según el sistema. Diez idiomas incluidos.
 
 ## Instalación
@@ -49,6 +49,12 @@ El paquete está firmado por LumiBear Studio y no por la Store, así que la prim
 
 Ambos canales son exactamente la misma aplicación.
 
+### Linux
+
+Descarga el tarball `linux-x64`, extráelo y ejecuta `./install.sh` — se instala en `~/.local` y no necesita root. Añade OtterZip al menú contextual de tu gestor de archivos desde **Ajustes → Integración**.
+
+Todos los detalles, incluida la línea de comandos y las diferencias con Windows: [**OtterZip en Linux**](LINUX.md).
+
 ## Formatos
 
 **Crear** — ZIP · 7z · TAR · TAR.GZ
@@ -65,7 +71,9 @@ Tema, idioma, reglas de sobrescritura y más: ajustados como prefieras, y aparta
 
 ## Requisitos
 
-Windows 10 (versión 2004) o posterior · x64
+**Windows** — Windows 10 (versión 2004) o posterior · x64
+
+**Linux** — x64 o arm64, X11 o Wayland. El tarball de la versión es autónomo, así que no hace falta instalar ningún runtime antes.
 
 ## Licencia
 

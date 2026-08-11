@@ -4,7 +4,7 @@
 
 # OtterZip
 
-**L'outil d'archivage discret pour Windows.**
+**L'outil d'archivage discret pour Windows et Linux.**
 
 Un clic droit pour compresser ou extraire. Sans publicité, sans compte, sans suivi.
 
@@ -28,7 +28,7 @@ Clic droit sur un fichier — il est zippé. Clic droit sur une archive — elle
 - **Une seule chose, bien faite** — pas de modes, pas d'encombrement, rien à apprendre.
 - **Sans publicité. Sans compte. Sans suivi.** Aucun logiciel additionnel, aucune relance, aucune inscription. Les rapports d'incident sont strictement facultatifs.
 - **Un cœur natif, discrètement rapide** — le moteur est écrit en Rust. Il fait le travail et ne vous laisse pas attendre.
-- **L'allure de Windows, parce que c'en est** — conçu avec C# et WinUI 3. Une véritable interface native, pas une page web dans une fenêtre.
+- **L'allure de Windows, parce que c'en est** — conçu avec C# et WinUI 3. Une véritable interface native, pas une page web dans une fenêtre. Sous Linux, une fenêtre Avalonia native au-dessus du même moteur.
 - **À votre main** — clair, sombre ou selon le système. Dix langues intégrées.
 
 ## Installation
@@ -49,6 +49,12 @@ Le paquet est signé par LumiBear Studio plutôt que par le Store : la première
 
 Les deux canaux proposent exactement la même application.
 
+### Linux
+
+Téléchargez l'archive `linux-x64`, extrayez-la et lancez `./install.sh` — l'installation se fait dans `~/.local`, sans root. Ajoutez OtterZip au menu contextuel de votre gestionnaire de fichiers depuis **Paramètres → Intégration**.
+
+Tous les détails, y compris la ligne de commande et les différences avec Windows : [**OtterZip sous Linux**](LINUX.md).
+
 ## Formats
 
 **Créer** — ZIP · 7z · TAR · TAR.GZ
@@ -65,7 +71,9 @@ Thème, langue, règles de remplacement et plus encore — réglés comme vous l
 
 ## Configuration requise
 
-Windows 10 (version 2004) ou ultérieur · x64
+**Windows** — Windows 10 (version 2004) ou ultérieur · x64
+
+**Linux** — x64 ou arm64, X11 ou Wayland. L'archive de release est autonome : aucun runtime à installer au préalable.
 
 ## Licence
 

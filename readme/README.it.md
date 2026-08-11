@@ -4,7 +4,7 @@
 
 # OtterZip
 
-**Lo strumento per archivi discreto per Windows.**
+**Lo strumento per archivi discreto per Windows e Linux.**
 
 Clic destro per comprimere o estrarre. Niente pubblicità, niente account, nessun tracciamento.
 
@@ -28,7 +28,7 @@ Clic destro su un file: è compresso. Clic destro su un archivio: è estratto. L
 - **Una cosa sola, fatta bene** — niente modalità, niente ingombri, niente da imparare.
 - **Niente pubblicità. Niente account. Nessun tracciamento.** Nessun software aggiuntivo, nessun avviso insistente, nessuna registrazione. I rapporti di arresto anomalo sono inviati solo su tua scelta esplicita.
 - **Un core nativo, veloce senza clamore** — il motore è scritto in Rust. Fa il suo lavoro e non ti lascia ad aspettare.
-- **Sembra Windows, perché lo è** — realizzato con C# e WinUI 3. Un'interfaccia nativa vera, non una pagina web in una finestra.
+- **Sembra Windows, perché lo è** — realizzato con C# e WinUI 3. Un'interfaccia nativa vera, non una pagina web in una finestra. Su Linux, una finestra Avalonia nativa sopra lo stesso motore.
 - **Regolabile a tuo modo** — chiaro, scuro o come il sistema. Dieci lingue integrate.
 
 ## Installazione
@@ -49,6 +49,12 @@ Il pacchetto è firmato da LumiBear Studio anziché dallo Store, quindi la prima
 
 I due canali offrono esattamente la stessa app.
 
+### Linux
+
+Scarica il tarball `linux-x64`, estrailo ed esegui `./install.sh` — l'installazione avviene in `~/.local` e non richiede root. Aggiungi OtterZip al menu contestuale del tuo gestore file da **Impostazioni → Integrazione**.
+
+Tutti i dettagli, riga di comando e differenze rispetto a Windows compresi: [**OtterZip su Linux**](LINUX.md).
+
 ## Formati
 
 **Creazione** — ZIP · 7z · TAR · TAR.GZ
@@ -65,7 +71,9 @@ Tema, lingua, regole di sovrascrittura e altro: configurabili come preferisci e 
 
 ## Requisiti
 
-Windows 10 (versione 2004) o successivo · x64
+**Windows** — Windows 10 (versione 2004) o successivo · x64
+
+**Linux** — x64 o arm64, X11 o Wayland. Il tarball di release è autonomo, quindi non serve installare prima alcun runtime.
 
 ## Licenza
 
