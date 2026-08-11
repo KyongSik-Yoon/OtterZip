@@ -42,10 +42,20 @@ tools/build-linux.sh --arch arm64 # aarch64
 tools/build-linux.sh --cli-only   # command line only — no .NET SDK needed
 ```
 
-The full build needs a Rust toolchain **and the .NET 9 SDK**; the script
-checks for the SDK before it builds anything and tells you how to install it
-if it is missing. Add `--no-self-contained` for a distro package where the
-runtime is a declared dependency.
+The full build needs a Rust toolchain **and the .NET 9 SDK**. Install the
+*versioned* package — the unsuffixed one is the newest major, which
+`global.json` will refuse:
+
+```sh
+sudo pacman -S dotnet-sdk-9.0      # Arch — NOT plain `dotnet-sdk`
+sudo apt install dotnet-sdk-9.0    # Debian/Ubuntu
+sudo dnf install dotnet-sdk-9.0    # Fedora
+```
+
+Having a newer SDK installed as well is fine; they coexist and `global.json`
+picks. The script checks all this before it builds anything, and prints which
+SDKs it actually found when the check fails. Add `--no-self-contained` for a
+distro package where the runtime is a declared dependency.
 
 `--cli-only` builds just `otterzip`. That binary links the engine statically,
 so it needs neither the .NET SDK nor `libotterzip_ffi.so` — a Rust toolchain

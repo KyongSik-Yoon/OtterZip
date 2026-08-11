@@ -49,44 +49,78 @@ case "$ARCH" in
 esac
 
 # --- Preflight --------------------------------------------------------------
-# Checked BEFORE anything is built. The .NET failure surfaces at `dotnet
-# publish`, which is the last step, so without this the script would spend a
-# full release compile of the Rust engine and only then tell the user it
-# cannot finish — and it would tell them in the .NET SDK resolver's words
-# ("The application 'publish' does not exist"), which do not say what to do.
+# Checked BEFORE anything is built or deleted. The .NET failure otherwise
+# surfaces at `dotnet publish`, the last step, so the script would spend a full
+# release compile of the Rust engine and wipe dist/ before reporting it — and
+# it would report it in the SDK resolver's words ("The application 'publish'
+# does not exist"), which do not say what is wrong or what to do.
 
-die_missing_dotnet() {
-    cat >&2 <<'EOF'
-error: building the GUI needs the .NET 9 SDK, and it was not found.
+# Read the required SDK major out of global.json rather than hardcoding it, so
+# this check cannot drift from what the SDK resolver will actually demand.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GLOBAL_JSON="${SCRIPT_DIR}/../global.json"
+WANT_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${GLOBAL_JSON}" 2>/dev/null | head -1)"
+WANT_VERSION="${WANT_VERSION:-9.0.100}"
+WANT_MAJOR="${WANT_VERSION%%.*}"
 
-  Install it with your package manager:
-      Debian/Ubuntu   sudo apt install dotnet-sdk-9.0
-      Fedora          sudo dnf install dotnet-sdk-9.0
-      Arch            sudo pacman -S dotnet-sdk
-      openSUSE        sudo zypper install dotnet-sdk-9.0
+report_dotnet_state() {
+    # Show what IS there. Without this the message says only "not found",
+    # which on a rolling distro is actively misleading: the usual cause is a
+    # perfectly good SDK of the WRONG MAJOR, and the user has just watched
+    # their package manager install it successfully.
+    echo "  what this machine has:" >&2
+    if ! command -v dotnet >/dev/null 2>&1; then
+        echo "      dotnet: not on PATH" >&2
+        return
+    fi
+    echo "      dotnet: $(command -v dotnet)" >&2
+    local sdks
+    sdks="$(dotnet --list-sdks 2>/dev/null || true)"
+    if [ -z "${sdks}" ]; then
+        echo "      SDKs:   (none — this is a runtime-only install)" >&2
+    else
+        echo "${sdks}" | sed 's/^/      SDK:    /' >&2
+    fi
+    if [ -n "${DOTNET_ROOT:-}" ]; then
+        echo "      DOTNET_ROOT=${DOTNET_ROOT}" >&2
+    fi
+}
 
-  Or without root, into your home directory:
-      curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 9.0
-      export PATH="$PATH:$HOME/.dotnet"
+die_dotnet() {
+    echo "error: building the GUI needs the .NET ${WANT_MAJOR} SDK." >&2
+    echo "       global.json asks for ${WANT_VERSION} (rollForward=latestFeature)," >&2
+    echo "       which accepts any ${WANT_MAJOR}.0.1xx SDK but NOT a different major." >&2
+    echo >&2
+    report_dotnet_state
+    cat >&2 <<EOF
 
-  Or skip the GUI entirely — the command-line tool is pure Rust and needs
-  no .NET at all:
+  Install the VERSIONED package — note the "${WANT_MAJOR}.0" suffix. The
+  unsuffixed "dotnet-sdk" is the newest major on rolling distros, which is
+  precisely what does not work here:
+      Arch            sudo pacman -S dotnet-sdk-${WANT_MAJOR}.0
+      Debian/Ubuntu   sudo apt install dotnet-sdk-${WANT_MAJOR}.0
+      Fedora          sudo dnf install dotnet-sdk-${WANT_MAJOR}.0
+      openSUSE        sudo zypper install dotnet-sdk-${WANT_MAJOR}.0
+
+  Installing it alongside a newer SDK is fine and expected: they coexist,
+  and global.json decides which one builds this repo.
+
+  Or, with no root at all:
+      curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel ${WANT_MAJOR}.0
+      export PATH="\$HOME/.dotnet:\$PATH"
+
+  Or skip the GUI entirely — the command line is pure Rust and needs no
+  .NET at all:
       tools/build-linux.sh --cli-only
 EOF
     exit 1
 }
 
 if [ "${CLI_ONLY}" -eq 0 ]; then
-    command -v dotnet >/dev/null 2>&1 || die_missing_dotnet
-    # `dotnet` on PATH is not the same as an SDK being installed: the runtime-
-    # only package ships the same launcher, and it fails the same opaque way.
-    if ! dotnet --list-sdks 2>/dev/null | grep -q '^9\.'; then
-        echo "error: a .NET runtime is present but no 9.x SDK is installed." >&2
-        echo "       (global.json pins 9.0.100 with rollForward=latestFeature," >&2
-        echo "        so any 9.0.1xx SDK will do.)" >&2
-        echo >&2
-        die_missing_dotnet
-    fi
+    command -v dotnet >/dev/null 2>&1 || die_dotnet
+    # `dotnet` on PATH is not the same as an SDK being installed: the
+    # runtime-only package ships the same launcher and fails the same way.
+    dotnet --list-sdks 2>/dev/null | grep -q "^${WANT_MAJOR}\." || die_dotnet
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
