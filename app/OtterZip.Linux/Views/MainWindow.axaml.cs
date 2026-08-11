@@ -265,7 +265,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private static bool IsArchive(string path)
+    /// <summary>
+    /// Whether this launch is "open exactly one archive" — a double-click or a
+    /// lone "Open With", which should show the contents view as the whole
+    /// window rather than the drop window. The verb is <c>"open"</c> (a bare
+    /// file argument, with no explicit compress/extract verb); a real verb, a
+    /// second file, or a non-archive all fall through to the drop window.
+    /// </summary>
+    internal static bool IsSingleArchiveOpen(InvokeRequest? invoke) =>
+        invoke is { Verb: "open", Paths.Count: 1 }
+        && File.Exists(invoke.Paths[0])
+        && IsArchive(invoke.Paths[0]);
+
+    internal static bool IsArchive(string path)
     {
         string name = Path.GetFileName(path);
         foreach (string ext in ArchiveExtensions)

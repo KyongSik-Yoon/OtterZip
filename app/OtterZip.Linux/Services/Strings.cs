@@ -157,7 +157,14 @@ public static class Strings
         }
         else
         {
+            // A bare key can name either a TextBlock's `.Text` or a Button/
+            // ContentControl's `.Content` in the .resw — WinUI's x:Uid model
+            // addresses a XAML property, and which one it is depends on the
+            // control. Try both so a button label like
+            // `ExtractDialog_PrimaryButton.Content` resolves from the bare key
+            // instead of leaking the key onto the button face.
             yield return key + ".Text";
+            yield return key + ".Content";
         }
     }
 

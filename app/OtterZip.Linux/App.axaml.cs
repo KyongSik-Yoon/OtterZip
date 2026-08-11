@@ -50,7 +50,16 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow(PendingInvoke);
+            // Double-clicking one archive should open ONLY its contents view —
+            // not the contents view stacked on top of the drop window, which is
+            // what happened when MainWindow was always the main window and then
+            // spawned a second one. When the launch is exactly "open this one
+            // archive", the contents view IS the main window; everything else
+            // (a plain launch, a compress/extract verb, a multi-file open) is
+            // the drop window as before.
+            desktop.MainWindow = MainWindow.IsSingleArchiveOpen(PendingInvoke) && StartupError is null
+                ? new ArchiveWindow(PendingInvoke!.Paths[0])
+                : new MainWindow(PendingInvoke);
             // The window owns the shutdown decision: a headless verb closes
             // itself when its job settles, a plain launch waits for the user.
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
