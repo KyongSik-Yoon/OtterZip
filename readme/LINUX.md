@@ -39,10 +39,20 @@ else has to be installed first. `./uninstall.sh` removes what it added.
 ```sh
 tools/build-linux.sh              # → dist/linux-x64/ and a .tar.gz
 tools/build-linux.sh --arch arm64 # aarch64
+tools/build-linux.sh --cli-only   # command line only — no .NET SDK needed
 ```
 
-Needs a Rust toolchain and the .NET 9 SDK. Add `--no-self-contained` for a
-distro package where the runtime is a declared dependency.
+The full build needs a Rust toolchain **and the .NET 9 SDK**; the script
+checks for the SDK before it builds anything and tells you how to install it
+if it is missing. Add `--no-self-contained` for a distro package where the
+runtime is a declared dependency.
+
+`--cli-only` builds just `otterzip`. That binary links the engine statically,
+so it needs neither the .NET SDK nor `libotterzip_ffi.so` — a Rust toolchain
+is the whole requirement, and the tarball comes out around 2 MB instead of
+50. Its `install.sh` is the same script and simply skips the GUI parts. The
+artifact is named `OtterZip-<version>-linux-<arch>-cli.tar.gz` so it cannot
+be confused with the full package.
 
 ## File-manager integration
 
