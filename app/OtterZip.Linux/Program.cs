@@ -51,11 +51,33 @@ internal static class Program
     }
 
     /// <summary>Avalonia's designer and the runtime both call this.</summary>
+    /// <remarks>
+    /// <c>UsePlatformDetect</c> selects the X11 backend, which is Avalonia
+    /// 11's production Linux path; on a Wayland session it runs through
+    /// XWayland, seamlessly, and that is what "run on Wayland" means today
+    /// (Avalonia has no shipping native-Wayland backend to switch to). The
+    /// one thing that must be right either way is the app identity: the
+    /// compositor and the taskbar pair a running window with its installed
+    /// <c>.desktop</c> file — and thus show its otter icon and name instead of
+    /// a generic placeholder — by matching WM_CLASS (X11 / XWayland) or app_id
+    /// (Wayland) against the desktop-file basename. Setting <c>WmClass</c> to
+    /// that exact id makes the match deterministic; <c>Window.Icon</c> (set in
+    /// XAML) covers the case where no desktop file is installed at all.
+    /// </remarks>
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .With(new X11PlatformOptions { WmClass = DesktopAppId })
             .WithInterFont()
             .LogToTrace();
+
+    /// <summary>
+    /// Reverse-DNS application id. Must equal the basename of the main
+    /// <c>.desktop</c> file that <c>DesktopIntegration</c> installs, so the
+    /// desktop shell can pair the window with it. Kept in sync with
+    /// <c>DesktopIntegration.AppId</c>.
+    /// </summary>
+    private const string DesktopAppId = "io.github.lumibearstudio.OtterZip";
 
     private static bool IsHelpFlag(string arg) =>
         string.Equals(arg, "--help", StringComparison.Ordinal)

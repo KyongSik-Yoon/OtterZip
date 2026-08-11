@@ -6,6 +6,7 @@
         Width="720" Height="560"
         MinWidth="520" MinHeight="400"
         WindowStartupLocation="CenterScreen"
+        Icon="avares://otterzip-gui/Assets/otterzip.png"
         Title="OtterZip">
 
   <Grid RowDefinitions="Auto,*,Auto" Margin="16">

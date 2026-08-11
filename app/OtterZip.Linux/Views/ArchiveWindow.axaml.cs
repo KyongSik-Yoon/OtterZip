@@ -19,6 +19,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using OtterZip.App.Services;
@@ -49,9 +50,66 @@ public partial class ArchiveWindow : Window
         _archivePath = archivePath;
         EntryList.ItemsSource = _rows;
         ApplyStrings();
+        SetUpDragAndDrop();
         Title = Path.GetFileName(archivePath);
         ArchiveName.Text = Path.GetFileName(archivePath);
         LoadEntries();
+    }
+
+    // ------------------------------------------------------------ drag & drop
+
+    /// <summary>
+    /// Let the user drop files or folders straight onto the contents view to
+    /// append them — the same thing the Add buttons do, without the picker.
+    /// The whole window is the drop surface; the entry-list card lights up so
+    /// it is clear the drop lands in this archive.
+    /// </summary>
+    private void SetUpDragAndDrop()
+    {
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+        AddHandler(DragDrop.DropEvent, OnDrop);
+    }
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        bool hasFiles = e.Data.Contains(DataFormats.Files);
+        e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
+        DropArea.Classes.Set("active", hasFiles);
+        e.Handled = true;
+    }
+
+    private void OnDragLeave(object? sender, RoutedEventArgs e) =>
+        DropArea.Classes.Set("active", false);
+
+    private async void OnDrop(object? sender, DragEventArgs e)
+    {
+        DropArea.Classes.Set("active", false);
+        e.Handled = true;
+        await AddPathsAsync(DropPaths(e.Data));
+    }
+
+    private static List<string> DropPaths(IDataObject data)
+    {
+        var paths = new List<string>();
+        IEnumerable<IStorageItem>? items = data.GetFiles();
+        if (items is null)
+        {
+            return paths;
+        }
+        foreach (IStorageItem item in items)
+        {
+            // Skip non-local drops (a remote URI, a GVfs mount the CLI cannot
+            // open by path) rather than fail later with "file not found".
+            string? local = item.TryGetLocalPath();
+            if (!string.IsNullOrEmpty(local))
+            {
+                paths.Add(local);
+            }
+        }
+        return paths;
     }
 
     private void ApplyStrings()
@@ -149,7 +207,7 @@ public partial class ArchiveWindow : Window
         {
             return;
         }
-        SetBusy(Strings.Get("Job_StatusStarting"));
+        SetBusy();
 
         var args = new List<string> { "a", _archivePath };
         args.AddRange(paths);
@@ -159,6 +217,9 @@ public partial class ArchiveWindow : Window
 
         if (code == 0)
         {
+            // The reloaded list — new rows, updated summary — is the
+            // confirmation. Clear any leftover status so nothing lingers.
+            ShowStatus(string.Empty);
             LoadEntries();
         }
         else
@@ -259,11 +320,18 @@ public partial class ArchiveWindow : Window
         return paths;
     }
 
-    private void SetBusy(string message)
+    /// <summary>
+    /// Enter the working state: disable the action buttons and show the
+    /// indeterminate bar. An optional <paramref name="message"/> (empty for an
+    /// add, which has nothing byte-level to report) rides alongside the bar; an
+    /// empty one hides the status line so no stale text sits under the bar.
+    /// </summary>
+    private void SetBusy(string message = "")
     {
         AddFilesButton.IsEnabled = false;
         AddFolderButton.IsEnabled = false;
         ExtractButton.IsEnabled = false;
+        BusyBar.IsVisible = true;
         ShowStatus(message);
     }
 
@@ -272,6 +340,7 @@ public partial class ArchiveWindow : Window
         AddFilesButton.IsEnabled = true;
         AddFolderButton.IsEnabled = true;
         ExtractButton.IsEnabled = true;
+        BusyBar.IsVisible = false;
     }
 
     private void ShowStatus(string message)

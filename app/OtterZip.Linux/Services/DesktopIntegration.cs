@@ -238,7 +238,12 @@ public static class DesktopIntegration
             .Append("Categories=Utility;Archiving;Compression;\n")
             .Append("Keywords=zip;7z;rar;tar;archive;compress;extract;\n")
             .Append("StartupNotify=true\n")
-            .Append("StartupWMClass=otterzip-gui\n")
+            // Must equal the WM_CLASS the app sets at startup
+            // (Program.BuildAvaloniaApp → X11PlatformOptions.WmClass) AND the
+            // basename of this file, so GNOME/KDE — natively on X11 and via
+            // XWayland on a Wayland session — pair the running window with this
+            // entry and show its otter icon instead of a generic placeholder.
+            .Append("StartupWMClass=").Append(AppId).Append('\n')
             .Append("MimeType=").Append(string.Join(';', ArchiveMimeTypes)).Append(";\n")
             // Desktop actions: these show up on the launcher icon's own
             // right-click menu (dock / app grid), which is the closest thing

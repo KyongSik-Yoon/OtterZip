@@ -60,6 +60,14 @@
       <Setter Property="Padding" Value="12" />
     </Style>
 
+    <!-- A card acting as a drop target lights up while a drag hovers it, the
+         same accent the main window's drop zone uses. Toggled from code-behind
+         via the `active` class. -->
+    <Style Selector="Border.card.active">
+      <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
+      <Setter Property="Background" Value="{DynamicResource DropZoneActiveBackground}" />
+    </Style>
+
     <!-- The drop target. The `.active` class is toggled from code-behind on
          DragOver/DragLeave so the whole panel reacts, not just the border. -->
     <Style Selector="Border.dropzone">

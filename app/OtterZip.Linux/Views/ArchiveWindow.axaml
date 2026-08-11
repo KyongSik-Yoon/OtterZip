@@ -6,20 +6,27 @@
         Width="640" Height="480"
         MinWidth="420" MinHeight="300"
         WindowStartupLocation="CenterScreen"
+        Icon="avares://otterzip-gui/Assets/otterzip.png"
         Title="OtterZip">
 
   <Grid RowDefinitions="Auto,*,Auto" Margin="14">
 
-    <!-- Header: which archive, and how many entries. -->
-    <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,10">
-      <TextBlock x:Name="ArchiveName" Classes="h1" TextTrimming="CharacterEllipsis" />
-      <TextBlock x:Name="ArchiveSummary" Classes="caption" />
-    </StackPanel>
+    <!-- Header: the otter, which archive, and how many entries. -->
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,10">
+      <Image Grid.Column="0" Width="32" Height="32" Margin="0,0,12,0"
+             VerticalAlignment="Top"
+             Source="avares://otterzip-gui/Assets/otterzip.png" />
+      <StackPanel Grid.Column="1" Spacing="2">
+        <TextBlock x:Name="ArchiveName" Classes="h1" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="ArchiveSummary" Classes="caption" />
+      </StackPanel>
+    </Grid>
 
     <!-- Entry list. A ListBox with a three-column row template rather than a
          DataGrid, so no extra package is pulled in for what is a read-only
-         listing. -->
-    <Border Grid.Row="1" Classes="card" Padding="0">
+         listing. Doubles as a drop target: dropping files or folders here
+         appends them to the archive (ZIP), the same as the Add buttons. -->
+    <Border Grid.Row="1" x:Name="DropArea" Classes="card" Padding="0">
       <DockPanel>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,110,150"
               Margin="12,8" >
@@ -46,6 +53,14 @@
       </DockPanel>
     </Border>
 
+    <!-- A thin indeterminate bar shown only while an add is in flight. The
+         append runs in one shot with no byte-level progress to report, so an
+         honest "working" pulse beats a fake percentage — and it disappears the
+         moment the operation settles instead of leaving a stale "Starting…". -->
+    <ProgressBar Grid.Row="2" x:Name="BusyBar" Height="3" Margin="0,8,0,0"
+                 IsIndeterminate="True" IsVisible="False"
+                 VerticalAlignment="Top" />
+
     <!-- Actions. -->
     <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,12,0,0">
       <Button Grid.Column="0" x:Name="AddFilesButton" Click="OnAddFilesClick"
@@ -56,7 +71,7 @@
               Classes="accent" Padding="14,6" />
     </Grid>
 
-    <!-- A thin status line, reused for "adding…", "extracted N", errors. -->
+    <!-- A thin status line, reused for "extracted N" and errors. -->
     <TextBlock Grid.Row="2" x:Name="StatusLine" Classes="caption"
                VerticalAlignment="Center" HorizontalAlignment="Center"
                IsVisible="False" />

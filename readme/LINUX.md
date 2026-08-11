@@ -123,9 +123,10 @@ Double-clicking an archive (or dropping a single one onto the window) opens a
 contents view listing its entries. From there:
 
 * **Extract** unpacks everything to a folder you pick.
-* **Add files… / Add folder…** appends to the archive in place — ZIP only.
-  Existing entries are preserved as-is (nothing is recompressed); a name that
-  is already inside the archive is skipped rather than duplicated.
+* **Add files… / Add folder…**, or **dragging files and folders straight onto
+  the list**, appends to the archive in place — ZIP only. Existing entries are
+  preserved as-is (nothing is recompressed); a name that is already inside the
+  archive is skipped rather than duplicated.
 
 The command line does the same append:
 
@@ -167,6 +168,14 @@ holds: an entry with a drive-letter prefix (`C:\…`) is rejected on Linux
 rather than being rewritten, because there is no drive to strip.
 
 **RAR is still extract-only**, for licensing reasons, not technical ones.
+
+**Wayland.** OtterZip runs on the X11 backend, which is Avalonia's production
+Linux path; on a Wayland session it runs through XWayland with no configuration
+needed — there is no separate "enable Wayland" step, and no native-Wayland
+backend to switch to in this Avalonia version. The window advertises its
+application id (`io.github.lumibearstudio.OtterZip`, matching the installed
+`.desktop` file) so the compositor and the taskbar show the OtterZip icon and
+name rather than a generic placeholder.
 
 ## Building and testing
 

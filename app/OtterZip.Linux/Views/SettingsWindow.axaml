@@ -3,6 +3,7 @@
         x:Class="OtterZip.Linux.Views.SettingsWindow"
         Width="560" Height="620"
         WindowStartupLocation="CenterOwner"
+        Icon="avares://otterzip-gui/Assets/otterzip.png"
         Title="Settings">
 
   <Grid RowDefinitions="*,Auto" Margin="16">
