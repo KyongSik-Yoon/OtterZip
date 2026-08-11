@@ -42,20 +42,31 @@ tools/build-linux.sh --arch arm64 # aarch64
 tools/build-linux.sh --cli-only   # command line only — no .NET SDK needed
 ```
 
-The full build needs a Rust toolchain **and the .NET 9 SDK**. Install the
-*versioned* package — the unsuffixed one is the newest major, which
-`global.json` will refuse:
+The full build needs a Rust toolchain **and the .NET SDK 9.0.300 or newer**.
+The minimum is not the 9.0 GA: Avalonia 12's Roslyn analyzers require the 4.14
+compiler, which first ships in SDK **9.0.300**, so an older 9.0.1xx builds the
+engine and CLI but fails the GUI with `CS9057`. The most reliable way to get a
+current 9.0 SDK — no root, and independent of what your distro packages — is:
 
 ```sh
-sudo pacman -S dotnet-sdk-9.0      # Arch — NOT plain `dotnet-sdk`
+curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 9.0
+export PATH="$HOME/.dotnet:$PATH"
+```
+
+Or from the distro, as long as it is actually 9.0.300+ (update if it is older;
+the `9.0` suffix picks the 9 line, not the newest major):
+
+```sh
+sudo pacman -Syu dotnet-sdk-9.0    # Arch — NOT plain `dotnet-sdk`
 sudo apt install dotnet-sdk-9.0    # Debian/Ubuntu
 sudo dnf install dotnet-sdk-9.0    # Fedora
 ```
 
-Having a newer SDK installed as well is fine; they coexist and `global.json`
-picks. The script checks all this before it builds anything, and prints which
-SDKs it actually found when the check fails. Add `--no-self-contained` for a
-distro package where the runtime is a declared dependency.
+Having other SDKs installed as well is fine; they coexist and `global.json`
+(rollForward=latestFeature) picks the highest 9.0.x you have. The script checks
+the feature band before it builds anything, and prints which SDKs it actually
+found when the check fails. Add `--no-self-contained` for a distro package
+where the runtime is a declared dependency.
 
 `--cli-only` builds just `otterzip`. That binary links the engine statically,
 so it needs neither the .NET SDK nor `libotterzip_ffi.so` — a Rust toolchain
