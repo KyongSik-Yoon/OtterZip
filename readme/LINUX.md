@@ -83,7 +83,7 @@ no root, no package manager, no polkit prompt:
 | `~/.local/share/applications/io.github.lumibearstudio.OtterZip*.desktop` | Puts OtterZip in "Open With" and the launcher |
 | `~/.config/mimeapps.list` | Makes OtterZip the default for archive types (merged, not overwritten) |
 | `~/.local/share/nautilus/scripts/OtterZip — *` | GNOME Files → right-click → Scripts |
-| `~/.local/share/kio/servicemenus/otterzip.desktop` | Dolphin → right-click → OtterZip submenu |
+| `~/.local/share/kio/servicemenus/otterzip.desktop` | Dolphin → right-click → OtterZip submenu (installed `chmod +x`, which KIO requires outside system directories) |
 | `~/.config/Thunar/uca.xml.otterzip` | Thunar actions — **needs a manual merge**, see below |
 
 Uninstall removes all of it, including the `mimeapps.list` entries, and leaves

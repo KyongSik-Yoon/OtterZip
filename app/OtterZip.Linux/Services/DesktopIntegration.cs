@@ -468,7 +468,6 @@ public static class DesktopIntegration
         string body = new StringBuilder()
             .Append("[Desktop Entry]\n")
             .Append("Type=Service\n")
-            .Append("ServiceTypes=KonqPopupMenu/Plugin\n")
             .Append("MimeType=").Append(archiveMimes).Append(";inode/directory;application/octet-stream;\n")
             .Append("Icon=").Append(icon).Append('\n')
             .Append("X-KDE-Submenu=OtterZip\n")
@@ -490,7 +489,14 @@ public static class DesktopIntegration
             .Append("Icon=").Append(icon).Append('\n')
             .Append("Exec=").Append(Quote(exec)).Append(" --invoke compress-7z --files %F\n")
             .ToString();
-        Write(path, body, log);
+        // NOT `Write`: KIO refuses to run a service menu out of
+        // $XDG_DATA_HOME unless the .desktop file itself carries the execute
+        // bit — "the location is not a standard location that is authorized
+        // by default". Without it Dolphin still SHOWS the menu, and clicking
+        // an entry fails with "You are not authorized to execute this file",
+        // which reads like a permissions problem with the user's files rather
+        // than with this one.
+        WriteScript(path, body, log);
     }
 
     /// <summary>
