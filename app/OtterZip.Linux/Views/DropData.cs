@@ -112,8 +112,10 @@ internal static class DropData
                     info = raw switch
                     {
                         null => "null",
-                        byte[] b => "b" + b.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        string s => "s" + s.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        byte[] b => "b" + b.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            + "[" + Preview(b) + "]",
+                        string s => "s" + s.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            + "[" + Preview(Encoding.UTF8.GetBytes(s)) + "]",
                         _ => raw.GetType().Name,
                     };
                 }
@@ -124,7 +126,32 @@ internal static class DropData
                 parts.Add(format.Identifier + "=" + info);
             }
         }
+        // If a portal key is present, show the outcome of actually calling the
+        // FileTransfer portal with it — the decisive fact when file items and
+        // raw uri-lists both came up empty.
+        foreach (string key in RawValues(data, "application/vnd.portal.filetransfer"))
+        {
+            parts.Add("portal→" + PortalFileTransfer.Describe(key));
+            break;
+        }
         return parts.Count > 0 ? string.Join(", ", parts) : "(none)";
+    }
+
+    /// <summary>
+    /// Up to 24 bytes of a raw value rendered as printable ASCII (other bytes
+    /// shown as <c>.</c>), so the diagnostic can reveal whether formats carry
+    /// distinct content or the same buffer, and whether a "key" looks like one.
+    /// </summary>
+    private static string Preview(byte[] bytes)
+    {
+        int n = Math.Min(bytes.Length, 24);
+        var sb = new StringBuilder(n);
+        for (int i = 0; i < n; i++)
+        {
+            char c = (char)bytes[i];
+            sb.Append(c is >= (char)32 and < (char)127 ? c : '.');
+        }
+        return sb.ToString();
     }
 
     private static string? LocalPathOf(IStorageItem item)

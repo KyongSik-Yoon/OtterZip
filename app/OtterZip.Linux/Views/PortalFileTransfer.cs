@@ -26,11 +26,56 @@ internal static class PortalFileTransfer
     public static List<string> Retrieve(string key)
     {
         var files = new List<string>();
-        key = key.Trim().Trim('\0').Trim();
+        key = Clean(key);
         if (key.Length == 0)
         {
             return files;
         }
+        (int code, string stdout, _) = RunGdbus(key);
+        if (code == 0)
+        {
+            ParseGVariantStrings(stdout, files);
+        }
+        return files;
+    }
+
+    /// <summary>
+    /// Short human-readable outcome of the portal call, for the on-screen drop
+    /// diagnostic: <c>ok:N</c>, <c>empty</c>, <c>gdbus-missing</c>, or
+    /// <c>exit&lt;code&gt;:&lt;stderr first line&gt;</c>.
+    /// </summary>
+    public static string Describe(string key)
+    {
+        key = Clean(key);
+        if (key.Length == 0)
+        {
+            return "nokey";
+        }
+        (int code, string stdout, string stderr) = RunGdbus(key);
+        if (code == int.MinValue)
+        {
+            return "gdbus-missing";
+        }
+        if (code != 0)
+        {
+            string first = stderr.Split('\n', 2)[0].Trim();
+            return "exit" + code.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + (first.Length > 0 ? ":" + Truncate(first, 80) : string.Empty);
+        }
+        var files = new List<string>();
+        ParseGVariantStrings(stdout, files);
+        return files.Count > 0 ? "ok:" + files.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) : "empty";
+    }
+
+    private static string Clean(string key) => key.Trim().Trim('\0').Trim();
+
+    /// <summary>
+    /// Call <c>org.freedesktop.portal.FileTransfer.RetrieveFiles</c> via gdbus.
+    /// Returns (exitCode, stdout, stderr); exitCode is <see cref="int.MinValue"/>
+    /// when gdbus itself could not be launched.
+    /// </summary>
+    private static (int code, string stdout, string stderr) RunGdbus(string key)
+    {
         try
         {
             var psi = new ProcessStartInfo
@@ -55,23 +100,21 @@ internal static class PortalFileTransfer
             using var p = Process.Start(psi);
             if (p is null)
             {
-                return files;
+                return (int.MinValue, string.Empty, string.Empty);
             }
-            string output = p.StandardOutput.ReadToEnd();
+            string stdout = p.StandardOutput.ReadToEnd();
+            string stderr = p.StandardError.ReadToEnd();
             if (!p.WaitForExit(5000))
             {
                 try { p.Kill(); } catch (Exception) { /* already gone */ }
-                return files;
+                return (int.MinValue, string.Empty, "timeout");
             }
-            // gdbus prints the return tuple as GVariant text, e.g.
-            //   (['/home/sam/a.txt', '/home/sam/b.pdf'],)
-            ParseGVariantStrings(output, files);
+            return (p.ExitCode, stdout, stderr);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            // gdbus is not installed, or could not be launched.
+            return (int.MinValue, string.Empty, ex.Message);
         }
-        return files;
     }
 
     /// <summary>
@@ -120,4 +163,7 @@ internal static class PortalFileTransfer
             i = j + 1;
         }
     }
+
+    private static string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "…";
 }
