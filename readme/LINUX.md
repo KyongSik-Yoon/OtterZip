@@ -170,14 +170,34 @@ rather than being rewritten, because there is no drive to strip.
 
 **RAR is still extract-only**, for licensing reasons, not technical ones.
 
-**No drag-and-drop from the file manager (yet).** Avalonia's X11 backend — the
-one this build uses — does not implement receiving drops from other
-applications; that support landed only in Avalonia 12.1 and is not backported
-to the 11.x line OtterZip ships on. So files dragged out of Dolphin, Nautilus
-or Thunar never reach the window. Use **Add files… / Add folder…**, "Open
-With", or the right-click **context-menu actions** instead — all of which do
-work. The drop wiring is already in the code and will start working if OtterZip
-moves to Avalonia 12+.
+**No drag-and-drop from the file manager.** Files dragged out of Dolphin,
+Nautilus or Thunar do not reach the window. Use **Add files… / Add folder…**,
+"Open With", or the right-click **context-menu actions** instead — all of which
+do work, and all of which reach the same code a drop would.
+
+Two separate things block it, and the second is why upgrading the toolkit is
+not the fix it looks like:
+
+1. Avalonia's X11 backend implements no XDND drop target before **12.1**
+   (AvaloniaUI/Avalonia#20926, not backported to 11.x), so on the 11.x line
+   this build ships, no drop event is delivered at all.
+2. On **12.1 the drop event does arrive, and the payload is still unusable**
+   under a KDE Plasma Wayland session. Plasma advertises `File`,
+   `application/x-kde4-urilist` and `application/vnd.portal.filetransfer`, but
+   every one of them reads back as the *same* buffer — and that buffer holds
+   the X clipboard's current text, not the drag. Measured directly against the
+   X server with an independent connection (bypassing Avalonia entirely): same
+   wrong bytes, byte-for-byte, tracking whatever was last copied. The document
+   portal then correctly rejects the resulting non-key with `AccessDenied:
+   Invalid transfer`.
+
+Point 2 puts the fault at or below the X selection layer rather than in
+Avalonia's format dispatch — consistent with the drag source (Dolphin) being a
+native Wayland client while OtterZip is an XWayland client, with the
+Wayland↔X11 drag bridge in between. No application-side code can recover the
+paths in that situation, which is why this build stays on the mature 11.2
+rather than carrying a newer toolkit that does not actually deliver the
+feature. The drop handlers remain wired and work on Windows and macOS.
 
 **Wayland.** OtterZip runs on the X11 backend, which is Avalonia's production
 Linux path; on a Wayland session it runs through XWayland with no configuration
