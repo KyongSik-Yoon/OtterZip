@@ -60,33 +60,8 @@ esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLOBAL_JSON="${SCRIPT_DIR}/../global.json"
 WANT_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${GLOBAL_JSON}" 2>/dev/null | head -1)"
-WANT_VERSION="${WANT_VERSION:-9.0.300}"
+WANT_VERSION="${WANT_VERSION:-9.0.100}"
 WANT_MAJOR="${WANT_VERSION%%.*}"
-# The three-digit SDK "feature band" (e.g. 300 in 9.0.300). Avalonia 12's
-# Roslyn analyzers require the 4.14 compiler, which first shipped in .NET SDK
-# 9.0.300 — an older 9.0.1xx SDK builds the rest of the repo but fails the GUI
-# with a cryptic CS9057 half a minute in, so the check below rejects it up front.
-WANT_MM="${WANT_VERSION%.*}"                       # 9.0
-WANT_BAND="${WANT_VERSION##*.}"; WANT_BAND="${WANT_BAND%%-*}"   # 300
-
-# True when an installed SDK satisfies global.json: same major.minor and a
-# feature band at least WANT_BAND. Mirrors what the SDK resolver will demand,
-# so the build cannot get past this check only to fail in the compiler.
-sdk_has_supported() {
-    local line ver mm band
-    while IFS= read -r line; do
-        [ -n "${line}" ] || continue
-        ver="${line%% *}"                          # "9.0.316" from "9.0.316 [/path]"
-        mm="${ver%.*}"                             # 9.0
-        band="${ver##*.}"; band="${band%%-*}"      # 316
-        [ "${mm}" = "${WANT_MM}" ] || continue
-        case "${band}" in ''|*[!0-9]*) continue;; esac
-        [ "${band}" -ge "${WANT_BAND}" ] && return 0
-    done <<EOF
-$(dotnet --list-sdks 2>/dev/null)
-EOF
-    return 1
-}
 
 report_dotnet_state() {
     # Show what IS there. Without this the message says only "not found",
@@ -112,30 +87,27 @@ report_dotnet_state() {
 }
 
 die_dotnet() {
-    echo "error: building the GUI needs the .NET SDK ${WANT_VERSION} or newer" >&2
-    echo "       (same ${WANT_MM} line — feature band ${WANT_BAND}+)." >&2
-    echo "       Avalonia 12's Roslyn analyzers need the 4.14 compiler, which" >&2
-    echo "       first ships in SDK ${WANT_MM}.${WANT_BAND}; an older ${WANT_MM}.1xx SDK" >&2
-    echo "       fails the GUI build with CS9057. global.json (rollForward=" >&2
-    echo "       latestFeature) picks the highest ${WANT_MM}.x you have installed." >&2
+    echo "error: building the GUI needs the .NET ${WANT_MAJOR} SDK." >&2
+    echo "       global.json asks for ${WANT_VERSION} (rollForward=latestFeature)," >&2
+    echo "       which accepts any ${WANT_MAJOR}.0.1xx SDK but NOT a different major." >&2
     echo >&2
     report_dotnet_state
     cat >&2 <<EOF
 
-  Get a current ${WANT_MM} SDK. The most reliable way, no root and independent
-  of what your distro packages, installs the latest ${WANT_MM}.x into ~/.dotnet:
-      curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel ${WANT_MM}
-      export PATH="\$HOME/.dotnet:\$PATH"
-
-  Or from the distro — make sure it is actually ${WANT_MM}.${WANT_BAND}+ (update
-  if it is older; the "${WANT_MAJOR}.0" suffix picks the ${WANT_MAJOR} line, not the newest major):
-      Arch            sudo pacman -Syu dotnet-sdk-${WANT_MAJOR}.0
+  Install the VERSIONED package — note the "${WANT_MAJOR}.0" suffix. The
+  unsuffixed "dotnet-sdk" is the newest major on rolling distros, which is
+  precisely what does not work here:
+      Arch            sudo pacman -S dotnet-sdk-${WANT_MAJOR}.0
       Debian/Ubuntu   sudo apt install dotnet-sdk-${WANT_MAJOR}.0
       Fedora          sudo dnf install dotnet-sdk-${WANT_MAJOR}.0
       openSUSE        sudo zypper install dotnet-sdk-${WANT_MAJOR}.0
 
-  Installing it alongside other SDKs is fine: they coexist, and global.json
-  decides which one builds this repo.
+  Installing it alongside a newer SDK is fine and expected: they coexist,
+  and global.json decides which one builds this repo.
+
+  Or, with no root at all:
+      curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel ${WANT_MAJOR}.0
+      export PATH="\$HOME/.dotnet:\$PATH"
 
   Or skip the GUI entirely — the command line is pure Rust and needs no
   .NET at all:
@@ -146,10 +118,9 @@ EOF
 
 if [ "${CLI_ONLY}" -eq 0 ]; then
     command -v dotnet >/dev/null 2>&1 || die_dotnet
-    # `dotnet` on PATH is not the same as a SUPPORTED SDK being installed: the
-    # runtime-only package ships the same launcher, and a too-old 9.0.1xx SDK
-    # builds everything except the GUI. Require the feature band global.json asks.
-    sdk_has_supported || die_dotnet
+    # `dotnet` on PATH is not the same as an SDK being installed: the
+    # runtime-only package ships the same launcher and fails the same way.
+    dotnet --list-sdks 2>/dev/null | grep -q "^${WANT_MAJOR}\." || die_dotnet
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -133,10 +133,13 @@ public partial class MainWindow : Window
     private void SetUpDragAndDrop()
     {
         DragDrop.SetAllowDrop(this, true);
-        // External file drops reach the app on Linux/X11 as of Avalonia 12.1
-        // (XDND drop target, AvaloniaUI/Avalonia#20926). handledEventsToo lets
-        // the window still see a drop the job list marked handled on the way
-        // up. See ArchiveWindow.SetUpDragAndDrop for the same reasoning.
+        // NOTE: external file drops do not reach the app on Linux/X11 in this
+        // build — Avalonia 11's X11 backend has no XDND drop target (it arrives
+        // in Avalonia 12.1). These handlers work on Windows/macOS and become
+        // live on a future Avalonia 12+; on Linux the buttons and context-menu
+        // actions are the way in. handledEventsToo lets the window still see a
+        // drop the job list marked handled once events do fire. See
+        // ArchiveWindow.SetUpDragAndDrop for the full reasoning.
         AddHandler(DragDrop.DragEnterEvent, OnDragEnter, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -147,7 +150,7 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        bool hasFiles = e.DataTransfer.Contains(DataFormat.File);
+        bool hasFiles = e.Data.Contains(DataFormats.Files);
         e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
         DropZone.Classes.Set("active", hasFiles);
         e.Handled = true;
@@ -161,12 +164,35 @@ public partial class MainWindow : Window
         DropZone.Classes.Set("active", false);
         e.Handled = true;
 
-        List<string> paths = DropData.LocalPaths(e.DataTransfer);
+        List<string> paths = PathsFrom(e.Data);
         if (paths.Count == 0)
         {
             return;
         }
         Accept(paths);
+    }
+
+    private static List<string> PathsFrom(IDataObject data)
+    {
+        var paths = new List<string>();
+        IEnumerable<IStorageItem>? items = data.GetFiles();
+        if (items is null)
+        {
+            return paths;
+        }
+        foreach (IStorageItem item in items)
+        {
+            // A drop can carry non-local items (a remote URI from a browser,
+            // a GVfs mount the core cannot open by path). TryGetLocalPath
+            // returns null for those; skipping is honest — we would only fail
+            // later with a confusing "file not found".
+            string? local = item.TryGetLocalPath();
+            if (!string.IsNullOrEmpty(local))
+            {
+                paths.Add(local);
+            }
+        }
+        return paths;
     }
 
     /// <summary>

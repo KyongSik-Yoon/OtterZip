@@ -357,5 +357,4 @@
   <data name="Linux_ColSize.Text" xml:space="preserve"><value>サイズ</value></data>
   <data name="Linux_ColModified.Text" xml:space="preserve"><value>更新日時</value></data>
   <data name="Linux_ArchiveSummaryFormat.Text" xml:space="preserve"><value>{0} 個のファイル · {1}</value></data>
-  <data name="Linux_DropUnreadableFormat.Text" xml:space="preserve"><value>ドロップされた項目を読み取れませんでした (形式: {0})</value></data>
 </root>

@@ -19,13 +19,10 @@
          toolkit; Avalonia is the one that keeps the front end in C# and lets
          it share OtterZip.Interop and the platform-neutral services with the
          WinUI build instead of forking them. -->
-    <!-- 12.1 is the first release whose X11 backend implements the XDND
-         drop-target protocol (AvaloniaUI/Avalonia#20926), so files dragged
-         from a Linux file manager reach the window. 11.x never received it. -->
-    <PackageVersion Include="Avalonia" Version="12.1.*" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.*" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.*" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.*" />
+    <PackageVersion Include="Avalonia" Version="11.2.*" />
+    <PackageVersion Include="Avalonia.Desktop" Version="11.2.*" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.2.*" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.2.*" />
 
     <!-- MVVM -->
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.*" />

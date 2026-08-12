@@ -42,31 +42,20 @@ tools/build-linux.sh --arch arm64 # aarch64
 tools/build-linux.sh --cli-only   # command line only — no .NET SDK needed
 ```
 
-The full build needs a Rust toolchain **and the .NET SDK 9.0.300 or newer**.
-The minimum is not the 9.0 GA: Avalonia 12's Roslyn analyzers require the 4.14
-compiler, which first ships in SDK **9.0.300**, so an older 9.0.1xx builds the
-engine and CLI but fails the GUI with `CS9057`. The most reliable way to get a
-current 9.0 SDK — no root, and independent of what your distro packages — is:
+The full build needs a Rust toolchain **and the .NET 9 SDK**. Install the
+*versioned* package — the unsuffixed one is the newest major, which
+`global.json` will refuse:
 
 ```sh
-curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 9.0
-export PATH="$HOME/.dotnet:$PATH"
-```
-
-Or from the distro, as long as it is actually 9.0.300+ (update if it is older;
-the `9.0` suffix picks the 9 line, not the newest major):
-
-```sh
-sudo pacman -Syu dotnet-sdk-9.0    # Arch — NOT plain `dotnet-sdk`
+sudo pacman -S dotnet-sdk-9.0      # Arch — NOT plain `dotnet-sdk`
 sudo apt install dotnet-sdk-9.0    # Debian/Ubuntu
 sudo dnf install dotnet-sdk-9.0    # Fedora
 ```
 
-Having other SDKs installed as well is fine; they coexist and `global.json`
-(rollForward=latestFeature) picks the highest 9.0.x you have. The script checks
-the feature band before it builds anything, and prints which SDKs it actually
-found when the check fails. Add `--no-self-contained` for a distro package
-where the runtime is a declared dependency.
+Having a newer SDK installed as well is fine; they coexist and `global.json`
+picks. The script checks all this before it builds anything, and prints which
+SDKs it actually found when the check fails. Add `--no-self-contained` for a
+distro package where the runtime is a declared dependency.
 
 `--cli-only` builds just `otterzip`. That binary links the engine statically,
 so it needs neither the .NET SDK nor `libotterzip_ffi.so` — a Rust toolchain
@@ -134,11 +123,11 @@ Double-clicking an archive (or dropping a single one onto the window) opens a
 contents view listing its entries. From there:
 
 * **Extract** unpacks everything to a folder you pick.
-* **Add files… / Add folder…**, or **dragging files and folders straight onto
-  the list** (from your file manager or anywhere else), appends to the archive
-  in place — ZIP only. Existing entries are preserved as-is (nothing is
-  recompressed); a name that is already inside the archive is skipped rather
-  than duplicated.
+* **Add files… / Add folder…** appends to the archive in place — ZIP only.
+  Existing entries are preserved as-is (nothing is recompressed); a name that
+  is already inside the archive is skipped rather than duplicated. (Dragging
+  files from the file manager onto the window is not supported on Linux yet —
+  see *Differences from the Windows build* below.)
 
 The command line does the same append:
 
@@ -181,12 +170,34 @@ rather than being rewritten, because there is no drive to strip.
 
 **RAR is still extract-only**, for licensing reasons, not technical ones.
 
-**Drag-and-drop needs Avalonia 12.1+.** Receiving a drop from another
-application on X11 (the XDND protocol) is not something Avalonia's X11 backend
-implemented until 12.1 — the 11.x line never had it. OtterZip builds against
-12.1, so dragging files out of Dolphin, Nautilus or Thunar onto the window
-works; on an older toolkit it silently would not, which is why the minimum is
-called out here.
+**No drag-and-drop from the file manager.** Files dragged out of Dolphin,
+Nautilus or Thunar do not reach the window. Use **Add files… / Add folder…**,
+"Open With", or the right-click **context-menu actions** instead — all of which
+do work, and all of which reach the same code a drop would.
+
+Two separate things block it, and the second is why upgrading the toolkit is
+not the fix it looks like:
+
+1. Avalonia's X11 backend implements no XDND drop target before **12.1**
+   (AvaloniaUI/Avalonia#20926, not backported to 11.x), so on the 11.x line
+   this build ships, no drop event is delivered at all.
+2. On **12.1 the drop event does arrive, and the payload is still unusable**
+   under a KDE Plasma Wayland session. Plasma advertises `File`,
+   `application/x-kde4-urilist` and `application/vnd.portal.filetransfer`, but
+   every one of them reads back as the *same* buffer — and that buffer holds
+   the X clipboard's current text, not the drag. Measured directly against the
+   X server with an independent connection (bypassing Avalonia entirely): same
+   wrong bytes, byte-for-byte, tracking whatever was last copied. The document
+   portal then correctly rejects the resulting non-key with `AccessDenied:
+   Invalid transfer`.
+
+Point 2 puts the fault at or below the X selection layer rather than in
+Avalonia's format dispatch — consistent with the drag source (Dolphin) being a
+native Wayland client while OtterZip is an XWayland client, with the
+Wayland↔X11 drag bridge in between. No application-side code can recover the
+paths in that situation, which is why this build stays on the mature 11.2
+rather than carrying a newer toolkit that does not actually deliver the
+feature. The drop handlers remain wired and work on Windows and macOS.
 
 **Wayland.** OtterZip runs on the X11 backend, which is Avalonia's production
 Linux path; on a Wayland session it runs through XWayland with no configuration
